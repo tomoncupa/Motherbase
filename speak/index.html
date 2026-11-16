@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.17, 2026-11-16">
+<meta name="mb-version" content="1.0.18, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -143,6 +143,8 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .voice thead th{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);color:var(--text-muted);text-transform:uppercase}
 .voice tbody th{font-weight:var(--w-body)}
 .voice th small{display:block;font-size:var(--f-1);color:var(--text-muted)}
+.player.hasvid{flex-wrap:wrap}
+.player .vid{flex:1 0 100%;width:100%;max-height:calc(var(--s-10) * 4);object-fit:contain;border-radius:var(--radius-md);background:var(--surface-2);transform:scaleX(-1)}
 /* the goal and the why, on a drill sheet and on a today card */
 .goal{display:grid;grid-template-columns:var(--s-9) 1fr;gap:var(--s-2) var(--s-3);align-items:baseline;
   font-size:var(--f-2);line-height:var(--lh-body);margin:var(--s-3) 0}
@@ -631,9 +633,33 @@ function lookAt(fl, video, t) {
     yaw: (nose.x - le.x) / ((re.x - le.x) || 1) - 0.5,
     pitch: (nose.y - eyeMid.y) / ((chin.y - eyeMid.y) || 1),
     blink: Math.max(g('eyeBlinkLeft'), g('eyeBlinkRight')) > 0.5,
+    /* the mouth, for speaking from one side (Tom, 2026-11-16: "I have a habit
+       of speaking from the side of my mouth"). The blendshapes name the face's
+       own left and right; not yet watched on a real face */
+    mL: g('mouthLowerDownLeft') + g('mouthUpperUpLeft') + g('mouthStretchLeft'),
+    mR: g('mouthLowerDownRight') + g('mouthUpperUpRight') + g('mouthStretchRight'),
+    shift: g('mouthLeft') - g('mouthRight'),
+    gap: (L[14].y - L[13].y) / ((chin.y - eyeMid.y) || 1),
   };
 }
 const EYE_BAND = { gh: 0.18, gv: 0.18, yaw: 0.07, pitch: 0.08 };
+/* how even the mouth was while he spoke: 100 is both sides alike. `dir` is
+   the side that did more, `open` the lip gap as a share of face height, `bad`
+   the stretches of 0.8 s or more where one side clearly led, for the coach */
+function mouthOf(looks, t0, least) {
+  const sp = looks.filter(x => x.mo && x.talk && (x.mo.l + x.mo.r) > 0.08);
+  if (sp.length < (least || 20)) return null;
+  const a = x => clamp((x.mo.l - x.mo.r) / (x.mo.l + x.mo.r + 0.05) + x.mo.s, -1, 1);
+  const mean = sp.reduce((s0, x) => s0 + a(x), 0) / sp.length;
+  const mag = sp.reduce((s0, x) => s0 + Math.abs(a(x)), 0) / sp.length;
+  const bad = []; let run = null;
+  sp.forEach(x => {
+    const rel = (x.t - t0) / 1000;
+    if (Math.abs(a(x)) > 0.35) { if (!run) run = [rel, rel]; else if (rel - run[1] < 0.4) run[1] = rel; else { if (run[1] - run[0] >= 0.8) bad.push([r1(run[0]), r1(run[1] - run[0])]); run = [rel, rel]; } }
+  });
+  if (run && run[1] - run[0] >= 0.8) bad.push([r1(run[0]), r1(run[1] - run[0])]);
+  return { even: 100 * (1 - Math.min(1, mag)), dir: mean >= 0 ? 'left' : 'right', open: sp.reduce((s0, x) => s0 + x.mo.gap, 0) / sp.length * 100, bad: bad.slice(0, 6) };
+}
 function onLens(look, base) {
   if (!look || !base || look.blink) return null;
   return Math.abs(look.gh - base.gh) <= EYE_BAND.gh && Math.abs(look.gv - base.gv) <= EYE_BAND.gv &&
@@ -651,7 +677,7 @@ const STYLES = [
   { id: 'live',  name: 'Live',          note: 'a stream, thinking out loud',        band: [140, 170] },
   { id: 'read',  name: 'Read aloud',    note: 'a passage, no thinking',             band: [140, 160] },
 ];
-const DEFAULT_TGT = { fpm: 4, fpmLow: 2, eye: 80, eyeStart: 60, crispPct: 85, pitch: 6, ttMin: 60, ttMax: 120 };
+const DEFAULT_TGT = { fpm: 4, fpmLow: 2, eye: 80, eyeStart: 60, mouthEven: 85, crispPct: 85, pitch: 6, ttMin: 60, ttMax: 120 };
 function targets() { return Object.assign({}, DEFAULT_TGT, opt('tgt', {}) || {}); }
 function band(style) {
   const t = targets(), s = STYLES.filter(x => x.id === style)[0] || STYLES[0];
@@ -677,6 +703,8 @@ const METRICS = {
   pitch:   { name: 'Pitch spread', unit: 'st', fmt: v => r1(v), note: 'semitones between the low and high tenth of your voice' },
   eye:     { name: 'On the lens', unit: '%', fmt: v => Math.round(v), note: 'share of the take with eyes and head in the lens zone' },
   eyeAway: { name: 'Longest look away', unit: 's', fmt: v => r1(v), note: '' },
+  mouthEven: { name: 'Mouth evenness', unit: '%', fmt: v => Math.round(v), note: 'both sides of the mouth moving alike while you spoke' },
+  mouthOpen: { name: 'Mouth opening', unit: '%', fmt: v => r1(v), note: 'lip gap while speaking, as a share of face height' },
   hiss:    { name: 'Longest sound', unit: 's', fmt: v => r1(v), note: 'one breath, one sound' },
   time:    { name: 'Time', unit: '', fmt: v => mmss(v), gfmt: v => mmss(v), note: 'from the first word to STOP' },
   /* the program's: read off the transcript where there is one, so each is
@@ -1080,6 +1108,10 @@ const FIXES = [
     goals: t => [{ m: 'crisp', op: 'ge', v: stepGe(srcM().crisp, t.crispPct, 5) }],
     why: 'Consonants live at 2 to 4kHz, and the last one of each word is the first to go.',
     how: 'Open the mouth wider and sound the last consonant of every word.' },
+  { id: 'fix-mouth', skill: 'clear', name: 'Whole mouth', style: 'read', kind: 'read', dur: 45, cam: true, mouthLive: true,
+    goals: t => [{ m: 'mouthEven', op: 'ge', v: stepGe(srcM().mouthEven, t.mouthEven, 5) }],
+    why: 'One side of the mouth doing the work muffles half the sound, and the camera sees it.',
+    how: 'Read it to the camera. Open the whole mouth on every vowel, both corners moving the same. The meter shows how even it is.' },
   { id: 'fix-lens', skill: 'eyes', name: 'Think at the lens', style: 'long', kind: 'topic', dur: 45, cam: true,
     goals: t => [{ m: 'eye', op: 'ge', v: stepGe(srcM().eye, t.eye, 10) }, { m: 'eyeAway', op: 'le', v: 2 }],
     why: 'Eyes leave the lens to look for the next sentence, and the screen never has it.',
@@ -1092,7 +1124,7 @@ const LIVE = { held: 'ums', crutch: 'crutch', longPauses: 'silences', pauses: 'p
 /* each fault the coach can name, in a few words, for FOCUS */
 const FAULT = { 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
   fillers: 'Fillers', crutch: 'Crutch phrases', speedup: 'Speeding up', fast: 'Too fast', slow: 'Too slow', 'dead-air': 'Long silences',
-  'run-on': 'Too few pauses', restarts: 'Stammered starts', flat: 'A flat voice', mumble: 'Soft consonants', eyes: 'Eyes off the lens' };
+  'run-on': 'Too few pauses', mouth: 'Talking from one side', restarts: 'Stammered starts', flat: 'A flat voice', mumble: 'Soft consonants', eyes: 'Eyes off the lens' };
 /* what went wrong in one take, worst first: {id, sev, what, cue, fix} */
 function coach(t) {
   const d = t && t.drill !== 'warm' ? drillById(t.drill) : null;
@@ -1148,6 +1180,8 @@ function coach(t) {
   if (m.pitch != null && m.pitch < tg.pitch - 1 && d.style !== 'read') add('flat', 'pitch', (tg.pitch - m.pitch) / tg.pitch * 0.75, 'Pitch moved ' + m.pitch + ' semitones, against ' + tg.pitch + '.', 'Lift your voice on the one word in each sentence that matters.', 'fix-key-word');
   if (m.crisp != null && m.crisp < tg.crispPct) add('mumble', 'crisp', (tg.crispPct - m.crisp) / tg.crispPct * 2.8, 'Crispness ' + Math.round(m.crisp) + '% of this morning\'s warm-up, against ' + tg.crispPct + '%.', 'Open the mouth wider and sound every last consonant.', 'fix-crisp');
   if (m.eye != null && m.eye < tg.eye) add('eyes', 'eye', (tg.eye - m.eye) / tg.eye * 2.1, 'On the lens ' + Math.round(m.eye) + '%' + (m.eyeAway ? ', the longest look away ' + m.eyeAway + 's.' : '.'), 'Find the next thought with the eyes on the lens.', 'fix-lens');
+  if (m.mouthEven != null && m.mouthEven < tg.mouthEven) add('mouth', 'mouthEven', (tg.mouthEven - m.mouthEven) / tg.mouthEven * 3,
+    'Mouth evenness ' + Math.round(m.mouthEven) + '%: your ' + (m.mouthDir || 'one') + ' side did more of the work.', 'Open the whole mouth on every vowel, both corners moving the same.', 'fix-mouth', (ev && ev.mz) || []);
   const fb = t.fb || {};
   return out.filter(f => fb[f.id] !== 0).sort((x, y) => y.sev - x.sev);
 }
@@ -1188,7 +1222,9 @@ function clipPlayer(t) {
   const bar = tl.querySelector('.bar'), hit = el('div', 'hit'), head = el('i', 'head');
   tl.insertBefore(hit, bar); hit.appendChild(bar); bar.appendChild(head);
   wrap.appendChild(btn); wrap.appendChild(tl);
-  const audio = new Audio(); audio.preload = 'auto';
+  const isVid = !!(t.vid || (row && /^video/.test(row.mime || '')));
+  const audio = isVid ? document.createElement('video') : new Audio(); audio.preload = 'auto';
+  if (isVid) { audio.playsInline = true; audio.setAttribute('playsinline', ''); audio.className = 'vid'; wrap.classList.add('hasvid'); wrap.insertBefore(audio, wrap.firstChild); }
   let url = null, stopAt = null, raf = 0;
   const src = (t.clipP ? t.clipP.then(b => b ? (url = URL.createObjectURL(b)) : null) : Promise.resolve(row.data))
     .then(s => { if (s) audio.src = s; else wrap.classList.add('none'); return s; });
@@ -1206,6 +1242,7 @@ function clipPlayer(t) {
     try { audio.currentTime = clamp(from, 0, end); } catch (e) {}
     audio.play().catch(() => UI.toast('The recording would not play.', { bad: true }));
   });
+  if (isVid) audio.onclick = () => btn.click();
   btn.onclick = () => { if (audio.paused) play(audio.currentTime >= end - 0.3 ? 0 : audio.currentTime, null); else audio.pause(); };
   hit.onclick = e => { const r = hit.getBoundingClientRect(); play((e.clientX - r.left) / Math.max(1, r.width) * end, null); };
   return { el: wrap, play: play, stop: () => { audio.pause(); if (url) URL.revokeObjectURL(url); } };
@@ -1618,7 +1655,12 @@ function myVoice() {
   v.takes = all.length; v.wpm = avg('wpm'); v.fpm = avg('fpm');
   return v;
 }
-const speakers = () => Rec.all('speaker').map(r => Object.assign({ key: r.key }, r.payload)).sort((a, b) => (a.at || 0) - (b.at || 0));
+/* his own pastes, plus Todoist tasks `Speaker: <name>` whose description is
+   their transcript: Tom asks Claude Code for a speaker by name and Claude
+   finds the words (Tom, 2026-11-16: "add someone just by typing their name") */
+const speakers = () => Rec.all('speaker').map(r => Object.assign({ key: r.key }, r.payload))
+  .concat(todoQs('Speaker').map(x => ({ key: 'td:' + x.text, name: x.text, text: String(x.notes || '').replace(/^\*\*[^*]+\*\*.*$/gm, ''), td: 1 })))
+  .filter(sp => wordsOf(sp.text).length >= 30).sort((a, b) => (a.at || 0) - (b.at || 0));
 const speakerVoice = sp => voiceOf(String(sp.text || '').split(/[.!?]+\s+|\n+/));
 const VOICE_ROWS = [
   ['perPiece', 'Words per sentence', v => r1(v), 'yours: per breath group, the transcript has no full stops'],
@@ -1686,8 +1728,8 @@ function drawVoice(m) {
   c.appendChild(acts);
   sps.forEach(sp => {
     const r = el('div', 'row mb-plate');
-    r.innerHTML = '<span class="tx"><span class="nm">' + esc(sp.name) + '</span><span class="sub">' + wordsOf(sp.text).length + ' words pasted</span></span>';
-    Mobile.hold(r, e => UI.menu(e && e.clientX || 0, e && e.clientY || 0, [
+    r.innerHTML = '<span class="tx"><span class="nm">' + esc(sp.name) + '</span><span class="sub">' + wordsOf(sp.text).length + (sp.td ? ' words, found by Claude (Todoist)' : ' words pasted') + '</span></span>';
+    if (!sp.td) Mobile.hold(r, e => UI.menu(e && e.clientX || 0, e && e.clientY || 0, [
       { label: 'Remove ' + sp.name, kind: 'bad', fn: () => { const was = Object.assign({}, sp); delete was.key; Rec.del('speaker', null, sp.key); UI.undo('removed ' + sp.name, () => { Rec.set('speaker', null, sp.key, was); draw(); }); draw(); } },
     ], { title: 'SPEAKER' }), { dots: true, dotsLabel: 'More for ' + sp.name });
     c.appendChild(r);
@@ -1988,6 +2030,7 @@ function drawToday(m) {
   ql.appendChild(drillRow(TT));
   ql.appendChild(drillRow(FT));
   ql.appendChild(drillRow(OT));
+  if (camOn()) ql.appendChild(drillRow(drillById('fix-mouth')));
   qc.appendChild(ql);
   m.appendChild(qc);
 
@@ -2343,7 +2386,7 @@ function lastLine(d, t) {
 const T = { live: false };
 async function startTake(d, warmStep, prompt) {
   if (T.live) return;
-  const wantCam = !!(d && d.cam && camOn());
+  const wantCam = !!(d && camOn() && (d.cam || optOn('camAll', 1)));
   const wantAsr = !!(d && (asrOn() || (d.forceAsr && ASR)));
   let stream;
   try {
@@ -2361,11 +2404,14 @@ async function startTake(d, warmStep, prompt) {
   T.liveLast = 0;
   /* the take's own sound, kept on this device so the coach's moments can be
      played back. Tom, 2026-11-16. Off in Settings; never for the warm-up */
-  T.rec = null; T.clipP = null;
+  T.rec = null; T.clipP = null; T.vid = false;
   if (d && optOn('rec', 1) && window.MediaRecorder) try {
-    const mime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].filter(x => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(x))[0] || '';
-    const o = { audioBitsPerSecond: 32000 }; if (mime) o.mimeType = mime;
-    const rec = new MediaRecorder(new MediaStream(stream.getAudioTracks()), o), parts = [];
+    const vid = !!(wantCam && stream.getVideoTracks().length && optOn('recVid', 1));
+    const kinds = vid ? ['video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'] : ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'];
+    const mime = kinds.filter(x => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(x))[0] || '';
+    const o = vid ? { audioBitsPerSecond: 32000, videoBitsPerSecond: 250000 } : { audioBitsPerSecond: 32000 }; if (mime) o.mimeType = mime;
+    const rec = new MediaRecorder(new MediaStream(vid ? stream.getTracks() : stream.getAudioTracks()), o), parts = [];
+    T.vid = vid;
     rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
     T.clipP = new Promise(res => { rec.onstop = () => res(parts.length ? new Blob(parts, { type: rec.mimeType || mime || 'audio/webm' }) : null); });
     T.rec = rec;
@@ -2431,7 +2477,8 @@ async function readEye(calib) {
   const look = lookAt(fl, $('#cam'), performance.now());
   if (calib) { if (look && !look.blink) T.eye.calib.push(look); return; }
   const on = onLens(look, T.eye.base);
-  T.eye.looks.push({ t: performance.now(), on: on, seen: !!look });
+  T.eye.looks.push({ t: performance.now(), on: on, seen: !!look, talk: T.ear.level() > 0.25,
+    mo: look && !look.blink ? { l: look.mL, r: look.mR, s: look.shift, gap: look.gap } : null });
 }
 function runTake() {
   const d = T.d, mid = $('#tkMid'), meters = $('#tkMeters');
@@ -2451,7 +2498,7 @@ function runTake() {
   const mPace = mk('mPace', T.warm ? (T.warm.kind === 'hiss' ? 'sound' : T.warm.kind === 'siren' ? 'spread' : 'crisp') : 'pace');
   const mLvl = mk('mLvl', 'time'); mLvl.innerHTML += '<div class="level"><i></i></div>';
   const w = d && winOf(d);
-  const mEye = mk('mEye', w ? 'light' : T.cam ? 'lens' : d && d.live ? LIVE[d.live] : T.listener ? 'transcript' : 'time');
+  const mEye = mk('mEye', w ? 'light' : T.cam ? (d && d.mouthLive ? 'mouth' : 'lens') : d && d.live ? LIVE[d.live] : T.listener ? 'transcript' : 'time');
   $('#tkFoot').innerHTML = '';
   const stop = el('button', 'mb-btn go mb-press mb-tap', ICN('stop') + '<span>STOP</span>');
   stop.onclick = () => stopTake(false);
@@ -2488,7 +2535,10 @@ function runTake() {
         const wpm = Math.round(m.wpmEst);
         setMeter(mPace, m.spoken > 3 ? wpm : '·', band_ ? (OPS.in(wpm, band_.v) ? 'in' : 'out') : '');
       }
-      if (T.cam) {
+      if (T.cam && d && d.mouthLive) {
+        const mo = mouthOf(T.eye.looks.slice(-30), T.t0, 5);
+        setMeter(mEye, mo ? Math.round(mo.even) + '%' : (engineState === 'failed' ? 'off' : '\u2026'), mo ? (mo.even >= targets().mouthEven ? 'in' : 'out') : 'off');
+      } else if (T.cam) {
         const recent = T.eye.looks.slice(-10), on = recent.filter(x => x.on).length, seen = recent.filter(x => x.seen).length;
         setMeter(mEye, seen ? Math.round(on / seen * 100) + '%' : (engineState === 'failed' ? 'off' : '…'), seen ? (on / seen >= 0.8 ? 'in' : 'out') : 'off');
       } else if (w) {
@@ -2570,6 +2620,7 @@ function finishTake(m, secs) {
     T.eye.looks.forEach(x => { if (x.seen && !x.on) { if (last != null) run += (x.t - last); away = Math.max(away, run); } else run = 0; last = x.t; });
     eyeAway = away / 1000;
   }
+  const mo = T.cam ? mouthOf(T.eye.looks, T.t0) : null;
   const ref = crispRef();
   const out = {
     wpm: asrOn && words >= 10 ? words / minutes : m.wpmEst, wpmEst: m.wpmEst, words: words, syll: m.syll,
@@ -2578,12 +2629,14 @@ function finishTake(m, secs) {
     restarts: m.restarts, pitch: m.pitchSpread == null ? null : r1(m.pitchSpread), f0: m.f0 == null ? null : Math.round(m.f0),
     crispRaw: r1(m.crisp * 1000) / 1000, crisp: ref ? m.crisp / ref * 100 : null,
     eye: eye == null ? null : r1(eye), eyeAway: eyeAway == null ? null : r1(eyeAway),
+    mouthEven: mo ? r1(mo.even) : null, mouthOpen: mo ? r1(mo.open) : null, mouthDir: mo ? mo.dir : null,
     spoken: r1(m.spoken), loud: m.loud == null ? null : r1(m.loud), time: Math.round(secs),
   };
   /* where things happened, for the coach: each um and each pause in seconds
      from the start, and the pace in each third of the take */
   const rel = x => r1(Math.max(0, x - T.from));
   const ev = { end: r1(m.total), held: m.heldAt.map(h => [rel(h.at), r1(h.dur)]), pz: m.pauseAt.map(p => [rel(p.at), r1(p.dur)]) };
+  if (mo && mo.bad.length) ev.mz = mo.bad;
   out.openUms = ev.held.filter(h => h[0] < 5).length;
   if (asrOn) {
     const dv = devicesOf(T.listener.out.chunks, T.listener.text());
@@ -2618,6 +2671,7 @@ function finishTake(m, secs) {
     asr: asrOn ? 1 : 0, cam: eye != null ? 1 : 0, tx: asrOn ? T.listener.text().slice(0, 4000) : '', hits: asrOn ? tx.hits : null,
     prompt: T.prompt && (T.prompt.text || (T.prompt.items || []).join(' | ')), p: T.prompt, at: Date.now() };
   if (T.origin && T.origin.key) take.from = T.origin.key;
+  if (T.vid && T.clipP) take.vid = 1;
   if (T.prompt && T.prompt.kind === 'script') take.script = T.prompt.key;
   take.key = saveTake(take); take.date = Day.today();
   if (d === AQ && T.prompt && T.prompt.ask) {
@@ -2745,6 +2799,7 @@ function showTake(t, html) {
         put('ratio', m.ratio); put('restarts', m.restarts);
         put('crisp', m.crisp, 'against today\'s warm-up'); put('pitch', m.pitch, m.f0 ? 'around ' + m.f0 + ' Hz' : '');
         put('eye', m.eye); put('eyeAway', m.eyeAway);
+        put('mouthEven', m.mouthEven, m.mouthDir ? 'your ' + m.mouthDir + ' side did more' : ''); put('mouthOpen', m.mouthOpen);
         if (m.crisp == null && m.crispRaw != null) stat(rows, 'Crispness, raw', Math.round(m.crispRaw * 1000), 'no warm-up to measure against');
         if (m.eye == null && d.cam) stat(rows, 'On the lens', '·', 'not measured');
       } else {
@@ -2846,6 +2901,8 @@ function drawGear(p) {
   lang.onchange = () => Rec.setting(APP.id, 'lang', lang.value);
   p.appendChild(UI.row('Transcript language', 'what the recogniser listens for', lang));
   p.appendChild(UI.row('Camera', 'On for the EYES drills. About 15MB of face finder, fetched once and then kept. The picture never leaves this machine', UI.toggle(camOn(), on => Rec.setting(APP.id, 'cam', on ? 1 : 0))));
+  p.appendChild(UI.row('Camera on every take', 'Eyes and mouth are measured on every take, not only the EYES drills', UI.toggle(optOn('camAll', 1), on => Rec.setting(APP.id, 'camAll', on ? 1 : 0))));
+  p.appendChild(UI.row('Record video', 'With the camera on, keeps the picture with the sound, on this device only', UI.toggle(optOn('recVid', 1), on => Rec.setting(APP.id, 'recVid', on ? 1 : 0))));
   p.appendChild(UI.row('Which camera', 'front is the one you talk to', UI.segmented([{ id: 'user', name: 'Front' }, { id: 'environment', name: 'Back' }], opt('facing', 'user'), v => Rec.setting(APP.id, 'facing', v))));
   p.appendChild(UI.row('Pace beat', 'a click per syllable on the To the beat drill', UI.toggle(optOn('beat', 1), on => Rec.setting(APP.id, 'beat', on ? 1 : 0))));
   p.appendChild(UI.row('Record takes', 'Keeps each take\'s sound on this device, to play the moments the coach names', UI.toggle(optOn('rec', 1), on => Rec.setting(APP.id, 'rec', on ? 1 : 0))));

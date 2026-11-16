@@ -509,6 +509,45 @@ seeded takes showing every measure and the phrases, a pasted speaker as a
 second column, COPY FOR CLAUDE. No page errors, no sideways scroll. Review
 197/197. His real backup had 16 takes and no transcripts that day.
 
+## The camera: mouth, video, every take, 2026-11-16 (SPEAK 1.0.18)
+
+Tom: *"add a webcam recording feature so you can see how I talk and so I can
+maintain eye contact ... I need to practice speaking with my whole mouth
+because apparently I have a habit of speaking from the side of my mouth."*
+
+- **The camera is on for every take** (Settings, Camera on every take,
+  `speak.camAll`, on), not only EYES, so eyes and mouth are read each time.
+  EYES goals still apply only to EYES drills; the coach's eyes fault now fires
+  on any camera take.
+- **Mouth** (`lookAt` adds `mL`, `mR`, `shift`, `gap` from the face tracker's
+  blendshapes and lip landmarks; `mouthOf`): over frames while he is
+  speaking (`T.ear.level() > 0.25`) with the mouth moving, each frame's lean
+  is (left - right) / (left + right) plus the mouth pulled sideways.
+  `mouthEven` is 100 minus the mean size of the lean; `mouthDir` the side that
+  did more; `mouthOpen` the lip gap as a share of face height; `ev.mz` the
+  stretches of 0.8 s or more leaning past 0.35. Target `mouthEven` 85
+  (`DEFAULT_TGT`), a first guess. **Not watched on a real face**, and which way
+  the tracker's left and right fall is from its documentation, not seen.
+- **Coach fault `mouth`** ("Talking from one side") with its moments, fixed by
+  **`fix-mouth`, Whole mouth**: a read passage to the camera, the third meter
+  showing evenness live (`mouthLive`), goal one step up. Also under QUICK
+  PRACTICE while the camera switch is on.
+- **Video**: with the camera on, the recorder takes picture and sound
+  (`video/webm` VP8 and Opus, 250 kbps, else `video/mp4`; Settings, Record
+  video, `speak.recVid`, on). Same `tclip` row, device only; `take.vid`.
+  The take's player shows it mirrored above the strip, and every moment button
+  plays the picture at that moment. About 30 KB a second.
+- **A speaker by name**: Tom asks Claude Code; Claude finds a transcript and
+  adds a Todoist task `Speaker: <name>` whose description is the words (any
+  `**Label:**` lines are dropped). SPEAK lists it beside his pastes, labelled
+  "found by Claude".
+
+Watched 2026-11-16 in headless Chromium at 390 with a fake microphone and
+Chromium's fake camera (no face in it): a FITNESS take turned the camera on,
+saved a 377 KB video clip, the player showed and played it; `mouthOf` on made-up
+frames found the right side leading at the made-up 2 s stretch; the coach named
+it with that moment; Whole mouth's meter read mouth. No page errors.
+
 ## Needs from the foundation
 
 - A device-only row type: one `Rec` would keep and back up but live sync
