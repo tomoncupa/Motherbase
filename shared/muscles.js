@@ -33,8 +33,8 @@
     ['Shoulders', ['Front Delts', 'Side Delts', 'Rear Delts', 'Rotator Cuff']],
     ['Arms', ['Biceps', 'Triceps', 'Forearm Flexors', 'Forearm Extensors']],
     ['Core', ['Abs', 'Obliques', 'Serratus']],
-    ['Legs', ['Quads', 'Hamstrings', 'Glutes', 'Adductors', 'Calves']],
-    ['Other', ['Cardio']]
+    ['Legs', ['Quads', 'Hamstrings', 'Glutes', 'Adductors', 'Calves', 'Tibialis']],
+    ['Other', ['Neck', 'Cardio']]
   ];
   var LIST = [], REGION = {};
   GROUPS.forEach(function (r) { r[1].forEach(function (m) { LIST.push(m); REGION[m] = r[0]; }); });
@@ -72,6 +72,20 @@
   var R = [
     /* ── combinations and traps for the rules below ── */
     ['Rowing machine', 'cardio', /rowing machine|\berg\b|concept 2|row erg/, { Cardio: 1 }],
+
+    /* ── prehab and small muscles, named before the big rules swallow them ── */
+    ['Tibialis raise', 'iso', /tib(ialis)? (raise|curl)|toe raise|tib bar|dorsiflex/, { Tibialis: 1 }],
+    ['Reverse nordic', 'squat', /reverse nordic/, { Quads: 1 }],
+    ['Knee-over-toe squat', 'squat', /spanish squat|terminal knee|\btke\b|poliquin step|peterson step|patrick step/, { Quads: 1 }],
+    ['Cossack squat', 'lunge', /cossack|side lunge|lateral lunge/, { Adductors: 1, Quads: 0.75, Glutes: 0.5 }],
+    ['Wall slide', 'iso', /wall slide|wall angel|scapular wall|floor slide/, { Serratus: 1, 'Lower Traps': 0.75 }],
+    ['Bird dog', 'core', /bird dog/, { 'Lower Back': 1, Glutes: 0.5 }],
+    ['Hip airplane', 'iso', /airplane|fire hydrant/, { Glutes: 1 }],
+    ['Forearm rotation', 'iso', /pronation|supination|leverage bar|wrist rotat|rice bucket|radial deviation|ulnar deviation/, { 'Forearm Flexors': 0.75, 'Forearm Extensors': 0.75 }],
+    ['Wrist roller', 'iso', /wrist roller/, { 'Forearm Flexors': 1, 'Forearm Extensors': 0.75 }],
+    ['Finger extension', 'iso', /finger extension|band extension|hand extensor/, { 'Forearm Extensors': 1 }],
+    ['Neck work', 'iso', /neck (curl|extension|flexion|bridge|harness|raise)|neck harness|4 way neck|four way neck/, { Neck: 1 }],
+    ['Dead bug', 'core', /dead ?bug|mcgill|curl up/, { Abs: 1 }],
     ['Deadlift row', 'pull-h', /deadlift row/, { 'Upper Back': 1, Lats: 0.75, 'Lower Back': 0.5, Biceps: 0.5, Hamstrings: 0.25 }],
     ['Upright row to press', 'press-v', /upright row to press/, { 'Side Delts': 1, 'Front Delts': 0.75, 'Upper Traps': 0.5, Triceps: 0.25 }],
     ['Upright row', 'pull-v', /upright row|high pull/, { 'Side Delts': 1, 'Upper Traps': 0.75, Biceps: 0.25 }],
@@ -92,7 +106,7 @@
     ['Romanian deadlift', 'hinge', /romanian/, { Hamstrings: 1, Glutes: 0.75, 'Lower Back': 0.5 }],
     ['Stiff-leg deadlift', 'hinge', /stiff|straight leg deadlift/, { Hamstrings: 1, Glutes: 0.75, 'Lower Back': 0.75 }],
     ['Sumo deadlift', 'hinge', /sumo deadlift/, { Glutes: 1, Quads: 0.75, Adductors: 0.75, 'Lower Back': 0.75, Hamstrings: 0.5 }],
-    ['Trap bar deadlift', 'hinge', /(trap|hex) bar deadlift|^(?!.*row).*(trap|hex) bar/, { Glutes: 1, Quads: 0.75, 'Lower Back': 0.75, Hamstrings: 0.5, 'Upper Traps': 0.25 }],
+    ['Trap bar deadlift', 'hinge', /(trap|hex) bar deadlift|^(?!.*(row|shrug|carry)).*(trap|hex) bar/, { Glutes: 1, Quads: 0.75, 'Lower Back': 0.75, Hamstrings: 0.5, 'Upper Traps': 0.25 }],
     ['Deadlift', 'hinge', /deadlift/, { 'Lower Back': 1, Glutes: 0.75, Hamstrings: 0.5, Quads: 0.5, 'Upper Traps': 0.25, 'Forearm Flexors': 0.25 }],
 
     /* ── vertical pulls ── */
@@ -106,7 +120,7 @@
     ['Inverted row', 'pull-h', /australian|inverted row|bodyweight row|ring row|trx row/, { 'Upper Back': 1, Lats: 0.75, Biceps: 0.5, 'Rear Delts': 0.5 }],
     ['Underhand row', 'pull-h', /(underhand|reverse grip|supinated|yates).* row|(underhand|reverse grip) row/, { Lats: 1, 'Upper Back': 0.75, Biceps: 0.75, 'Lower Back': 0.25 }],
     ['High row', 'pull-h', /high (cable )?row|wide (grip )?(cable |seated |bent over )?row|face height row/, { 'Upper Back': 1, 'Rear Delts': 0.75, Biceps: 0.5, Lats: 0.25 }],
-    ['Low row', 'pull-h', /low (cable )?row|low row machine/, { Lats: 1, 'Upper Back': 0.75, Biceps: 0.5, 'Rear Delts': 0.25 }],
+    ['Low row', 'pull-h', /low (cable )?row|low row machine|seated cable row|cable row/, { Lats: 1, 'Upper Back': 0.75, Biceps: 0.5, 'Rear Delts': 0.25 }],
     ['One-arm row', 'pull-h', /(one|single) arm.* row|dumbbell row|kroc|meadows/, { Lats: 1, 'Upper Back': 0.75, Biceps: 0.5, 'Rear Delts': 0.25 }],
     ['Bent-over row', 'pull-h', /barbell row|bent (over )?row|pendlay|trap bar row|helms|seal row(?!.*chest)/, { 'Upper Back': 1, Lats: 0.75, 'Rear Delts': 0.5, Biceps: 0.5, 'Lower Back': 0.5 }],
     ['Supported row', 'pull-h', /row|tbar/, { 'Upper Back': 1, Lats: 0.75, 'Rear Delts': 0.5, Biceps: 0.5 }],
@@ -115,8 +129,8 @@
     ['Face pull', 'pull-h', /face pull/, { 'Rear Delts': 1, 'Upper Back': 0.75, 'Rotator Cuff': 0.5, 'Lower Traps': 0.25 }],
     ['Scaption', 'iso', /scaption/, { 'Side Delts': 1, 'Front Delts': 0.5, 'Lower Traps': 0.25 }],
     ['Rear delt fly', 'iso', /rear delt|rear lateral|reverse (pec deck|fly)|bent over (lateral|raise)/, { 'Rear Delts': 1, 'Upper Back': 0.5 }],
-    ['External rotation', 'iso', /external rotat|internal rotat|cuban|rotator/, { 'Rotator Cuff': 1, 'Rear Delts': 0.25 }],
-    ['Y raise', 'iso', /\by raise|prone y|lower trap|\bi y t\b|ytw/, { 'Lower Traps': 1, 'Rear Delts': 0.5 }],
+    ['External rotation', 'iso', /external rotat|internal rotat|cuban|rotator|\bw raise|no money|90 90|sleeper|shoulder rotation|\bl fly|band dislocat|shoulder dislocat/, { 'Rotator Cuff': 1, 'Rear Delts': 0.25 }],
+    ['Y raise', 'iso', /\by raise|prone y|lower trap|\bi y t\b|ytw|\by t w|\bi t y|trap 3|cable y|incline y/, { 'Lower Traps': 1, 'Rear Delts': 0.5 }],
     ['Shrug', 'iso', /shrug/, { 'Upper Traps': 1, 'Forearm Flexors': 0.25 }],
     ['Carry', 'carry', /farmer|suitcase carry|carry|yoke/, { 'Forearm Flexors': 1, 'Upper Traps': 0.75, Obliques: 0.5, Abs: 0.25 }],
 
@@ -144,30 +158,31 @@
     ['Leg press', 'squat', /leg press/, { Quads: 1, Glutes: 0.5, Adductors: 0.5 }],
     ['Leg extension', 'iso', /leg extension|quad extension/, { Quads: 1 }],
     ['Leg curl', 'iso', /leg curl|hamstring curl/, { Hamstrings: 1 }],
-    ['Jump', 'plyo', /jump|bound|hop/, { Quads: 1, Glutes: 0.5, Calves: 0.5 }],
+    ['Jump', 'plyo', /jump|\bbounds?\b|\bhops?\b/, { Quads: 1, Glutes: 0.5, Calves: 0.5 }],
 
     /* ── presses (no curl ever lands here: "Vertical Bench Curl", "Decline Curl") ── */
     ['Close-grip bench', 'press-h', /close grip.*(bench|press)|tricep grip|jm press/, { Triceps: 1, 'Lower Chest': 0.5, 'Front Delts': 0.25 }],
     ['Incline fly', 'iso', /^(?!.*curl).*incline.*fly|low to high/, { 'Upper Chest': 1, 'Lower Chest': 0.5 }],
     ['Incline press', 'press-h', /^(?!.*curl).*incline/, { 'Upper Chest': 1, 'Front Delts': 0.5, Triceps: 0.5 }],
-    ['Tricep dip', 'press-v', /bench dip|dip machine|seated dip|tricep.*dip|dip.*tricep/, { Triceps: 1, 'Lower Chest': 0.5, 'Front Delts': 0.25 }],
-    ['Dip', 'press-v', /\bdip/, { 'Lower Chest': 1, Triceps: 0.75, 'Front Delts': 0.5 }],
+    /* Tom, 2026-11-16: "dips are definitely triceps. It has to be a chest dip before it's a chest movement." */
+    ['Chest dip', 'press-v', /chest dip|dip.*chest|forward lean dip|leaning dip/, { 'Lower Chest': 1, Triceps: 0.75, 'Front Delts': 0.5 }],
+    ['Dip', 'press-v', /\bdip/, { Triceps: 1, 'Lower Chest': 0.5, 'Front Delts': 0.5 }],
     ['Decline fly', 'iso', /decline.*fly|high to low/, { 'Lower Chest': 1 }],
     ['Decline press', 'press-h', /decline.*(press|bench|pushup|chess|chest)/, { 'Lower Chest': 1, Triceps: 0.5, 'Front Delts': 0.25 }],
     ['Chest fly', 'iso', /fly|pec deck|crossover|svend|plate press/, { 'Lower Chest': 1, 'Upper Chest': 0.5 }],
     ['Landmine press', 'press-v', /landmine press/, { 'Front Delts': 1, 'Upper Chest': 0.5, Triceps: 0.5 }],
     ['Push press', 'press-v', /push press|jerk/, { 'Front Delts': 1, Triceps: 0.5, 'Side Delts': 0.5, Quads: 0.25 }],
     ['Overhead press', 'press-v', /overhead|military|shoulder press|arnold|behind the neck|log press|z press|^(seated |standing )?(dumbbell )?press$|dumbbell press (standing|seated|machine)|(seated|standing) dumbbell press|one arm standing dumbbell press|smith machine overhead/, { 'Front Delts': 1, 'Side Delts': 0.5, Triceps: 0.5, 'Upper Chest': 0.25 }],
-    ['Push up plus', 'press-h', /pushup plus|scapular pushup|serratus|landmine punch/, { Serratus: 1 }],
+    ['Push up plus', 'press-h', /pushup plus|scapular pushup|serratus|landmine punch|ceiling punch|scapular protraction|\bpunch/, { Serratus: 1 }],
     ['Bench press', 'press-h', /^(?!.*curl).*(bench|chest|floor press|pushup|press up|pec press)/, { 'Lower Chest': 1, 'Upper Chest': 0.5, Triceps: 0.5, 'Front Delts': 0.5 }],
 
     /* ── raises ── */
     ['Front raise', 'iso', /front raise|front dumbbell raise|plate raise/, { 'Front Delts': 1, 'Upper Chest': 0.25 }],
-    ['Lateral raise', 'iso', /lateral|side raise|lu raise/, { 'Side Delts': 1, 'Upper Traps': 0.25 }],
+    ['Lateral raise', 'iso', /lateral|side raise|lu raise|lean away|\by press|egyptian/, { 'Side Delts': 1, 'Upper Traps': 0.25 }],
 
     /* ── core (before grip: "Hanging Leg Raise" is not a hang) ── */
     ['Rollout', 'core', /rollout|ab wheel/, { Abs: 1, Lats: 0.25 }],
-    ['Oblique work', 'core', /oblique|side bend|side plank|twist|wood ?chop|pallof|rotation|windmill/, { Obliques: 1, Abs: 0.25 }],
+    ['Oblique work', 'core', /oblique|side bend|side plank|twist|wood ?chop|chop|pallof|rotation|windmill|suitcase/, { Obliques: 1, Abs: 0.25 }],
     ['Ab work', 'core', /crunch|situp|leg raise|knee raise|v up|dragon flag|hollow|plank|\bl sit|toes to bar|\bab\b|abs\b|abdominal|vacuum/, { Abs: 1 }],
 
     /* ── arms ── */
