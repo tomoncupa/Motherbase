@@ -8,7 +8,9 @@
    {mb:'guess', id, text} or {.., error} through window.foodGuessBack.
 
    Nothing of his goes in but the food names, when they were eaten, and his
-   own earlier figures for the same names. The helpers at the foot are
+   own earlier figures for the same names, and since 2026-11-16 the photos
+   he logged food with (written into the guess folder as photo-N.jpg and
+   read with the Read tool, nothing else). The helpers at the foot are
    SpeakRefine.cs's, copied, so STATUS.exe stands alone.                  */
 
 using System;
@@ -33,6 +35,17 @@ static class FoodGuess
         string id = Convert.ToString(m.ContainsKey("id") ? m["id"] : "");
         string prompt = Convert.ToString(m.ContainsKey("prompt") ? m["prompt"] : "");
         if (id == "" || prompt.Trim() == "") return;
+        /* photos come as {name, data} with the JPEG in base64 */
+        var images = new List<KeyValuePair<string, byte[]>>();
+        if (m.ContainsKey("images") && m["images"] is ArrayList)
+            foreach (object o in (ArrayList)m["images"])
+            {
+                var im = o as Dictionary<string, object>;
+                if (im == null) continue;
+                string nm = Path.GetFileName(Convert.ToString(im.ContainsKey("name") ? im["name"] : ""));
+                if (!System.Text.RegularExpressions.Regex.IsMatch(nm, @"^photo-\d{1,2}\.jpg$")) continue;
+                try { images.Add(new KeyValuePair<string, byte[]>(nm, Convert.FromBase64String(Convert.ToString(im["data"])))); } catch { }
+            }
         /* one at a time: the page asks again for whatever is still waiting */
         if (Interlocked.CompareExchange(ref busy, 1, 0) != 0)
         {
@@ -41,12 +54,12 @@ static class FoodGuess
         }
         new Thread(() =>
         {
-            try { send(json.Serialize(Run(id, prompt, log))); }
+            try { send(json.Serialize(Run(id, prompt, images, log))); }
             finally { Interlocked.Exchange(ref busy, 0); }
         }) { IsBackground = true }.Start();
     }
 
-    static Dictionary<string, object> Run(string id, string prompt, Action<string> log)
+    static Dictionary<string, object> Run(string id, string prompt, List<KeyValuePair<string, byte[]>> images, Action<string> log)
     {
         var res = new Dictionary<string, object> { { "mb", "guess" }, { "id", id } };
         string exe = Exe();
@@ -55,9 +68,13 @@ static class FoodGuess
         Directory.CreateDirectory(room);
         string sys = Path.Combine(room, "SYSTEM.md");
         File.WriteAllText(sys, SYSTEM, new UTF8Encoding(false));
+        /* last ask's photos go first, so a picture is never read twice */
+        foreach (string old in Directory.GetFiles(room, "photo-*.jpg")) { try { File.Delete(old); } catch { } }
+        foreach (var im in images) File.WriteAllBytes(Path.Combine(room, im.Key), im.Value);
+        string tools = images.Count > 0 ? "WebSearch,Read" : "WebSearch";
         var args = new List<string> {
             "-p", "--strict-mcp-config", "--output-format", "json",
-            "--tools", "WebSearch", "--allowedTools", "WebSearch",
+            "--tools", tools, "--allowedTools", tools,
             "--append-system-prompt-file", sys,
         };
         var psi = new ProcessStartInfo(exe, Join(args))
@@ -68,7 +85,7 @@ static class FoodGuess
         };
         Clean(psi);
         string outText = "", errText = "";
-        log("guess: asking Claude");
+        log("guess: asking Claude" + (images.Count > 0 ? " with " + images.Count + " photo(s)" : ""));
         try
         {
             var p = Process.Start(psi);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.113, 2026-11-16">
+<meta name="mb-version" content="1.0.114, 2026-11-16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -359,6 +359,10 @@ button.islehero{background:none;border:0;padding:0;margin:0;color:inherit;
 .logrow.fblank input[type=text]:not(:focus){border-color:transparent;border-bottom-color:var(--border);
   background:transparent;border-radius:0}
 .logrow.fblank .fend{height:var(--tap);border-bottom:1px solid var(--border)}
+/* PHOTO: a picture of food, guessed by Claude (Tom, 2026-11-16) */
+.logrow .fcam{width:var(--s-6);height:var(--s-6);padding:0;display:grid;place-items:center;
+  background:transparent;border:0;color:var(--text-muted);cursor:pointer}
+.logrow .fcam svg{width:var(--s-5);height:var(--s-5)}
 .logrow input[type=text]::placeholder{color:var(--text-muted)}
 .logrow .fnm{min-width:0}
 .logrow .fnm small{display:block;color:var(--text-muted);font-size:var(--f-1);white-space:nowrap;
@@ -5647,7 +5651,7 @@ function mealMarks(x) {
         ? r1(mult) + ' × ' + said.replace(/^1\s+/, '') : said;
     bits.push(esc(serveText), x.amt != null ? r1(x.amt) + ' ' + esc(x.unit || '') : '');
   }
-  if (x.gs === 'wait') bits.push('<span class="gs">guessing</span>');
+  if (x.gs === 'wait') bits.push('<span class="gs">' + (x.shot ? 'guessing from the photo' : 'guessing') + '</span>');
   else if (x.gs === 'claude') bits.push('<span class="gs">guess ' + Math.round(num(x.lo, 0)) + ' to ' + Math.round(num(x.hi, 0)) + ' kcal' + (x.gserve ? ', ' + esc(x.gserve) : '') + '</span>');
   else if (errTag(x.err)) bits.push(errTag(x.err));
   if (x.acct) bits.push(esc(x.acct));
@@ -5660,7 +5664,12 @@ function foodGrid(d, list) {
   /* the card's title is the Name column's heading: one line, not two */
   head.appendChild(el('h2', 'fnm', foodLoggedHead(d)));
   FOODCOLS.forEach(k => head.appendChild(el('span', 'fh', k[1])));
-  head.appendChild(el('span'));
+  const cam = el('button', 'fcam mb-tap');
+  cam.type = 'button'; cam.dataset.icon = 'photo'; cam.setAttribute('aria-label', 'Log food from a photo');
+  cam.title = 'Log food from a photo';
+  if (window.Icons) cam.innerHTML = Icons.svg('photo');
+  cam.onclick = () => foodPhoto(d);
+  head.appendChild(cam);
   g.appendChild(head);
   list.forEach(x => g.appendChild(lockedMeal(x) ? foodRowLocked(d, x) : foodRowTyped(d, x, null)));
   const drafts = FOOD_DRAFTS[d] || [];
@@ -5882,21 +5891,61 @@ function foodRowLocked(d, x) {
    name asks again. */
 const GUESS = { flying: null, at: 0, t: null };
 const guessHere = () => DESK && !!(window.chrome && window.chrome.webview);
+/* PHOTO. Tom, 2026-11-16: marking a day not fully tracked is too much work,
+   so food gets logged the cheap way instead. A picture becomes a meal waiting
+   for a guess, with the picture kept as a `shot` small enough for live sync
+   to carry it (a row past 64KB never leaves the device), so a photo taken on
+   the phone is guessed by STATUS.exe on the PC. The name is Claude's unless
+   he types one. */
+const SHOT_MAX = 56000;     /* characters of data URL, under live sync's 64KB with room for the row */
+async function foodShrink(file) {
+  for (const [px, q] of [[960, .6], [800, .55], [640, .5], [512, .45], [400, .4]]) {
+    const u = await shrink(file, px, q);
+    if (u.length <= SHOT_MAX) return u;
+  }
+  return null;
+}
+function foodPhoto(d) {
+  pickPhoto(async f => {
+    let url = null;
+    try { url = await foodShrink(f); } catch (e) { url = null; }
+    if (!url) { UI.toast('That photo could not be read'); return; }
+    const id = saveShot('meal', url);
+    const key = uid();
+    Rec.set('meal', d, key, { fid: null, food: '', name: '', amt: 1, unit: 'serving', serve: 'one off', t: Date.now(), gs: 'wait', shot: id });
+    Rec.patch('shot', vd(), id, { ref: d + '|' + key });
+    Mobile.feedback('success');
+    draw();
+    guessSoon();
+  });
+}
+function foodShot(r) {
+  const id = r.payload && r.payload.shot;
+  if (!id) return null;
+  return Rec.all('shot').map(x => x.key === id ? x.payload : null).filter(p => p && p.img)[0] || null;
+}
 function guessDrop(m) { ['gs', 'lo', 'hi', 'gserve', 'gwhy', 'err', 'g0', 'gf'].forEach(k => { delete m[k]; }); return m; }
 function guessSoon() { if (!guessHere()) return; clearTimeout(GUESS.t); GUESS.t = setTimeout(guessRun, 2500); }
 function guessWaiting() {
-  return Rec.all('meal').filter(r => r.payload && r.payload.gs === 'wait' && r.payload.name && r.date)
+  return Rec.all('meal').filter(r => r.payload && r.payload.gs === 'wait' && (r.payload.name || r.payload.shot) && r.date)
     .sort((a, b) => (b.payload.t || 0) - (a.payload.t || 0)).slice(0, 12);
 }
 function guessRun() {
   if (!guessHere() || !countCal()) return;
   if (GUESS.flying && Date.now() - GUESS.at < 10 * 60 * 1000) return;
-  const rows = guessWaiting();
+  /* a photo row waits until its picture has arrived on this device, and at
+     most four pictures go in one ask */
+  let pics = 0;
+  const rows = guessWaiting().filter(r => {
+    if (!r.payload.shot) return true;
+    if (pics >= 4 || !foodShot(r)) return false;
+    pics++; return true;
+  });
   if (!rows.length) return;
   /* his own figures for any name sharing a word with what is asked, so the
      same food reads the same twice */
   const words = new Set();
-  rows.forEach(r => String(r.payload.name).toLowerCase().split(/[^a-z0-9ñ]+/).forEach(w => { if (w.length > 2) words.add(w); }));
+  rows.forEach(r => String(r.payload.name || '').toLowerCase().split(/[^a-z0-9ñ]+/).forEach(w => { if (w.length > 2) words.add(w); }));
   const hits = n => String(n || '').toLowerCase().split(/[^a-z0-9ñ]+/).some(w => words.has(w));
   const known = [];
   Object.values(foods()).filter(f => hits(f.name + ' ' + (f.brand || ''))).slice(0, 15).forEach(f => {
@@ -5911,18 +5960,27 @@ function guessRun() {
   });
   pastOneOffs().filter(o => hits(o.name) && o.kcal != null).slice(0, 10)
     .forEach(o => known.push('- ' + o.name + ': ' + Math.round(o.kcal) + ' kcal (typed by him)'));
-  const items = rows.map(r => '- key ' + r.date + '|' + r.key + ': "' + r.payload.name + '"' +
-    (r.payload.at ? ', eaten at ' + r.payload.at : '') + ' on ' + r.date);
+  const images = [];
+  const items = rows.map(r => {
+    let what = '"' + (r.payload.name || '') + '"';
+    if (r.payload.shot) {
+      const file = 'photo-' + (images.length + 1) + '.jpg';
+      images.push({ name: file, data: String(foodShot(r).img).replace(/^data:[^,]*,/, '') });
+      what = 'the food in the photo ' + file + (r.payload.name ? ', which he called "' + r.payload.name + '"' : '');
+    }
+    return '- key ' + r.date + '|' + r.key + ': ' + what + (r.payload.at ? ', eaten at ' + r.payload.at : '') + ' on ' + r.date;
+  });
   /* Tom, 2026-11-16: "it's a lot safer to err initially on the side of the
      higher range", since most people logging want to lose fat. Said here in
      the page rather than STATUS.exe, so it ships without a new program. */
   const prompt = 'Lean high. Most people logging food here want to lose fat, and people under-count what they eat, so a guess too low hides a surplus while one too high costs little. Make kcal the upper part of your range, about three quarters of the way from lo to hi, with the macros to match; keep lo and hi honest.\n\n' +
     'Estimate these:\n' + items.join('\n') +
-    (known.length ? '\n\nHis earlier figures for similar names:\n' + known.join('\n') : '');
+    (known.length ? '\n\nHis earlier figures for similar names:\n' + known.join('\n') : '') +
+    (images.length ? '\n\nRead each photo file in this folder with the Read tool before answering. From a photo, judge the portion against the plate, hand, cup or pack, count the pieces, read any brand, shop or label, and add a "name" field: what the food is, in a few plain words.' : '');
   const id = 'g' + Date.now();
   GUESS.flying = { id: id, keys: rows.map(r => r.date + '|' + r.key) };
   GUESS.at = Date.now();
-  try { window.chrome.webview.postMessage('mbguess:' + JSON.stringify({ id: id, prompt: prompt })); }
+  try { window.chrome.webview.postMessage('mbguess:' + JSON.stringify({ id: id, prompt: prompt, images: images })); }
   catch (e) { GUESS.flying = null; }
 }
 /* STATUS.exe calls this with Claude's answer */
@@ -5948,6 +6006,7 @@ window.foodGuessBack = function (d) {
     ['p', 'c', 'f'].forEach(m => { const v = num(g[m]); if (v != null) ch[m] = Math.round(v); });
     if (g.serve) ch.gserve = String(g.serve).slice(0, 60);
     if (g.why) ch.gwhy = String(g.why).slice(0, 200);
+    if (g.name && !cur.name) ch.name = String(g.name).slice(0, 80);
     Rec.patch('meal', date, key, ch);
     n++;
   });
