@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.26, 2026-11-16">
+<meta name="mb-version" content="1.0.27, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -212,7 +212,7 @@ body.widget>header,body.widget>#nav,body.widget>main{display:none}
 body.widget #wid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:var(--s-3);padding:var(--s-3) var(--s-4)}
 #wid .wtop{display:flex;align-items:baseline;gap:var(--s-3);min-width:0}
 #wid .logo{font-size:var(--f-3)}
-#wid .muted{flex:1;min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#wid .muted{flex:1;min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:none;border:0;color:var(--text-muted);font:inherit;cursor:pointer;text-decoration:underline;min-height:var(--tap)}
 #wid .wbtns{display:flex;flex-direction:column;gap:var(--s-2)}
 #wid .wbtns button{flex:1;min-width:0;min-height:var(--tap);padding:0 var(--s-1);font-family:var(--font-display);font-weight:var(--w-bold);letter-spacing:var(--track-cap)}
 @media (max-width:640px){
@@ -239,7 +239,7 @@ body.widget #wid{flex:1;display:flex;flex-direction:column;justify-content:cente
 <main class="mb-scroll"><div class="wrap" id="main"></div></main>
 
 <div id="wid">
-  <div class="wtop"><div class="logo">SPE<b>AK</b></div><span class="muted" id="widSub"></span></div>
+  <div class="wtop"><div class="logo">SPE<b>AK</b></div><button class="muted mb-tap" id="widSub" aria-label="Today's takes"></button></div>
   <div class="wbtns">
     <button class="mb-btn go mb-press mb-tap" id="widGo" data-d="topics" aria-label="Speak practice">SPEAK</button>
     <button class="mb-btn mb-press mb-tap" data-d="fitness" aria-label="Fitness topic">FITNESS</button>
@@ -678,14 +678,14 @@ function onLens(look, base) {
    Every number here is his to change in Settings. The defaults and where
    each came from are in speak/RESEARCH.md; the bands are words a minute. */
 const STYLES = [
-  { id: 'long',  name: 'Talking head',  note: 'explainers, the long video',        band: [140, 160] },
-  { id: 'short', name: 'Short-form',    note: 'Reels, Shorts, TikTok',              band: [160, 180] },
+  { id: 'long',  name: 'Talking head',  note: 'explainers, the long video',        band: [160, 190] },
+  { id: 'short', name: 'Short-form',    note: 'Reels, Shorts, TikTok',              band: [170, 200] },
   { id: 'teach', name: 'Teaching',      note: 'a tutorial, step by step',           band: [120, 140] },
   { id: 'story', name: 'Story',         note: 'slower at the line that matters',    band: [120, 150] },
-  { id: 'live',  name: 'Live',          note: 'a stream, thinking out loud',        band: [140, 170] },
+  { id: 'live',  name: 'Live',          note: 'a stream, thinking out loud',        band: [160, 190] },
   { id: 'read',  name: 'Read aloud',    note: 'a passage, no thinking',             band: [140, 160] },
 ];
-const DEFAULT_TGT = { fpm: 4, fpmLow: 2, eye: 80, eyeStart: 60, mouthEven: 85, crispPct: 85, pitch: 6, ttMin: 60, ttMax: 120 };
+const DEFAULT_TGT = { fpm: 4, fpmLow: 2, eye: 80, eyeStart: 60, mouthEven: 85, crispPct: 85, pitch: 6, ttMin: 120, ttMax: 180 };
 function targets() { return Object.assign({}, DEFAULT_TGT, opt('tgt', {}) || {}); }
 function band(style) {
   const t = targets(), s = STYLES.filter(x => x.id === style)[0] || STYLES[0];
@@ -2047,7 +2047,7 @@ function openAsk(q) {
    everywhere, go to the sheet's SPEAK tab and into every backup, which is
    how other work reads them. */
 let bankQ = '';
-const SRC_NAME = { free: 'Free speak', shoot: 'Shoot question', topic: 'Current topic', viewer: 'Viewer question', term: 'Skool term', other: 'Current topic', otherbank: 'Question' };
+const SRC_NAME = { free: 'Free speak', take: 'Practice take', shoot: 'Shoot question', topic: 'Current topic', viewer: 'Viewer question', term: 'Skool term', other: 'Current topic', otherbank: 'Question' };
 const srcLine = a => (SRC_NAME[a.src] || 'Question') + (a.bracket ? ' [' + a.bracket + ']' : '') + (a.subj ? ' \u00b7 ' + a.subj : '');
 function bankText(list) {
   const by = {}; list.forEach(a => { (by[a.q] = by[a.q] || []).push(a); });
@@ -2458,7 +2458,7 @@ function bankGaps(a) {
 }
 async function sortFree() {
   if (!REF.on || SORT.busy) return;
-  const a = answers().filter(x => x.src === 'free' && !x.sorted && !SORT.tried[x.key] && wordsOf(x.text || '').length >= 30).pop();
+  const a = answers().filter(x => (x.src === 'free' || x.src === 'take') && !x.sorted && !SORT.tried[x.key] && wordsOf(x.text || '').length >= 30).pop();
   if (!a) return;
   SORT.busy = true; SORT.tried[a.key] = 1;
   /* Tom, 2026-11-16: "my talking points get synthesized off of each other
@@ -2524,9 +2524,42 @@ function card(title, right) {
   if (title) c.appendChild(el('h2', null, esc(title) + (right ? '<span class="r">' + esc(right) + '</span>' : '')));
   return c;
 }
+/* the camera, one switch, on by default (Tom 2026-11-16: "Not all my takes
+   will have camera on, so let me disable it but have it on by default") */
+function camRow() {
+  return UI.row('Camera', 'Eyes and mouth are measured when it is on', UI.toggle(optOn('camAll', 1), on => Rec.setting(APP.id, 'camAll', on ? 1 : 0)));
+}
+/* today's takes, newest first, each opening its sheet */
+function openTodayTakes() {
+  const ts = takesOn(Day.today()).filter(t => t.drill !== 'warm').slice().reverse();
+  UI.dialog({
+    title: 'TODAY\u2019S TAKES', width: 560,
+    body: (b, h) => {
+      if (!ts.length) { b.appendChild(el('p', 'muted', 'No takes yet today.')); return; }
+      const l = el('div', 'list');
+      ts.forEach(t => {
+        const d = drillById(t.drill), r = el('button', 'row mb-plate mb-press mb-tap');
+        r.innerHTML = '<span class="tx"><span class="nm">' + esc((d ? d.name : t.drill) + (t.prompt ? ': ' + t.prompt : '')) + '</span><span class="sub">' +
+          esc(new Date(t.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' \u00b7 ' + mmss(t.dur || 0) + (d ? ' \u00b7 ' + numsOf(d, t) : '')) + '</span></span>';
+        r.onclick = () => { h.close(); showTake(t); };
+        l.appendChild(r);
+      });
+      b.appendChild(l);
+    },
+    actions: [{ label: 'CLOSE' }],
+  });
+}
 function drawToday(m) {
   const today = Day.today();
   const done = takesOn(today);
+  const tc = card('TODAY', done.filter(t => t.drill !== 'warm').length + ' takes');
+  const ta = el('div', 'acts');
+  const tb = el('button', 'mb-btn mb-press mb-tap', '<span>TODAY\u2019S TAKES</span>'); tb.onclick = openTodayTakes; ta.appendChild(tb);
+  const fb = el('button', 'mb-btn go mb-press mb-tap', '<span>FREE SPEAK</span>'); fb.onclick = () => openFree(); ta.appendChild(fb);
+  const mb2 = el('button', 'mb-btn mb-press mb-tap', '<span>DRILL MENU</span>'); mb2.onclick = openMenu; ta.appendChild(mb2);
+  tc.appendChild(ta);
+  tc.appendChild(camRow());
+  m.appendChild(tc);
   const w = warmToday();
   const aq = askQueue();
   if (aq.length) {
@@ -2895,6 +2928,7 @@ function openDrill(d) {
         (last ? '<b>Last</b><span>' + esc(lastLine(d, last)) + '</span>' : '') +
         (st === 'locked' ? '<b>Locked</b><span>Opens when step ' + (d.step - 1) + ' is met. Hold it on PATH to open it anyway.</span>' : '');
       b.appendChild(g);
+      b.appendChild(camRow());
       /* A drill nothing can measure says so, and the switch it wants is right
          here rather than three taps away in Settings (DOCTRINE law 6). */
       if (need === 'a script') {
@@ -3076,10 +3110,19 @@ function runTake() {
   Sfx.play('start');
   if (T.beat) startBeat();
   const dur = T.warm ? T.warm.dur : durOf(d);
+  /* Tom, 2026-11-16: "set a minimum speaking time of 2 minutes". SPEAK
+     PRACTICE, the topics and FREE SPEAK keep STOP locked until the shortest
+     time in TARGETS (two minutes by default) */
+  const minS = !T.warm && d && (d === TT || d === FT || d === OT || d === FS) ? targets().ttMin : 0;
+  if (minS) stop.disabled = true;
   const band_ = !T.warm && T.goals.filter(g => g.m === 'wpm')[0];
   T.timer = setInterval(() => {
     if (!T.live) return;
     const s = (performance.now() - T.t0) / 1000;
+    if (minS && stop.disabled) {
+      if (s >= minS) { stop.disabled = false; stop.innerHTML = ICN('stop') + '<span>STOP</span>'; paintIcons(stop); }
+      else stop.innerHTML = '<span>KEEP GOING ' + mmss(minS - s) + '</span>';
+    }
     $('#tkClock').textContent = w || (d && d.open) ? mmss(s) : mmss(Math.max(0, dur - s));
     if (w) lamp(mEye, s, w);
     /* the pen drill's switch: the first half is kept, the second measured */
@@ -3398,6 +3441,16 @@ function showTake(t, html) {
         b.appendChild(el('p', 'muted', 'Marked: fillers and crutch phrases. The browser\'s transcript, so um and uh are mostly missing from it; held sounds stand in.'));
       } else if (d && d.asr) b.appendChild(el('p', 'muted', 'No transcript. Fillers are the held sounds only.'));
       if (d && !d.fix && t.tx && t.key) b.appendChild(contentBox(t, h));
+      if (d && t.tx && t.key && !Rec.has('answer', t.date, t.key) && t.drill !== 'warm') {
+        const kb = el('div', 'acts'), kbb = el('button', 'mb-btn mb-press mb-tap', '<span>ADD TO KNOWLEDGE BANK</span>');
+        kbb.onclick = () => {
+          Rec.set('answer', t.date, t.key, { q: t.prompt || d.name, src: 'take', subj: '', text: t.tx, words: wordsOf(t.tx).length, dur: t.dur || 0, at: t.at || Date.now() });
+          kbb.disabled = true; kbb.innerHTML = '<span>IN YOUR BANK</span>';
+          UI.toast(REF.on ? 'In your bank. Claude files it into the right bank.' : 'In your bank. Claude files it the next time SPEAK on the PC is open.');
+          setTimeout(sortFree, 300);
+        };
+        kb.appendChild(kbb); b.appendChild(kb);
+      }
       if ((d === FS || d === TIGHT) && t.key) {
         const par = t.p && t.p.parent && takes().filter(x => x.key === t.p.parent)[0];
         if (par) b.insertBefore(el('p', 'muted', 'First take: ' + esc(numsOf(drillById(par.drill) || FS, par)) + '. This one: ' + esc(numsOf(d, t)) + '.'), b.firstChild.nextSibling);
@@ -3509,6 +3562,7 @@ function widSub() {
 function widget() {
   document.body.classList.add('widget');
   widSub();
+  $('#widSub').onclick = () => { widSize('big'); openTodayTakes(); };
   /* four buttons stacked, Tom 2026-11-16: SPEAK PRACTICE, FITNESS TOPIC,
      OTHER TOPIC and FREE SPEAK, in a 300 x 260 window; FREE SPEAK opens its
      jumping off points first */

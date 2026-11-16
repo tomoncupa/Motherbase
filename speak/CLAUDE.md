@@ -594,6 +594,16 @@ Tom approved both through the SPEAK/knowledge master chat ("Yes, all three"). FR
 - **YOUR VOICE** gains a Posted column, every post's words read as one speaker.
 - **draftmade** (undated, keyed by the take; `tools/backup.html` takes it): the draft shows "Posted <day> as a <kind>, graded N" with the link, leaves POSSIBLE CONTENT, and SPEAK sets its own `draft.state` to `done`, `doneBy: 'post'`, `doneAt` from the row, only if the draft was open (`syncMade`). When the row goes (Tom marked the match wrong), a draft with `doneBy: 'post'` goes back to open; one he pressed MADE IT on stays made.
 
+## Desktop first, 2026-11-16 (SPEAK 1.0.27)
+
+Tom: *"Is the speak exe different from speak in main menu? Because I want them to be the same ... speak will primarily be a desktop app."*
+
+- **SPEAK.exe opens the whole app** in an ordinary, resizable window (about 1100 x 860, size and place kept in `speak-app.txt` as `full=`). The old always-on-top widget is **Mini widget** in the tray's menu (`mini=1`); the page's `mbsize:` messages only move the window in mini mode.
+- **TODAY** opens with a TODAY card: TODAY'S TAKES (a sheet of today's takes, each opening its sheet), FREE SPEAK, DRILL MENU, and the **Camera** switch (`speak.camAll`, on by default). The same switch sits on every drill's sheet. In the widget, "N takes today" is a button to the same sheet.
+- **ADD TO KNOWLEDGE BANK** under any take with a transcript that is not in the bank yet: an `answer` with `src: 'take'`, filed by `sortFree` like a free speak.
+- **Two minutes at least**: SPEAK PRACTICE, the topics and FREE SPEAK keep STOP locked as KEEP GOING m:ss until TARGETS' shortest time, now 120 s (red light 180 s). Tom: "set a minimum speaking time of 2 minutes".
+- **Pace targets for a direct speaker** (Tom's authority style, measured against Faizan Asif's 277 wpm and his own 141 to 165): Talking head 160 to 190, Short-form 170 to 200, Live 160 to 190. A band he saved in TARGETS still wins.
+
 ## SPEAK.exe tray and desktop icon, 2026-11-16
 
 Tom: "give Speak a desktop icon and a tray icon". SPEAK.exe has a tray icon (`Tray` in `desktop/SpeakApp.cs`): a click brings it forward, its menu has Open SPEAK, Free speak, Drill menu and Quit SPEAK. The window's close button tucks it into the tray; Quit or Windows shutting down really closes it. A `SPEAK.lnk` on his desktop opens `desktop/SPEAK.exe` (made once by hand from a session, not by the program).

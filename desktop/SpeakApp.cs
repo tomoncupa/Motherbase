@@ -48,6 +48,13 @@ class Speak : Form
     string root, cfgPath, dataDir, pageUrl;
     Point home = new Point(int.MinValue, int.MinValue);   /* where the small window sits */
     bool big, bootSet;
+    /* Tom, 2026-11-16: "Is the speak exe different from speak in main menu?
+       Because I want them to be the same ... speak will primarily be a desktop
+       app." SPEAK.exe opens the whole app in an ordinary window now; the old
+       always-on-top widget is "Mini widget" in the tray's menu. */
+    bool mini;
+    Rectangle full = Rectangle.Empty;
+    string page;
 
     static Mutex only;
 
@@ -90,24 +97,19 @@ class Speak : Form
         try { File.Delete(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "speak-app.log")); } catch { }
         LoadCfg();
 
-        string page = Path.Combine(root, "speak", "index.html");
+        page = Path.Combine(root, "speak", "index.html");
         Text = TITLE;
-        FormBorderStyle = FormBorderStyle.FixedSingle;
-        MaximizeBox = false;
         StartPosition = FormStartPosition.Manual;
-        TopMost = true;
         BackColor = Color.FromArgb(0x08, 0x0B, 0x10);
         Icon = Hosted.OwnIcon();
-        ClientSize = SMALL;
-        Place();
+        ApplyMode();
 
         web = new WebView2();
         web.Dock = DockStyle.Fill;
         web.DefaultBackgroundColor = BackColor;
         web.CreationProperties = new CoreWebView2CreationProperties();
         web.CreationProperties.UserDataFolder = dataDir;
-        pageUrl = UseFolder() ? new Uri(page).AbsoluteUri + "?widget=1&boot=0"
-                              : Hosted.Url + "speak/index.html?widget=1&boot=0&fresh=1";
+        pageUrl = UrlFor(mini);
         web.CoreWebView2InitializationCompleted += Started;
         Controls.Add(web);
         web.EnsureCoreWebView2Async(null);
@@ -124,6 +126,44 @@ class Speak : Form
        tucks it into the tray; Quit in the tray's menu ends it. */
     NotifyIcon tray;
     bool quitting;
+    string UrlFor(bool m)
+    {
+        string q = m ? "?widget=1&boot=0" : "?boot=0";
+        return UseFolder() ? new Uri(page).AbsoluteUri + q : Hosted.Url + "speak/index.html" + q + "&fresh=1";
+    }
+    void ApplyMode()
+    {
+        big = false;
+        if (mini)
+        {
+            FormBorderStyle = FormBorderStyle.FixedSingle;
+            MaximizeBox = false;
+            TopMost = true;
+            ClientSize = SMALL;
+            Place();
+            return;
+        }
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = true;
+        TopMost = false;
+        var wa = Screen.PrimaryScreen.WorkingArea;
+        bool seen = false;
+        foreach (var sc in Screen.AllScreens) if (!full.IsEmpty && sc.WorkingArea.IntersectsWith(full)) seen = true;
+        if (full.IsEmpty || !seen)
+        {
+            int w = Math.Min(1100, wa.Width - 40), h = Math.Min(860, wa.Height - 40);
+            full = new Rectangle(wa.Left + (wa.Width - w) / 2, wa.Top + (wa.Height - h) / 2, w, h);
+        }
+        Bounds = full;
+    }
+    void SetMini(bool m)
+    {
+        if (m == mini) return;
+        mini = m;
+        ApplyMode();
+        try { if (web != null && web.CoreWebView2 != null) web.CoreWebView2.Navigate(UrlFor(mini)); } catch { }
+        SaveCfg();
+    }
     void Tray()
     {
         tray = new NotifyIcon { Icon = Icon, Text = TITLE, Visible = true };
@@ -131,6 +171,9 @@ class Speak : Form
         menu.Items.Add("Open SPEAK", null, (s, e) => Bring());
         menu.Items.Add("Free speak", null, (s, e) => { Bring(); Run("openFree()"); });
         menu.Items.Add("Drill menu", null, (s, e) => { Bring(); Run("openMenu()"); });
+        var mw = new ToolStripMenuItem("Mini widget") { Checked = mini };
+        mw.Click += (s, e) => { SetMini(!mini); mw.Checked = mini; Bring(); };
+        menu.Items.Add(mw);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit SPEAK", null, (s, e) => { quitting = true; Close(); });
         tray.ContextMenuStrip = menu;
@@ -189,6 +232,7 @@ class Speak : Form
         string m;
         try { m = e.TryGetWebMessageAsString(); } catch { return; }
         if (m == null) return;
+        if (m.StartsWith("mbsize:") && !mini) return;
         if (m == "mbsize:big") Grow(BIG);
         else if (m == "mbsize:small") Grow(SMALL);
         else if (m == "mbsize:wide") Grow(WIDE);
@@ -250,7 +294,13 @@ class Speak : Form
     protected override void OnMove(EventArgs e)
     {
         base.OnMove(e);
-        if (!big && WindowState == FormWindowState.Normal && IsHandleCreated) home = Location;
+        if (mini && !big && WindowState == FormWindowState.Normal && IsHandleCreated) home = Location;
+        if (!mini && WindowState == FormWindowState.Normal && IsHandleCreated) full = Bounds;
+    }
+    protected override void OnResizeEnd(EventArgs e)
+    {
+        base.OnResizeEnd(e);
+        if (!mini && WindowState == FormWindowState.Normal) { full = Bounds; SaveCfg(); }
     }
 
     void LoadCfg()
@@ -264,6 +314,14 @@ class Speak : Form
                 if (eq < 1) continue;
                 string k = line.Substring(0, eq).Trim(), v = line.Substring(eq + 1).Trim();
                 if (k == "boot") bootSet = true;
+                else if (k == "mini") mini = v == "1";
+                else if (k == "full")
+                {
+                    string[] f = v.Split(',');
+                    int fx, fy, fw, fh;
+                    if (f.Length == 4 && int.TryParse(f[0], out fx) && int.TryParse(f[1], out fy) && int.TryParse(f[2], out fw) && int.TryParse(f[3], out fh) && fw > 200 && fh > 200)
+                        full = new Rectangle(fx, fy, fw, fh);
+                }
                 else if (k == "at")
                 {
                     string[] p = v.Split(',');
@@ -282,7 +340,9 @@ class Speak : Form
             File.WriteAllText(cfgPath,
                 "# SPEAK.exe. Delete this file to go back to the defaults.\r\n" +
                 "at=" + home.X + "," + home.Y + "\r\n" +
-                "boot=" + (GetBoot() ? "1" : "0") + "\r\n");
+                "boot=" + (GetBoot() ? "1" : "0") + "\r\n" +
+                "mini=" + (mini ? "1" : "0") + "\r\n" +
+                (full.IsEmpty ? "" : "full=" + full.X + "," + full.Y + "," + full.Width + "," + full.Height + "\r\n"));
         }
         catch { }
     }
