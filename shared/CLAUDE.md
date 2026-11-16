@@ -657,7 +657,10 @@ reopened at 07:58:28; its own `mb.cloud` showed `lost` empty and a send at
 syncing yet. Starting up." over a Sign in button. io.js 0.1.18 says
 "Signed in as X. Connecting" with no button until start ends or `why` is set.
 Also seen: Local Storage was recreated "since it was missing" on 14 Nov
-21:45 (Chromium's LOG), and another power loss at 04:41 that day.
+21:45 (Chromium's LOG) with no power loss or restart logged near it, and
+another power loss at 04:41 on the 16th. Same morning the store's IndexedDB
+answered slower than live sync waits with three programs open on it
+(`tools/backup.html`, Rec.whole); Firebase keeps the sign-in there first.
 
 ## The start screen (2026-10-04, `boot.js`)
 
