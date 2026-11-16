@@ -239,5 +239,52 @@
     return null;
   }
 
-  g.Muscles = { version: '0.1.3', LIST: LIST, REGION: REGION, GROUPS: GROUPS, RULES: RULES, PREHAB: PREHAB, norm: norm, of: of };
+  function mainOf(sh) {
+    var main = null;
+    Object.keys(sh).forEach(function (m) { if (main == null || sh[m] > sh[main]) main = m; });
+    return main;
+  }
+
+  /* What one lift trains, for every app: TRAIN, FORGE and COACH (inside
+     TRAIN) all ask this, so they cannot disagree (Tom, 2026-11-16: "Train
+     and Forge and Coach should not disagree whatsoever").
+       name   the lift's name
+       own    its own correction, `exercise.mus` ({Muscle: share}), set in
+              TRAIN's Edit Exercise. Wins over everything.
+       tag    FORGE's older muscle list for the name (`ftag.mus`, a list
+              with no shares): the first is the main muscle, the rest half.
+       group  the name of the TRAIN group it is filed in, the last word when
+              no rule knows the name ("LGNDRY" alone)
+       also   TRAIN's older {groupName: share} for that last case
+     Returns {share, main, group, src}: `group` is where TRAIN files it
+     (Prehab for a prehab rule), `src` 'own', 'tag', 'list' or 'group'. */
+  function forLift(name, own, tag, group, also) {
+    var sh = null, src = null;
+    if (own && typeof own === 'object') {
+      sh = {};
+      Object.keys(own).forEach(function (k) { var v = +own[k]; if (v > 0) sh[k] = Math.min(1, v); });
+      if (Object.keys(sh).length) src = 'own'; else sh = null;
+    }
+    if (!sh && Array.isArray(tag) && tag.length) {
+      sh = {}; tag.forEach(function (m, i) { if (m) sh[m] = i ? 0.5 : 1; }); src = 'tag';
+    }
+    if (sh) {
+      var mn = mainOf(sh), byName = of(name);
+      return { share: sh, main: mn, src: src,
+        group: byName && byName.group === 'Prehab' && (!group || /rehab/i.test(group)) ? 'Prehab' : mn };
+    }
+    var m = of(name);
+    if (m) return { share: m.share, main: m.main, group: m.group, src: 'list', rule: m.rule };
+    sh = {};
+    if (group) sh[group] = 1;
+    if (also && typeof also === 'object') Object.keys(also).forEach(function (k) { if (k !== group && +also[k] > 0) sh[k] = Math.min(1, +also[k]); });
+    return { share: sh, main: group || null, group: group || null, src: 'group' };
+  }
+
+  /* A colour slot per heading, so a chart colours by region (Tom picked 9). */
+  var REGION_SLOT = { Chest: 0, Back: 1, Shoulders: 2, Arms: 4, Trunk: 5, 'Lower body': 3, Other: 6 };
+  function slotOf(m) { return REGION[m] ? REGION_SLOT[REGION[m]] : (/rehab/i.test(m || '') ? 7 : null); }
+
+  g.Muscles = { version: '0.2.0', LIST: LIST, REGION: REGION, GROUPS: GROUPS, RULES: RULES, PREHAB: PREHAB,
+    norm: norm, of: of, forLift: forLift, mainOf: mainOf, slotOf: slotOf, REGION_SLOT: REGION_SLOT };
 })(typeof window !== 'undefined' ? window : this);
