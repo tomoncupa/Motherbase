@@ -41,7 +41,8 @@ class Speak : Form
     const string TITLE = "SPEAK";
 
     /* the page's two sizes, inside the frame */
-    static readonly Size SMALL = new Size(300, 116), BIG = new Size(440, 760);
+    static readonly Size SMALL = new Size(300, 116), BIG = new Size(440, 760), WIDE = new Size(1000, 820);
+    Size bigAs = Size.Empty;
 
     WebView2 web;
     string root, cfgPath, dataDir, pageUrl;
@@ -148,6 +149,8 @@ class Speak : Form
             Log("page loaded: " + (e2.IsSuccess ? "yes" : "NO, " + e2.WebErrorStatus));
         Caption(c);
         c.WebMessageReceived += Message;
+        /* tells the page Claude can rewrite a take here (speak, possible content) */
+        c.AddScriptToExecuteOnDocumentCreatedAsync("window.MB_REFINE=1;");
         c.Navigate(pageUrl);
     }
 
@@ -156,8 +159,10 @@ class Speak : Form
         string m;
         try { m = e.TryGetWebMessageAsString(); } catch { return; }
         if (m == null) return;
-        if (m == "mbsize:big") Grow(true);
-        else if (m == "mbsize:small") Grow(false);
+        if (m == "mbsize:big") Grow(BIG);
+        else if (m == "mbsize:small") Grow(SMALL);
+        else if (m == "mbsize:wide") Grow(WIDE);
+        else if (m.StartsWith("mbrefine:")) Refine.Ask(m.Substring(9), Log, s => BeginInvoke((Action)(() => { try { web.CoreWebView2.PostWebMessageAsJson(s); } catch { } })));
         else if (m.StartsWith("mbcap:"))
         {
             string[] p = m.Substring(6).Split(',');
@@ -171,15 +176,19 @@ class Speak : Form
        Small sits where he put it. Big keeps the same top left corner where
        it fits, and moves just enough to stay on the screen where it does
        not. Back to small, it goes home, wherever big had to move to. */
-    void Grow(bool on)
+    void Grow(bool on) { Grow(on ? BIG : SMALL); }
+    /* a third size, WIDE, for refining a take into content (SPEAK 1.0.19) */
+    void Grow(Size to)
     {
-        if (on == big) return;
+        bool on = to != SMALL;
+        if (on == big && (!on || to == bigAs)) return;
         if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
         if (on)
         {
-            home = Location;
+            if (!big) home = Location;
+            bigAs = to;
             var wa = Screen.FromControl(this).WorkingArea;
-            Size want = SizeFromClientSize(new Size(BIG.Width, Math.Min(BIG.Height, wa.Height - 60)));
+            Size want = SizeFromClientSize(new Size(Math.Min(to.Width, wa.Width - 40), Math.Min(to.Height, wa.Height - 60)));
             int x = Math.Max(wa.Left, Math.Min(Left, wa.Right - want.Width));
             int y = Math.Max(wa.Top, Math.Min(Top, wa.Bottom - want.Height));
             big = true;

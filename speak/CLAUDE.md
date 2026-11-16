@@ -37,8 +37,10 @@ his suite-wide rule of 2026-09-24 that verdicts on him are fine when they are
 correct and he can mark them right or wrong. Still no praise, no score, no
 XP, no levels (root brief, behaviour rules).
 
-**Device:** everywhere. A take is made wherever the camera is: a phone propped
-up, or a laptop at a desk. Built to the phone rules.
+**Device:** the PC first, the phone second. Tom, 2026-11-16: *"most of the
+time I'm going to be using Speak will be on PC, though Speak on phone is
+going to be a secondary thought."* Still built to the phone rules, which cost
+nothing at a desk; a PC-only power (Claude refining a take) is fine.
 
 **Tom only.** Flagged `mine` on the home screen, behind the line, and dropped
 from the client build. Nothing in it assumes Tom, so it can be given to
@@ -508,6 +510,45 @@ because apparently I have a habit of speaking from the side of my mouth."*
   "found by Claude".
 
 How it was watched: HISTORY.md: The camera: mouth, video, every take, 2026-11-16 (SPEAK 1.0.18).
+
+## Possible content and refining, added 2026-11-16 (SPEAK 1.0.19)
+
+Tom: *"how can it detect if something is, oh, this can be content? Do you
+want to refine it into a content?"*, then *"I would like Speak to have its
+own copy of the possible topics, and then we're gonna do this also in Outer
+Heaven ... the option to directly go into refine and iteration mode from a
+fresh speak practice."*
+
+- **The check** (`contentCheck`): a take with 60 words or more of transcript
+  and at least two of `CONTENT_SIGNS` (a story, a strong claim, a list,
+  advice for the viewer) gets "This could be content. It has ..." under its
+  transcript. The signs are a guess [UNTESTED on his takes]; tune them from
+  what he refines and drops.
+- **The way in** (`contentBox`): every take with a transcript, outside the
+  fix drills, ends with REFINE INTO CONTENT (filled when the check fired),
+  or OPEN DRAFT once a draft exists. No draft is made until he presses it.
+- **The row**: `draft`, keyed and dated as its take: `{take, prompt, tx,
+  why, fmt, state, at, doneAt, vers: [{text, by, ask, fmt, at}], cur}`. `by`
+  is `take` (what he said, always version 1), `claude` or `tom`. Kept to 12
+  versions (the first and the newest eleven) so the row stays under 64KB
+  and syncs. `state` is `''`, `done` (MADE IT) or `dropped`; nothing is
+  deleted.
+- **REFINE** (`openRefine`): a format (SHORT, YOUTUBE, POST, STORIES,
+  CAROUSEL, `FMTS`), the version with older and newer buttons, the words in
+  a box he edits himself (his typing edits his own newest version, else
+  starts one, so a Claude version is never overwritten), a "what to change"
+  box and REFINE, and WHAT YOU SAID. In SPEAK.exe the window grows to WIDE
+  (1000 x 820) while it is open (`mbsize:wide`).
+- **Claude only in SPEAK.exe** (`desktop/SpeakRefine.cs`): the page posts
+  `mbrefine:{id, prompt}`, SPEAK.exe runs the bundled claude.exe with no
+  tools and `voice-spoken.md` plus `brand.md` from tom-context as the system
+  prompt, and posts `{mb:'refine', id, text}` back. It sets
+  `window.MB_REFINE`; with no flag the REFINE box is replaced by a line
+  saying so, and he can still edit.
+- **SPEAK's own list**: POSSIBLE CONTENT on BANK, every draft not made or
+  dropped, newest first.
+- **OUTER HEAVEN** reads `draft` rows from the nightly backup, as
+  `knowledge.py` reads `answer` rows. Its side is its own session's work.
 
 ## Needs from the foundation
 

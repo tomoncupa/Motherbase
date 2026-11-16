@@ -76,9 +76,10 @@ $speak = Join-Path $dir 'SPEAK.exe'
 Free-Exe $speak
 & $csc -nologo -target:winexe -out:"$speak" -win32icon:"$dir\speak.ico" `
   -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
+  -reference:System.Web.Extensions.dll `
   -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
   -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" `
-  (Join-Path $dir 'SpeakApp.cs') (Join-Path $dir 'Hosted.cs')
+  (Join-Path $dir 'SpeakApp.cs') (Join-Path $dir 'SpeakRefine.cs') (Join-Path $dir 'Hosted.cs')
 
 if ($LASTEXITCODE -ne 0) { Write-Output "SPEAK build failed."; exit $LASTEXITCODE }
 

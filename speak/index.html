@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.18, 2026-11-16">
+<meta name="mb-version" content="1.0.19, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -132,6 +132,13 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .cmp{padding:var(--s-3);border-radius:var(--radius-md);margin-top:var(--s-3)}
 .cmp summary{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);letter-spacing:var(--track-cap);color:var(--text-muted);cursor:pointer;min-height:var(--tap);display:flex;align-items:center}
 .cmp .tx{margin-top:var(--s-2)}
+.cnt{padding:var(--s-3);border-radius:var(--radius-md);margin-top:var(--s-3)}
+.cnt p{margin:0 0 var(--s-2)}
+.ref-ver{display:flex;align-items:center;gap:var(--s-2);margin:var(--s-3) 0 var(--s-2)}
+.ref-ver .muted{flex:1;min-width:0}
+.ref-txt{width:100%;min-height:calc(var(--s-9) * 4);resize:vertical;font-size:var(--f-2);line-height:var(--lh-loose)}
+.ref-ask{display:flex;gap:var(--s-2);margin-top:var(--s-2)}
+.ref-ask input{flex:1;min-width:0}
 .chip{display:inline-flex;flex-direction:column;align-items:flex-start;gap:var(--s-1);text-align:left}
 .chip small{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap)}
 .ask-note{width:100%;min-height:calc(var(--s-10) * 1.2);margin-top:var(--s-3);font-size:var(--f-3);line-height:var(--lh-body)}
@@ -269,7 +276,7 @@ const APP = {
   name: 'Speak',
   icon: '◍',
   blurb: 'talk to the camera, measured: pace, fillers, flow, clarity, eyes',
-  types: ['take', 'topic', 'script', 'answer', 'ask', 'speaker'],
+  types: ['take', 'topic', 'script', 'answer', 'ask', 'speaker', 'draft'],
 };
 
 Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id);
@@ -1899,6 +1906,7 @@ function drawBank(m) {
     top.appendChild(box);
   } else top.appendChild(el('p', 'muted', 'No answers yet.'));
   m.appendChild(top);
+  drawContent(m);
   const done = askedAll();
   if (done.length) {
     const hc = card('ANSWERED QUESTIONS', String(done.length));
@@ -1952,6 +1960,172 @@ function drawBank(m) {
   }
   fill();
 }
+/* ══════════════ possible content, 2026-11-16 (SPEAK 1.0.19) ══════════════
+   Tom: "how can it detect if something is, oh, this can be content? Do you
+   want to refine it into a content?", and "the option to directly go into
+   refine and iteration mode from a fresh speak practice". A take with a
+   transcript can become a `draft` row, keyed and dated as its take, which
+   keeps every version. SPEAK's own list is POSSIBLE CONTENT on BANK; OUTER
+   HEAVEN reads the same rows from the nightly backup. Claude rewrites only
+   inside SPEAK.exe (desktop/SpeakApp.cs, `mbrefine:`), which sets
+   window.MB_REFINE; anywhere else he edits the words himself. */
+const FMTS = [
+  { id: 'short', name: 'SHORT', ask: 'a 30 to 60 second vertical video script for Reels, TikTok and Shorts: a hook in the first line, one idea, lines written to be spoken, one call to action' },
+  { id: 'yt', name: 'YOUTUBE', ask: 'a YouTube video outline: three title options, a hook for the first 15 seconds, the sections with the points to say in each, and the close' },
+  { id: 'post', name: 'POST', ask: 'an Instagram caption or Threads post: a hook line, short lines, one takeaway, one call to action' },
+  { id: 'story', name: 'STORIES', ask: 'a run of 4 to 7 Instagram Story frames, one short line each, the last one a question or a poll' },
+  { id: 'carousel', name: 'CAROUSEL', ask: 'an Instagram carousel of 6 to 9 slides: a cover that stops the scroll, one point a slide, a last slide with the call to action' },
+];
+/* what makes a take look like content: at least two of these, in 60 words
+   or more. A guess until his takes say otherwise (the brief). */
+const CONTENT_SIGNS = [
+  [/\b(i remember|one time|years ago|back when|when i was|the day i|a client (of mine )?(told|asked|came|said))\b/i, 'a story'],
+  [/\b(most people|the truth is|the biggest mistake|nobody tells you|stop (doing|trying)|here'?s (why|the thing|what)|the reason why|the problem (is|with))\b/i, 'a strong claim'],
+  [/\b(two|three|four|five|2|3|4|5) (things|ways|mistakes|rules|steps|reasons|habits|tips)\b/i, 'a list'],
+  [/\b(you (need|have) to|if you want|try this|do this|start with)\b/i, 'advice for the viewer'],
+];
+function contentCheck(t) {
+  const tx = String(t.tx || '');
+  if (tx.split(/\s+/).filter(Boolean).length < 60) return null;
+  const why = CONTENT_SIGNS.filter(s => s[0].test(tx)).map(s => s[1]);
+  return why.length >= 2 ? why : null;
+}
+const drafts = () => Rec.all('draft').map(r => Object.assign({ key: r.key, date: r.date }, r.payload)).sort((a, b) => (b.at || 0) - (a.at || 0));
+const draftOf = t => Rec.get('draft', t.date, t.key);
+const REF = { on: !!window.MB_REFINE, open: false, wait: {} };
+try {
+  window.chrome.webview.addEventListener('message', e => {
+    const d = e.data;
+    if (d && d.mb === 'refine' && REF.wait[d.id]) { const f = REF.wait[d.id]; delete REF.wait[d.id]; f(d); }
+  });
+} catch (e) {}
+function askRefine(prompt) {
+  return new Promise(res => {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    REF.wait[id] = res;
+    try { window.chrome.webview.postMessage('mbrefine:' + JSON.stringify({ id: id, prompt: prompt })); }
+    catch (e) { delete REF.wait[id]; res({ error: 'This window cannot reach Claude.' }); }
+  });
+}
+/* the plate at the foot of a take: why it may be content, and the way in */
+function contentBox(t, h) {
+  const box = el('div', 'cnt mb-plate');
+  const dr = draftOf(t), why = contentCheck(t);
+  if (dr) box.appendChild(el('p', 'muted', 'A draft from this take, ' + ((dr.vers || []).length) + ' version' + ((dr.vers || []).length === 1 ? '' : 's') + (dr.state === 'done' ? ', made' : dr.state === 'dropped' ? ', dropped' : '') + '.'));
+  else if (why) box.appendChild(el('p', null, '<b>This could be content.</b> It has ' + esc(why.join(' and ')) + '.'));
+  const b = el('button', 'mb-btn mb-press mb-tap' + (why || dr ? ' go' : ''), ICN('edit') + '<span>' + (dr ? 'OPEN DRAFT' : 'REFINE INTO CONTENT') + '</span>');
+  b.onclick = () => { if (h) h.close(); openRefine(t); };
+  box.appendChild(b);
+  paintIcons(box);
+  return box;
+}
+function openRefine(t) {
+  if (!draftOf(t)) Rec.set('draft', t.date, t.key, { take: t.key, prompt: t.prompt || '', tx: t.tx || '', why: contentCheck(t) || [], fmt: 'short', state: '', at: Date.now(), vers: [{ text: t.tx || '', by: 'take', at: Date.now() }], cur: 0 });
+  const dr = () => draftOf(t) || {};
+  const put = p => Rec.patch('draft', t.date, t.key, p);
+  let ta, nav, askBox, goBtn, busy = false, saveT = null;
+  const showVer = () => {
+    const d = dr(), vs = d.vers || [], i = Math.min(d.cur || 0, vs.length - 1), v = vs[i] || {};
+    if (document.activeElement !== ta) ta.value = v.text || '';
+    nav.querySelector('.muted').textContent = 'Version ' + (i + 1) + ' of ' + vs.length + ' · ' +
+      (v.by === 'take' ? 'what you said' : v.by === 'tom' ? 'your edit' : 'Claude' + (v.ask ? ', asked: ' + v.ask : ''));
+    nav.querySelector('.pv').disabled = i <= 0;
+    nav.querySelector('.nx').disabled = i >= vs.length - 1;
+  };
+  /* his typing: edits his own newest version in place, else starts one */
+  const typed = () => {
+    clearTimeout(saveT);
+    saveT = setTimeout(() => {
+      const d = dr(), vs = (d.vers || []).slice(), i = d.cur || 0;
+      if (vs[i] && vs[i].by === 'tom' && i === vs.length - 1) vs[i] = Object.assign({}, vs[i], { text: ta.value, at: Date.now() });
+      else { vs.push({ text: ta.value, by: 'tom', at: Date.now() }); }
+      put({ vers: trimVers(vs), cur: Math.min(vs.length, 12) - 1 });
+      showVer();
+    }, 600);
+  };
+  const refine = async () => {
+    if (busy) return;
+    const d = dr(), vs = d.vers || [], cur = vs[d.cur || 0] || {}, f = FMTS.filter(x => x.id === (d.fmt || 'short'))[0] || FMTS[0];
+    const ask = askBox.value.trim();
+    busy = true; goBtn.disabled = true; goBtn.querySelector('span').textContent = 'WRITING...';
+    const prompt = 'Turn this into ' + f.ask + '.\n\nIt comes from Tom speaking off the cuff in a practice take' + (d.prompt ? ', answering: ' + d.prompt : '') +
+      '. Keep his ideas, his examples and his way of talking. Cut the filler and the repeats. Add no claim he did not make.' +
+      (cur.by !== 'take' && cur.text ? '\n\nThe current draft:\n' + cur.text : '') +
+      (ask ? '\n\nWhat Tom wants changed: ' + ask : '') +
+      '\n\nAnswer with the draft only: no preamble, no notes after it.\n\nTHE TRANSCRIPT:\n' + (d.tx || '');
+    const r = await askRefine(prompt);
+    busy = false; goBtn.disabled = false; goBtn.querySelector('span').textContent = 'REFINE';
+    if (!r || !r.text) { UI.toast(esc((r && r.error) || 'Claude did not answer.')); return; }
+    const nv = (dr().vers || []).concat([{ text: r.text, by: 'claude', ask: ask, fmt: f.id, at: Date.now() }]);
+    put({ vers: trimVers(nv), cur: Math.min(nv.length, 12) - 1 });
+    askBox.value = '';
+    ta.blur(); showVer();
+  };
+  REF.open = true;
+  UI.dialog({
+    title: 'REFINE INTO CONTENT', width: 900,
+    onClose: () => { REF.open = false; if (saveT) { clearTimeout(saveT); } },
+    body: (b, h) => {
+      const d = dr();
+      b.appendChild(el('p', 'muted', esc((d.prompt ? d.prompt + ' · ' : '') + Day.label(t.date))));
+      b.appendChild(UI.segmented(FMTS.map(f => ({ id: f.id, name: f.name })), d.fmt || 'short', v => put({ fmt: v })));
+      nav = el('div', 'ref-ver');
+      const pv = el('button', 'mb-btn mb-press mb-tap pv', ICN('back')); pv.setAttribute('aria-label', 'Older version');
+      const nx = el('button', 'mb-btn mb-press mb-tap nx', ICN('next')); nx.setAttribute('aria-label', 'Newer version');
+      pv.onclick = () => { put({ cur: Math.max(0, (dr().cur || 0) - 1) }); ta.blur(); showVer(); };
+      nx.onclick = () => { put({ cur: Math.min((dr().vers || []).length - 1, (dr().cur || 0) + 1) }); ta.blur(); showVer(); };
+      nav.appendChild(el('span', 'muted')); nav.appendChild(pv); nav.appendChild(nx);
+      b.appendChild(nav);
+      ta = el('textarea', 'mb-input ref-txt'); ta.setAttribute('aria-label', 'The draft'); ta.setAttribute('data-keep-caret', '');
+      ta.oninput = typed;
+      b.appendChild(ta);
+      if (REF.on) {
+        const row = el('div', 'ref-ask');
+        askBox = el('input', 'mb-input'); askBox.placeholder = 'What to change: a sharper hook, shorter, more of the client story';
+        askBox.setAttribute('aria-label', 'What to change');
+        askBox.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); refine(); } };
+        goBtn = el('button', 'mb-btn go mb-press mb-tap', ICN('edit') + '<span>REFINE</span>');
+        goBtn.onclick = refine;
+        row.appendChild(askBox); row.appendChild(goBtn);
+        b.appendChild(row);
+      } else b.appendChild(el('p', 'muted', 'Claude rewrites it in SPEAK on the PC. Here you can change the words yourself; every version is kept.'));
+      const tr = el('details', 'cmp mb-plate');
+      tr.innerHTML = '<summary class="mb-tap">WHAT YOU SAID</summary><div class="tx">' + esc(d.tx || '') + '</div>';
+      b.appendChild(tr);
+      paintIcons(b);
+      showVer();
+    },
+    actions: [
+      { label: 'DROP', kind: 'bad', fn: () => { put({ state: 'dropped' }); UI.undo('dropped a draft', () => put({ state: '' })); } },
+      { label: 'COPY', fn: () => { copyText(ta.value, 'Draft'); return false; } },
+      { label: 'CLOSE' },
+      { label: 'MADE IT', kind: 'go', fn: () => { put({ state: 'done', doneAt: Date.now() }); } },
+    ],
+  });
+}
+/* the first version (what he said) always stays; then the newest eleven */
+function trimVers(vs) { return vs.length <= 12 ? vs : [vs[0]].concat(vs.slice(vs.length - 11)); }
+function drawContent(m) {
+  const open = drafts().filter(d => !d.state);
+  if (!open.length) return;
+  const c = card('POSSIBLE CONTENT', String(open.length));
+  open.forEach(d => {
+    const vs = d.vers || [], v = vs[Math.min(d.cur || 0, vs.length - 1)] || {};
+    const row = el('div', 'ans mb-plate');
+    const f = FMTS.filter(x => x.id === d.fmt)[0];
+    row.appendChild(el('div', 'muted', esc(Day.label(d.date) + ' · ' + (f ? f.name : 'SHORT') + ' · ' + vs.length + ' version' + (vs.length === 1 ? '' : 's') + (d.prompt ? ' · ' + d.prompt : ''))));
+    const words = String(v.text || '');
+    row.appendChild(el('div', 'tx', esc(words.length > 240 ? words.slice(0, 240) + '...' : words)));
+    const ra = el('div', 'acts');
+    const op = el('button', 'mb-btn go mb-press mb-tap', ICN('edit') + '<span>REFINE</span>');
+    op.onclick = () => { const tk = takes().filter(x => x.key === d.key)[0] || { key: d.key, date: d.date, tx: d.tx, prompt: d.prompt }; openRefine(tk); };
+    ra.appendChild(op);
+    row.appendChild(ra);
+    c.appendChild(row);
+  });
+  m.appendChild(c);
+}
+
 /* ══════════════ drawing ══════════════ */
 let view = 'today';
 function draw() {
@@ -2824,6 +2998,7 @@ function showTake(t, html) {
         b.appendChild(el('div', 'tx', html || esc(t.tx)));
         b.appendChild(el('p', 'muted', 'Marked: fillers and crutch phrases. The browser\'s transcript, so um and uh are mostly missing from it; held sounds stand in.'));
       } else if (d && d.asr) b.appendChild(el('p', 'muted', 'No transcript. Fillers are the held sounds only.'));
+      if (d && !d.fix && t.tx && t.key) b.appendChild(contentBox(t, h));
     },
     actions: d && d.fix ? fixActions(t, d) : d ? [{ label: 'CLOSE' }, { label: 'NEW PROMPT', fn: () => { if ((d === FT || d === OT) && t.prompt) fitSkip[String(t.prompt).toLowerCase()] = 1; startTake(d); } },
       { label: 'SAME PROMPT', kind: 'go', fn: () => { startTake(d, null, promptOf(t, d)); } }] : [{ label: 'CLOSE' }],
@@ -2945,7 +3120,8 @@ function widget() {
   setInterval(() => {
     const busy = W.hold || T.live || $('#take').classList.contains('on') || document.querySelector('.mb-sheet.on');
     idle = busy ? 0 : idle + 1;
-    if (busy) widSize('big'); else if (idle >= 4) widSize('small');
+    if (REF.open) widSize('wide');
+    else if (busy) widSize('big'); else if (idle >= 4) widSize('small');
   }, 300);
   widSize('small');
 }
