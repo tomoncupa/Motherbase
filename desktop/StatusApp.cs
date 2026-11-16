@@ -305,6 +305,8 @@ class App : Form
         if (string.IsNullOrEmpty(raw)) return;
         /* the overlay's picture is a long line of base64, never logged */
         if (raw.StartsWith("ovimg|")) { OvImage(raw); return; }
+        /* a food typed with no numbers, guessed by Claude (FoodGuess.cs) */
+        if (raw.StartsWith("mbguess:")) { FoodGuess.Ask(raw.Substring(8), Log, s => BeginInvoke((Action)(() => { try { web.CoreWebView2.ExecuteScriptAsync("window.foodGuessBack&&foodGuessBack(" + s + ")"); } catch { } }))); return; }
         Log("page asked for: " + raw);
 
         string[] bits = raw.Split('|');

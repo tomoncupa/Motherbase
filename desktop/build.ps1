@@ -49,8 +49,8 @@ Free-Exe $out
 & $csc -nologo -target:winexe -out:"$out" -win32icon:"$dir\status.ico" `
   -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
   -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
-  -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" `
-  (Join-Path $dir 'StatusApp.cs') (Join-Path $dir 'KeyBox.cs') (Join-Path $dir 'Hosted.cs') (Join-Path $dir 'Updater.cs')
+  -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" -reference:System.Web.Extensions.dll `
+  (Join-Path $dir 'StatusApp.cs') (Join-Path $dir 'FoodGuess.cs') (Join-Path $dir 'KeyBox.cs') (Join-Path $dir 'Hosted.cs') (Join-Path $dir 'Updater.cs')
 
 if ($LASTEXITCODE -ne 0) { Write-Output "Build failed."; exit $LASTEXITCODE }
 
