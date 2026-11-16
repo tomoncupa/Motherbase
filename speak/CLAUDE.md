@@ -602,6 +602,16 @@ Tom approved both through the SPEAK/knowledge master chat ("Yes, all three"). FR
 - **YOUR VOICE** gains a Posted column, every post's words read as one speaker.
 - **draftmade** (undated, keyed by the take; `tools/backup.html` takes it): the draft shows "Posted <day> as a <kind>, graded N" with the link, leaves POSSIBLE CONTENT, and SPEAK sets its own `draft.state` to `done`, `doneBy: 'post'`, `doneAt` from the row, only if the draft was open (`syncMade`). When the row goes (Tom marked the match wrong), a draft with `doneBy: 'post'` goes back to open; one he pressed MADE IT on stays made.
 
+## TODAY'S PLAN, from the day before, 2026-11-17 (SPEAK 1.0.37)
+
+Tom: *"At the end of the day I want Speak to analyze my takes for the day to create a smarter plan for tomorrow."*
+
+- **One `splan` row per practice day** (dated the day it read, key `''`). `planRules`: the top fault of each take tallied, the fix drill of the top two, any step not met that day, the stage's next steps, Don't stop, three in all; a headline ("3 takes, 0 met. X came top in 3."), one cue for every take. Then in SPEAK.exe `planClaude` sends every take's numbers, faults and Claude's point with a list of allowed drill ids and keeps Claude's three (unknown ids dropped, filled from the rules' list), its headline and cue.
+- **When it is made**: by itself at midnight while SPEAK is open (`Day.on`), on the first open after a practice day, again when that day gained takes, and by Claude the first time SPEAK.exe opens after a phone-only plan (`planCheck`). PLAN TOMORROW on the TODAY card makes it from today's takes now and opens it; once made it reads TOMORROW'S PLAN.
+- **Where it shows**: TODAY'S DRILLS becomes TODAY'S PLAN with the plan's drills in order, each with its why; REMEMBER THIS TIME hides until the day's first take, since the plan carries the cue.
+- **Right/Wrong** on the fault it names: Wrong makes the plan again without that fault (`no`).
+- Watched in headless Chromium with three seeded takes and a fake Claude: the rules plan, Claude's plan (a bogus id dropped), Wrong remade it, PLAN TOMORROW, 390 wide no sideways scroll. Not watched inside SPEAK.exe with real Claude.
+
 ## DO THIS NEXT and SEND TO WRITE, 2026-11-16 (SPEAK 1.0.34)
 
 Tom: *"I don't just want numbers and statistics. I want the best course of action given what I just outputted. It doesn't have to be every speak take. It can just give me a button with content or send to [WRITE's] inbox as a raw seed."*

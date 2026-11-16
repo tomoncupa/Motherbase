@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.36, 2026-11-16">
+<meta name="mb-version" content="1.0.37, 2026-11-17">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -142,6 +142,7 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .cmp .tx{margin-top:var(--s-2)}
 .cnt{padding:var(--s-3);border-radius:var(--radius-md);margin-top:var(--s-3)}
 .cnt p{margin:0 0 var(--s-2)}
+.list .why{margin:calc(var(--s-1) * -1) 0 var(--s-2) var(--s-3)}
 .ref-ver{display:flex;align-items:center;gap:var(--s-2);margin:var(--s-3) 0 var(--s-2)}
 .ref-ver .muted{flex:1;min-width:0}
 .ref-txt{width:100%;min-height:calc(var(--s-9) * 4);resize:vertical;font-size:var(--f-2);line-height:var(--lh-loose)}
@@ -287,7 +288,7 @@ const APP = {
   name: 'Speak',
   icon: '◍',
   blurb: 'talk to the camera, measured: pace, fillers, flow, clarity, eyes',
-  types: ['take', 'topic', 'script', 'answer', 'ask', 'speaker', 'draft'],
+  types: ['take', 'topic', 'script', 'answer', 'ask', 'speaker', 'draft', 'splan'],
 };
 
 Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id);
@@ -2784,10 +2785,20 @@ function drawToday(m) {
   const fb = el('button', 'mb-btn go mb-press mb-tap', '<span>FREE SPEAK</span>'); fb.onclick = () => openFree(); ta.appendChild(fb);
   const mb2 = el('button', 'mb-btn mb-press mb-tap', '<span>DRILL MENU</span>'); mb2.onclick = openMenu; ta.appendChild(mb2);
   const ck = el('button', 'mb-btn mb-press mb-tap', '<span>CHECK THE COACH</span>'); ck.onclick = () => openDrill(drillById('lib-check')); ta.appendChild(ck);
+  if (dayTakes(today).length) {
+    const pt = planOf(today), fresh = pt && pt.n === dayTakes(today).length;
+    const pb = el('button', 'mb-btn mb-press mb-tap', '<span>' + (fresh ? 'TOMORROW’S PLAN' : 'PLAN TOMORROW') + '</span>');
+    pb.onclick = async () => {
+      if (!fresh) { pb.disabled = true; pb.innerHTML = '<span>Planning…</span>'; await makePlan(today, pt && pt.no); }
+      openPlan(today);
+    };
+    ta.appendChild(pb);
+  }
   tc.appendChild(ta);
   tc.appendChild(camRow());
   m.appendChild(tc);
-  const rc = remindCard(); if (rc) m.appendChild(rc);
+  const plan = planToday();
+  const rc = plan && !dayTakes(today).length ? null : remindCard(); if (rc) m.appendChild(rc);
   const w = warmToday();
   const aq = askQueue();
   if (aq.length) {
@@ -2831,10 +2842,15 @@ function drawToday(m) {
     const all = DRILLS.filter(d => skillOf(d).stage === cs), left = stageLeft(cs).length;
     dc.appendChild(el('p', 'muted', 'Stage ' + cs + ' of ' + STAGES.length + ', ' + sg.name + ': ' + (all.length - left) + ' of ' + all.length + ' steps met.'));
   } else dc.appendChild(el('p', 'muted', 'Every stage is met. These are the steps longest since their last run.'));
-  const list = el('div', 'list');
-  todaysDrills().forEach(d => list.appendChild(drillRow(d)));
-  if (!list.children.length) list.appendChild(el('p', 'muted', 'Every step is met. Pick any drill on PATH to run it again.'));
-  dc.appendChild(list);
+  if (plan) {
+    dc.querySelector('h2').innerHTML = 'TODAY’S PLAN<span class="r">from ' + esc(Day.label(plan.date)) + '</span>';
+    planBody(dc, plan);
+  } else {
+    const list = el('div', 'list');
+    todaysDrills().forEach(d => list.appendChild(drillRow(d)));
+    if (!list.children.length) list.appendChild(el('p', 'muted', 'Every step is met. Pick any drill on PATH to run it again.'));
+    dc.appendChild(list);
+  }
   const dm = el('div', 'acts'), dmb = el('button', 'mb-btn mb-press mb-tap', '<span>DRILL MENU</span>');
   dmb.onclick = openMenu; dm.appendChild(dmb); dc.appendChild(dm);
   m.appendChild(dc);
@@ -3210,6 +3226,152 @@ function remindCard() {
   (r.drills || []).map(drillById).filter(Boolean).forEach(x => l.appendChild(drillRow(x)));
   c.appendChild(l);
   return c;
+}
+/* ══════════════ the plan for the next day (SPEAK 1.0.37) ══════════════
+   Tom, 2026-11-17: "At the end of the day I want Speak to analyze my takes
+   for the day to create a smarter plan for tomorrow." One `splan` row per
+   practice day, dated the day it read, key ''. TODAY shows the newest plan
+   from a day before today as TODAY'S PLAN, in place of the stage's list.
+   Made by the numbers anywhere (`planRules`), then read again by Claude in
+   SPEAK.exe (`planClaude`). It is made by itself at midnight while SPEAK is
+   open, on the first open after a practice day, and on PLAN TOMORROW. */
+const dayTakes = d => takesOn(d).filter(t => { if (t.drill === 'warm' || /^post-/.test(t.drill || '')) return false; const x = drillById(t.drill); return !!x && !x.check; });
+const planOf = d => { const p = Rec.get('splan', d, ''); return p ? Object.assign({ date: d }, p) : null; };
+/* today's plan: the newest one read from a day before today */
+function planToday() {
+  const t = Day.today();
+  const r = Rec.all('splan').filter(x => x.date && x.date < t && x.payload && (x.payload.drills || []).length).sort((a, b) => a.date < b.date ? 1 : -1)[0];
+  return r ? Object.assign({ date: r.date }, r.payload) : null;
+}
+function planRules(day, no) {
+  no = no || [];
+  const ts = dayTakes(day), tally = {}, cueOf = {}, fixOf = {};
+  ts.forEach(t => { const f = coach(t).filter(x => no.indexOf(x.id) < 0)[0]; if (!f) return; tally[f.id] = (tally[f.id] || 0) + 1; cueOf[f.id] = f.cue; fixOf[f.id] = f.fix; });
+  const ranked = Object.keys(tally).sort((a, b) => tally[b] - tally[a]);
+  const out = [];
+  const add = (id, why) => { if (!id || out.length >= 3 || out.some(x => x.id === id)) return; const d = drillById(id); if (!d || blocked(d)) return; out.push({ id: id, why: why }); };
+  ranked.slice(0, 2).forEach(id => add(fixOf[id], (FAULT[id] || id) + ' came top in ' + tally[id] + ' of ' + ts.length + ' takes.'));
+  ts.filter(t => !t.pass && DRILLS.some(d => d.id === t.drill) && !ts.some(u => u.drill === t.drill && u.pass)).forEach(t => add(t.drill, 'Not met last time. Run it again.'));
+  todaysDrills().filter(d => !ts.some(t => t.drill === d.id && t.pass)).forEach(d => add(d.id, 'The next step on your stage.'));
+  add('lib-nostop', 'The daily rep: two minutes, no stopping.');
+  const met = ts.filter(t => t.pass).length, top = ranked[0];
+  return { n: ts.length, met: met, top: top ? { id: top, n: tally[top] } : null,
+    head: ts.length + (ts.length === 1 ? ' take, ' : ' takes, ') + met + ' met. ' + (top ? (FAULT[top] || top) + ' came top in ' + tally[top] + '.' : 'No fault stood out.'),
+    cue: top ? cueOf[top] : '', drills: out, by: 'rules', no: no, at: Date.now() };
+}
+function planLine(t) {
+  const d = drillById(t.drill), m = t.m || {}, jg = t.judge || {};
+  const nums = [m.wpm != null ? Math.round(m.wpm) + ' wpm' : '', m.fpm != null ? r1(m.fpm) + ' fillers/min' : '', m.crutch ? m.crutch + ' crutch phrases' : '',
+    m.longP ? m.longP + ' long silences' : '', m.eye != null ? 'on the lens ' + Math.round(m.eye) + '%' : '', m.crisp != null ? 'crispness ' + Math.round(m.crisp) + '%' : '',
+    jg.coh ? 'coherence ' + jg.coh + '/5' : '', jg.con ? 'concision ' + jg.con + '/5' : ''].filter(Boolean).join(', ');
+  const fs = coach(t).slice(0, 3).map(f => (FAULT[f.id] || f.id) + ': ' + f.what).join(' | ');
+  return '- ' + (d ? d.name : t.drill) + ', ' + mmss(t.dur || 0) + ', ' + (t.pass ? 'met' : 'not met') + (nums ? '. ' + nums : '') + (fs ? '. Faults: ' + fs : '') + (jg.point ? '. His point: ' + jg.point : '');
+}
+async function planClaude(day, base) {
+  const ts = dayTakes(day);
+  if (!REF.on || !ts.length) return null;
+  const ids = [];
+  const push = id => { const d = drillById(id); if (d && !d.check && !blocked(d) && ids.indexOf(id) < 0) ids.push(id); };
+  base.drills.forEach(x => push(x.id));
+  ts.forEach(t => coach(t).forEach(f => push(f.fix)));
+  todaysDrills().forEach(d => push(d.id));
+  LIB.forEach(d => push(d.id));
+  const cand = ids.slice(0, 24).map(drillById);
+  const r = await askRefine('Plan tomorrow\'s speaking practice for Tom, a fitness coach training to speak on camera like a direct, authoritative creator (between Alex Hormozi and Jocko Willink). ' +
+    'Read every take he did today, with the numbers and faults the coach measured, and pick the three drills that will move him most tomorrow, in the order to do them. ' +
+    'Prefer the fault that repeats across takes over a one-off, a step he missed over one he met, and do not pick a fault he marked wrong. ' +
+    'Reply with one JSON object and nothing else: {"head": one sentence on what today showed, naming the pattern, "cue": one short instruction to carry into every take tomorrow, ' +
+    '"drills": [{"id": an id from the list, "why": one plain sentence under 20 words}] three of them}. Dry and plain, no encouragement.' +
+    (base.no && base.no.length ? '\n\nFaults he marked wrong, ignore them: ' + base.no.map(x => FAULT[x] || x).join(', ') : '') +
+    '\n\nTODAY\'S TAKES (' + ts.length + '):\n' + ts.map(planLine).join('\n') +
+    '\n\nDRILLS TO PICK FROM (id | name | what it works on | goal):\n' + cand.map(d => d.id + ' | ' + d.name + ' | ' + skillOf(d).name + ' | ' + (d.goals(targets()).map(goalText).join(', ') || 'a count')).join('\n'));
+  let o = null;
+  try { const mm = String(r && r.text || '').match(/\{[\s\S]*\}/); o = mm ? JSON.parse(mm[0]) : null; } catch (e) { o = null; }
+  if (!o || !Array.isArray(o.drills)) return null;
+  const out = [];
+  o.drills.forEach(x => { const id = x && String(x.id || ''); if (id && ids.indexOf(id) >= 0 && !out.some(y => y.id === id) && out.length < 3) out.push({ id: id, why: String(x.why || '').slice(0, 200) }); });
+  if (!out.length) return null;
+  base.drills.forEach(x => { if (out.length < 3 && !out.some(y => y.id === x.id)) out.push(x); });
+  return Object.assign({}, base, { head: String(o.head || base.head).slice(0, 300), cue: String(o.cue || base.cue).slice(0, 200), drills: out, by: 'claude', at: Date.now() });
+}
+const PLAN = { busy: {} };
+async function makePlan(day, no) {
+  if (PLAN.busy[day]) return planOf(day);
+  PLAN.busy[day] = 1;
+  try {
+    const base = planRules(day, no);
+    if (!base.n) return null;
+    const old = planOf(day);
+    Rec.set('splan', day, '', Object.assign({}, base, { mark: no && no.length ? 0 : (old && old.n === base.n ? old.mark || 0 : 0) }));
+    const c = await planClaude(day, base);
+    if (c) Rec.set('splan', day, '', Object.assign({}, c, { mark: (planOf(day) || {}).mark || 0 }));
+    return planOf(day);
+  } finally { delete PLAN.busy[day]; }
+}
+/* by itself: the newest practice day before today gets a plan, or a new one
+   when it has more takes than its plan read, or Claude's reading when SPEAK.exe
+   is open and only the numbers made it */
+function planCheck() {
+  const t = Day.today();
+  const last = takes().filter(x => x.date < t && dayTakes(x.date).length).map(x => x.date).pop();
+  if (!last) return;
+  const p = planOf(last), n = dayTakes(last).length;
+  if (!p || p.n < n) makePlan(last, p && p.no);
+  else if (REF.on && p.by !== 'claude' && !PLAN.busy[last]) makePlan(last, p.no);
+}
+Rec.ready(() => setTimeout(planCheck, 4000));
+Day.on(() => setTimeout(planCheck, 1000));
+/* the plan drawn: what the day showed, the one cue, the marks on the fault it
+   names, then its drills in order, each with why */
+function planBody(box, p, onGo) {
+  box.appendChild(el('p', 'what', esc(p.head)));
+  if (p.cue) box.appendChild(el('p', null, '<b>Every take:</b> ' + esc(p.cue)));
+  if (p.top) {
+    const acts = el('div', 'acts');
+    acts.appendChild(el('span', 'muted', 'Was ' + esc(FAULT[p.top.id] || p.top.id) + ' the main fault?'));
+    if (p.mark === 1) acts.appendChild(el('span', 'muted marked', 'Marked right'));
+    else {
+      const right = el('button', 'mb-btn mb-press mb-tap', 'Right');
+      right.onclick = () => { Rec.patch('splan', p.date, '', { mark: 1 }); UI.toast('Marked right.'); };
+      const wrong = el('button', 'mb-btn mb-press mb-tap', 'Wrong');
+      wrong.onclick = async () => {
+        wrong.disabled = right.disabled = true; wrong.textContent = 'Making again…';
+        await makePlan(p.date, (p.no || []).concat([p.top.id]));
+        UI.toast('Made again without ' + (FAULT[p.top.id] || p.top.id) + '.');
+      };
+      acts.appendChild(right); acts.appendChild(wrong);
+    }
+    box.appendChild(acts);
+  }
+  const l = el('div', 'list');
+  (p.drills || []).forEach(x => {
+    const d = drillById(x.id); if (!d) return;
+    const row = drillRow(d);
+    if (onGo) { const go = row.onclick; row.onclick = e => { onGo(); go(e); }; }
+    l.appendChild(row);
+    if (x.why) l.appendChild(el('p', 'muted why', esc(x.why)));
+  });
+  box.appendChild(l);
+  box.appendChild(el('p', 'muted', p.by === 'claude' ? 'Read by Claude from that day’s takes.' : REF.on ? 'Worked out from the numbers. Claude is reading the takes.' : 'Worked out from the numbers. Claude reads the takes the next time SPEAK.exe is open.'));
+}
+function openPlan(day) {
+  const draw1 = (b, p) => {
+    b.innerHTML = '';
+    if (!p) { b.appendChild(el('p', 'muted', 'No takes to plan from.')); return; }
+    planBody(b, p, () => h1 && h1.close());
+    paintIcons(b);
+  };
+  let h1 = null, off = null;
+  UI.dialog({
+    title: 'TOMORROW’S PLAN', width: 560,
+    body: (b, h) => {
+      h1 = h;
+      draw1(b, planOf(day));
+      off = Rec.on(() => { if (b.isConnected) draw1(b, planOf(day)); });
+    },
+    onClose: () => { if (typeof off === 'function') off(); },
+    actions: [{ label: 'MAKE AGAIN', fn: () => { makePlan(day); return false; } }, { label: 'CLOSE' }],
+  });
 }
 function stat(box, k, v, d, cls) {
   const s = el('div', 'stat mb-plate' + (cls ? ' ' + cls : ''));
