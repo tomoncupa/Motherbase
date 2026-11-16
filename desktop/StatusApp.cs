@@ -111,6 +111,10 @@ class App : Form
     bool dragging;
     int grabX, grabY;
     ContextMenu winMenu;     /* the right click menu, what the tray icon's menu was */
+    bool trayOn;             /* Settings, DESKTOP, Tray icon: off unless he turns it on */
+    NotifyIcon tray;
+    Rectangle wideBack;      /* where the window was before Settings took the screen */
+    string wideMode;
     /* where the whole app was put when it opened, and its corner before a
        status check took the screen, so going back lands where he left it */
     Point appPlaced = new Point(int.MinValue, 0);
@@ -174,6 +178,7 @@ class App : Form
         PlaceWidget();
 
         BuildMenu();
+        Tray(trayOn);
         RegisterTheHotkey();
 
         dragT = new Timer();
@@ -348,6 +353,14 @@ class App : Form
             return;
         }
         if (verb == "boot") { SetBoot(bits.Length > 1 && bits[1] == "1"); Sense(); return; }
+        /* Tom, 2026-11-16: "Make the status tray icon toggleable in desktop
+           settings." Off by default: the tray holds SPEAK alone. */
+        if (verb == "tray") { trayOn = bits.Length > 1 && bits[1] == "1"; Tray(trayOn); SaveCfg(); Sense(); return; }
+        /* Settings takes the whole screen it is on while it is open, and the
+           window goes back where it was after (Tom, 2026-11-16: "take
+           advantage of all the desktop real estate ... don't limit it to the
+           current status size window"). */
+        if (verb == "wide") { Wide(bits.Length > 1 && bits[1] == "1"); return; }
         /* `ov|show|pos|top`: the S-rank overlay's choices, from Settings, DESKTOP */
         if (verb == "ov")
         {
@@ -426,6 +439,7 @@ class App : Form
                    a second. */
                 if (mode == "checkin") return;
                 if (mode == "app") { backRight = Left + Width; backTop = Top; }
+                if (mode == "wide") { backRight = wideBack.Right; backTop = wideBack.Top; Pin(onTop); }
                 mode = "checkin";
                 var scr = Screen.FromPoint(Cursor.Position).Bounds;
                 Square();
@@ -487,7 +501,7 @@ class App : Form
     void OvPlace(bool raise)
     {
         if (ov == null) return;
-        bool want = ovShow && ov.HasImage && mode != "checkin" && !ovCovered;
+        bool want = ovShow && ov.HasImage && mode != "checkin" && mode != "wide" && !ovCovered;
         if (!want) { ov.Appear(false); return; }
         Size s = ov.ImageSize;
         var wa = Screen.PrimaryScreen.WorkingArea;
@@ -597,7 +611,7 @@ class App : Form
         string js = "window.deskHost&&deskHost({idle:" + idle +
             ",exe:" + Js(exe) + ",app:" + Js(app) + ",title:" + Js(title) +
             ",top:" + (onTop ? 1 : 0) + ",key:" + Js(Pretty(hotkey)) +
-            ",boot:" + (GetBoot() ? 1 : 0) + "})";
+            ",boot:" + (GetBoot() ? 1 : 0) + ",tray:" + (trayOn ? 1 : 0) + "})";
         try { web.CoreWebView2.ExecuteScriptAsync(js); } catch { }
     }
 
@@ -798,6 +812,7 @@ class App : Form
                 string k = line.Substring(0, eq).Trim(), v = line.Substring(eq + 1).Trim();
                 if (k == "hotkey") hotkey = v.ToLowerInvariant();
                 else if (k == "ontop") onTop = (v != "0");
+                else if (k == "tray") trayOn = (v == "1");
                 else if (k == "pos")
                 {
                     string[] xy = v.Split(',');
@@ -818,6 +833,7 @@ class App : Form
                 "# STATUS. Delete this file to go back to the defaults.\r\n" +
                 "hotkey=" + hotkey + "\r\n" +
                 "ontop=" + (onTop ? "1" : "0") + "\r\n" +
+                "tray=" + (trayOn ? "1" : "0") + "\r\n" +
                 (posX == int.MinValue ? "" : "pos=" + posX + "," + posY + "\r\n"));
         }
         catch { }
@@ -861,6 +877,49 @@ class App : Form
 
         winMenu = menu;
         MarkKeys(keys);
+    }
+
+    /* The tray icon, when he wants it: the right click menu on it, and a
+       double click brings STATUS to the front. */
+    void Tray(bool on)
+    {
+        if (!on) { if (tray != null) { tray.Visible = false; tray.Dispose(); tray = null; } return; }
+        if (tray != null) return;
+        tray = new NotifyIcon();
+        tray.Icon = plainIcon ?? Icon;
+        tray.Text = "STATUS";
+        tray.ContextMenu = winMenu;
+        tray.DoubleClick += (s, e) => Front();
+        tray.Visible = true;
+        Log("tray icon on");
+    }
+
+    void Wide(bool on)
+    {
+        if (on)
+        {
+            if (mode == "wide" || mode == "checkin") return;
+            wideBack = Bounds; wideMode = mode; mode = "wide";
+            var wa = Screen.FromRectangle(Bounds).WorkingArea;
+            Square();
+            /* Always on top is for the widget and the status check, never
+               Settings (Tom, 2026-11-16): it sits with his other windows. */
+            Pin(false);
+            Bounds = wa;
+            Front();
+            OvPlace(true);
+            Log("settings took the screen at " + wa.Left + "," + wa.Top + " " + wa.Width + "x" + wa.Height);
+        }
+        else
+        {
+            if (mode != "wide") return;
+            mode = wideMode ?? "app";
+            Bounds = wideBack;
+            Pin(onTop);
+            Round();
+            OvPlace(true);
+            Log("settings gave the screen back");
+        }
     }
 
     /* Always on top, said so Windows takes it from a program that is not in
@@ -1060,6 +1119,7 @@ class App : Form
         SaveCfg();
         try { UnregisterHotKey(Handle, HOTKEY_ID); } catch { }
         NoteGone();
+        Tray(false);
     }
 
     void Quit()
@@ -1067,6 +1127,7 @@ class App : Form
         SaveCfg();
         try { UnregisterHotKey(Handle, HOTKEY_ID); } catch { }
         NoteGone();
+        Tray(false);
         Application.Exit();
     }
 }

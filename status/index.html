@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.102, 2026-11-16">
+<meta name="mb-version" content="1.0.103, 2026-11-16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -503,6 +503,16 @@ label.fl:first-child{margin-top:0}
    Two changes and no new colours. A label that is a direct child of the pane
    is a SECTION HEADING and is drawn like one. Everything under it sits on the
    same card the switches already use, so a group reads as a group. */
+/* Settings across the whole screen, STATUS.exe only (deskWide). The panel fills the window and each
+   tab flows into as many columns as fit; a heading never ends a column on its own. */
+body .mb-sheet.stwide{top:var(--s-4);left:var(--s-4);right:var(--s-4);bottom:var(--s-4);
+  width:auto;max-width:none;max-height:none;margin:0;transform:none;opacity:1;
+  border:1px solid var(--border-strong);border-radius:var(--radius-lg)}
+body .mb-sheet.stwide .mb-grab{display:none}
+.mb-sheet.stwide .mb-sheet-body > div{columns:420px auto;column-gap:var(--s-6)}
+.mb-sheet.stwide .mb-sheet-body > div > *{break-inside:avoid}
+.mb-sheet.stwide .mb-sheet-body > div > .mb-group,
+.mb-sheet.stwide .mb-sheet-body > div > label.fl{break-after:avoid}
 .setpane > label.fl{
   text-transform:uppercase;letter-spacing:.12em;font-size:var(--f-1);
   color:var(--text-2);margin:var(--s-5) 0 var(--s-2);
@@ -7371,7 +7381,7 @@ function fieldRow(pane, label, key, val, hint) {
 }
 
 function openSettings() {
-  UI.settings(APP.id, [
+  return deskWide(UI.settings(APP.id, [
     /* It holds what each letter needs, so it says so. The id stays `quests`,
        which drawSettingsPane and the tab order use. Tom, 2026-09-15. */
     { id: 'quests', name: 'GRADES', draw: drawQuestsTab },
@@ -7394,7 +7404,25 @@ function openSettings() {
     append: { data: drawSyncTab },
     /* STATUS draws the whole sheet setup itself, so not the short one as well */
     sync: false,
-  });
+  }));
+}
+/* Tom, 2026-11-16: "Make the desktop settings of status take advantage of all the desktop real
+   estate ... don't limit it to the current status size window. Only for the exe file." Inside
+   STATUS.exe, Settings asks for the whole screen the window is on (`wide|1`), fills it, and lays
+   each tab in columns; closing it in any way gives the screen back (`wide|0`), and STATUS.exe puts
+   the window where it was. A browser tab and the phone are unchanged. */
+function deskWide(h) {
+  if (!HOSTED || !h || !h.panel) return h;
+  h.panel.classList.add('stwide');
+  ovPost('wide|1');
+  let back = false;
+  const give = () => { if (!back) { back = true; ovPost('wide|0'); } };
+  const close = h.close;
+  h.close = function (v) { give(); return close.call(h, v); };
+  /* anything that takes the panel off the page without close() */
+  const watch = new MutationObserver(() => { if (!h.panel.isConnected) { give(); watch.disconnect(); } });
+  watch.observe(document.body, { childList: true });
+  return h;
 }
 
 /* Move a field up or down the list. `order` already decided the tile order on
@@ -10172,6 +10200,10 @@ function drawProgramSettings(pane) {
   }));
   pane.appendChild(toggleRow('Start with Windows', 'STATUS opens when you sign in to the PC', !!h.boot, v => {
     ovPost('boot|' + (v ? 1 : 0)); if (deskHostInfo) deskHostInfo.boot = v ? 1 : 0; drawSettingsPane('desk');
+  }));
+  /* Tom, 2026-11-16: "Make the status tray icon toggleable in desktop settings." Off by default. */
+  pane.appendChild(toggleRow('Tray icon', 'A STATUS icon beside the clock, with the right click menu', !!h.tray, v => {
+    ovPost('tray|' + (v ? 1 : 0)); if (deskHostInfo) deskHostInfo.tray = v ? 1 : 0; drawSettingsPane('desk');
   }));
   const said = String(h.key || 'Ctrl+B');
   const known = DESK_KEYS.find(k => k.name.toLowerCase() === said.toLowerCase());
