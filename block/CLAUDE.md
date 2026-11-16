@@ -36,4 +36,12 @@ Tom: "Weekly and every so often and habit tracked routines just in 1 page". The 
 
 ## Needs from the home screen
 
-None. HOME 1.0.75 copied `rhPeriod`, `rhPer` and `act` ticking into its EVERY & HABITS card (`rhAnyState`, `rhTickH`). Change both when habit maths changes.
+The new chapter: `HOME.md`, Needs from BLOCK (2026-11-16), asks STREAKS and EVERY & HABITS to count from `Chapter.from('block')`. HOME 1.0.75 copied `rhPeriod`, `rhPer` and `act` ticking into its EVERY & HABITS card (`rhAnyState`, `rhTickH`). Change both when habit maths changes.
+
+## New chapter (Tom, 2026-11-16; 1.0.26)
+
+"Reset tracking with zero guilt". The rule is `shared/chapter.js`; `chFrom(day)` reads `Chapter.from('block', day)` on every draw, and a `chapter` row landing redraws like any row.
+- **Cut from the chapter day:** the Summary's current streak, finished last 14 days, blocks you reliably do and What the record says (`statsFrom`, the later of the chapter day and his own Counting since line, `S.streakFrom`; a chapter later than his line says so beside it); every habit's streak (`rhStreak` `floor`: a period running across the day is the oldest looked at and can add one, never end the run).
+- **An Every block** missed before the chapter is due on its first day (`everyState` `floor`), not owed for every week before; done since, its schedule is untouched. The Day's Also column uses the chapter running on the day shown.
+- **Kept whole:** every tick, the habit grids, the 14 bars, History, "days recorded" and this period's "x of y" (it keeps every tick in the period, so a chapter never makes it fall).
+- **Today is open** (since 1.0.26, any chapter or none): a half-done today neither breaks the streak nor counts in the average or a block's rate.

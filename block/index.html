@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.25, 2026-11-09">
+<meta name="mb-version" content="1.0.26, 2026-11-16">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="icon-192.png">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -831,6 +831,7 @@ if (window.Icons) Icons.paint();
 </script>
 <script src="../shared/records.js"></script>
 <script src="../shared/io.js"></script>
+<script src="../shared/chapter.js"></script>
 <script>
 /* ══════════════════════════ LIFEOS KERNEL v2 ══════════════════════════
    Identical in every app that shares data — edit the copy in index.html and
@@ -2299,13 +2300,24 @@ function logToday() { logDay(todayKey()); }
    So the line moves the START OF THE RECORD, not just the streak counter.
    Every old day is still logged, still on the chart, still in the backup. It
    is simply not evidence about the plan you are running now. */
-function statsFrom() { return S.streakFrom || null; }
+/* ── a new chapter ──
+   Tom, 2026-11-16: reset tracking "with zero guilt". `shared/chapter.js`
+   says the day BLOCK counts from in the chapter running on `day`, or null.
+   The record's start is the later of that and his own Counting since line,
+   so either one can only move the start forward. Read on every draw: a
+   chapter row arriving by live sync redraws the board like any other row. */
+const chFrom = day => (window.Chapter && window.Rec && window.Day) ? (Chapter.from('block', day) || null) : null;
+function statsFrom() { const c = chFrom(), s = S.streakFrom || null; return c && (!s || c > s) ? c : s; }
 
 function blockStats() {
   const m = {};
   const from = statsFrom();
-  Object.keys(S.log || {}).filter(k => !from || k >= from).map(k => S.log[k]).forEach(e => {
-    (e.t || []).forEach(k => { (m[k] = m[k] || { key: k, n: keyName(k), where: String(k).split('||')[1] || '', seen: 0, done: 0 }).seen++; });
+  const today = todayKey();
+  Object.keys(S.log || {}).filter(k => !from || k >= from).forEach(day => {
+    const e = S.log[day];
+    /* today is still open: a block not ticked yet has not been missed */
+    (e.t || []).filter(k => day !== today || (e.d || []).includes(k))
+      .forEach(k => { (m[k] = m[k] || { key: k, n: keyName(k), where: String(k).split('||')[1] || '', seen: 0, done: 0 }).seen++; });
     (e.d || []).forEach(k => { if (m[k]) m[k].done++; });
   });
   return Object.values(m).map(x => Object.assign(x, { rate: x.seen ? x.done / x.seen : 0 })).sort((a, b) => a.rate - b.rate);
@@ -2324,7 +2336,7 @@ function blockStats() {
    progress: the progress is all still there. What moves is where the counting
    starts, which is a thing you are allowed to decide about your own life. */
 function streak() {
-  const from = S.streakFrom || null;
+  const from = statsFrom();
   let n = 0;
   for (let i = 0; i < 180; i++) {
     const d = new Date(); d.setDate(d.getDate() - i);
@@ -2332,7 +2344,8 @@ function streak() {
     if (from && key < from) break;
     const e = (S.log || {})[key];
     if (!e || !e.t.length) { if (i === 0) continue; break; }
-    if (e.d.length >= e.t.length) n++; else break;
+    /* today is still open: finished it adds one, half done it never breaks the run */
+    if (e.d.length >= e.t.length) n++; else if (i === 0) continue; else break;
   }
   return n;
 }
@@ -3955,12 +3968,16 @@ function rhPeriod(r, date, today, start, made) {
     adds one. A period short of it with any tick keeps the run without adding
     (a streak continues if he logged anything at all), and one empty period is
     forgiven silently; two empty in a row end it. The period still open adds
-    once it is met and never breaks the run. Nothing before it began counts. */
-function rhStreak(r, dates, today, start, made) {
+    once it is met and never breaks the run. Nothing before it began counts,
+    and nothing that ended before `floor`, the new chapter's day: a period
+    running across that day is the oldest one looked at, and on its own it
+    can add one but never end the run. */
+function rhStreak(r, dates, today, start, made, floor) {
   const count = (a, b) => dates.filter(d => d >= a && d <= b).length;
+  const stop = floor && floor > made ? floor : made;
   let [from, to] = rhPeriod(r, today, today, start, made);
   let run = 0, empty = 0, open = true;
-  for (let guard = 0; to >= made && guard < 2000; guard++) {
+  for (let guard = 0; to >= stop && guard < 2000; guard++) {
     const n = count(from, to);
     if (n >= r.times) { run++; empty = 0; }
     else if (!open) { if (n) empty = 0; else if (++empty >= 2) break; }
@@ -3988,11 +4005,15 @@ function rhLog() {
   Object.keys(m).forEach(k => m[k].sort());
   return m;
 }
-/** Where an Every block stands. Pure, so the self-test can hand it any dates. */
-function everyState(r, dates, today) {
+/** Where an Every block stands. Pure, so the self-test can hand it any dates.
+    `floor` is the new chapter's day: a due date before it is moved up to it,
+    so something missed before the chapter is due on its first day rather
+    than owed for every week before. The schedule after that is untouched. */
+function everyState(r, dates, today, floor) {
   const last = dates.length ? dates[dates.length - 1] : null;
   if (last === today) return { st: 'done', last: last, next: rhAdd(today, r.n, r.unit) };
-  const due = last ? rhAdd(last, r.n, r.unit) : (r.from || today);
+  let due = last ? rhAdd(last, r.n, r.unit) : (r.from || today);
+  if (floor && due < floor) due = floor;
   const late = Day.diff(today, due);
   return { st: late > 0 ? 'owed' : late === 0 ? 'due' : 'later', last: last, due: due, late: late };
 }
@@ -4003,11 +4024,14 @@ function rhWeekStart(today, start) {
   const dow = new Date(today + 'T12:00:00').getDay();
   return Day.shift(today, -((dow - (start == null ? 1 : start) + 7) % 7));
 }
-function anytimeState(r, dates, today, start) {
+/* `floor` is the new chapter's day. It cuts only the streak: this period's
+   count keeps every tick in it, because a tick is never hidden and a count
+   that fell on the chapter's first day would read as behind. */
+function anytimeState(r, dates, today, start, floor) {
   const made = rhMade(r, dates, today), from = rhPeriod(r, today, today, start, made)[0];
   const n = dates.filter(d => d >= from && d <= today).length;
   return { n: n, of: r.times, met: n >= r.times, today: dates.indexOf(today) >= 0, made: made,
-    streak: rhStreak(r, dates, today, start, made), per: RH_PER[rhPer(r)] };
+    streak: rhStreak(r, dates, today, start, made, floor), per: RH_PER[rhPer(r)] };
 }
 
 function rhToggle(r, date, force) {
@@ -4148,7 +4172,7 @@ function renderEvery() {
   p.appendChild(bar);
   p.appendChild(rhAddBar('every'));
   const log = rhLog(), today = todayKey();
-  const list = rhythms('every').map(r => ({ r: r, s: everyState(r, log[rhTick(r)] || [], today) }));
+  const list = rhythms('every').map(r => ({ r: r, s: everyState(r, log[rhTick(r)] || [], today, chFrom()) }));
   if (!list.length) { p.appendChild(el('div', 'hint', 'Nothing here yet. Name one above and say how often it comes round.')); return; }
   const how = x => rhEvery(x.r) + (x.s.last ? ', last done ' + rhDate(x.s.last) : ', not done yet');
   const by = st => list.filter(x => x.s.st === st);
@@ -4162,14 +4186,15 @@ function renderEvery() {
 
 function renderAnytime() {
   const p = $('#anytime'); p.innerHTML = '';
-  const today = todayKey(), start = S.weekStart, from = rhWeekStart(today, start);
+  const today = todayKey(), start = S.weekStart, from = rhWeekStart(today, start), ch = chFrom();
   const bar = el('div', 'weekbar');
   bar.appendChild(el('span', 'wbnote', 'Done on any day, at no set time, as often as you say. ' +
-    (start === 'today' ? 'A week is the last seven days.' : 'This week is ' + rhDate(from) + ' to ' + rhDate(Day.shift(from, 6)) + '.')));
+    (start === 'today' ? 'A week is the last seven days.' : 'This week is ' + rhDate(from) + ' to ' + rhDate(Day.shift(from, 6)) + '.') +
+    (ch ? ' Streaks count since ' + rhDate(ch) + '.' : '')));
   p.appendChild(bar);
   p.appendChild(rhAddBar('anytime'));
   const log = rhLog();
-  const list = rhythms('anytime').map(r => { const dates = log[rhTick(r)] || []; return { r: r, dates: dates, s: anytimeState(r, dates, today, start) }; });
+  const list = rhythms('anytime').map(r => { const dates = log[rhTick(r)] || []; return { r: r, dates: dates, s: anytimeState(r, dates, today, start, ch) }; });
   if (!list.length) { p.appendChild(el('div', 'hint', 'Nothing here yet. Name one above and say how often.')); return; }
   /* dots only while they can be counted at a glance; past that the words say it */
   const dots = s => { const k = Math.max(s.of, s.n); if (k > 14) return null; const d = el('span', 'rhdots'); for (let i = 0; i < k; i++) d.appendChild(el('i', i < s.n ? 'on' : '')); return d; };
@@ -4191,7 +4216,7 @@ function renderAnytime() {
 function rhBadge() {
   const b = $('#vWeek'); if (!b) return;
   const log = rhLog(), today = todayKey();
-  const n = rhythms('every').filter(r => { const s = everyState(r, log[rhTick(r)] || [], today).st; return s === 'owed' || s === 'due'; }).length;
+  const n = rhythms('every').filter(r => { const s = everyState(r, log[rhTick(r)] || [], today, chFrom()).st; return s === 'owed' || s === 'due'; }).length;
   b.innerHTML = 'Schedule' + (n ? '<span class="vbadge">' + n + '</span>' : '');
 }
 
@@ -4284,7 +4309,7 @@ function rhEdit(r) {
 function rhFor(day, log) {
   const out = [];
   rhythms('every').forEach(r => {
-    const s = everyState(r, (log[rhTick(r)] || []).filter(d => d <= day), day);
+    const s = everyState(r, (log[rhTick(r)] || []).filter(d => d <= day), day, chFrom(day));
     if (s.st === 'owed') out.push({ r: r, done: false, tone: 'owed', why: 'owed since ' + rhDate(s.due) });
     else if (s.st === 'due') out.push({ r: r, done: false, tone: 'due', why: 'due' });
     else if (s.st === 'done') out.push({ r: r, done: true, why: 'done, next ' + rhDate(s.next) });
@@ -4341,11 +4366,13 @@ function renderSum() {
   const last14 = [];
   for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); last14.push(d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())); }
   const rates = last14.map(k => { const e = (S.log || {})[k]; return e && e.t.length ? e.d.length / e.t.length : null; });
-  const avg = rates.filter(r => r != null);
+  /* the bars below still draw every day; the average only takes days since the
+     line, and today only once it is finished, because an open day is not a miss */
+  const avg = rates.filter((r, i) => r != null && !(statsFrom() && last14[i] < statsFrom()) && (i < 13 || r >= 1));
   const card = (big, label, tip) => { const c = el('div', 'sumcard'); c.innerHTML = '<b>' + big + '</b><span>' + label + '</span>'; if (tip) c.dataset.tip = tip; return c; };
   cards.appendChild(card(st + (st === 1 ? ' day' : ' days'), 'current streak',
     'Days in a row where everything scheduled got ticked' +
-    (S.streakFrom ? ' — counting from ' + S.streakFrom : '')));
+    (statsFrom() ? ' — counting from ' + rhDate(statsFrom()) : '')));
   cards.appendChild(card(avg.length ? Math.round(avg.reduce((a, b) => a + b, 0) / avg.length * 100) + '%' : '—', 'finished, last 14 days'));
   cards.appendChild(card(stats.length ? stats.filter(s => s.rate >= .8 && s.seen >= 3).length : 0, 'blocks you reliably do', 'Done 80%+ of the times they came up'));
   p.appendChild(cards);
@@ -4385,6 +4412,12 @@ function renderSum() {
     };
     fresh.appendChild(clr);
   }
+  /* A chapter later than his own line wins; said once, here, beside the line. */
+  const ch = chFrom();
+  if (ch && statsFrom() === ch && ch !== S.streakFrom) {
+    const c = window.Chapter && Chapter.current();
+    fresh.appendChild(el('span', 'freshlab', (c && c.name ? esc(c.name) : 'New chapter') + ', since ' + rhDate(ch)));
+  }
   p.appendChild(fresh);
 
   const spark = el('div', 'spark');
@@ -4412,7 +4445,7 @@ function renderSum() {
      point. Four days is the floor for calling anything a pattern. */
   if (statsFrom() && sinceLine < 4) {
     advice.appendChild(el('div', 'adv',
-      'Counting from <b>' + esc(statsFrom()) + '</b>. ' +
+      'Counting from <b>' + rhDate(statsFrom()) + '</b>. ' +
       (sinceLine ? sinceLine + (sinceLine === 1 ? ' day' : ' days') + ' in.' : 'Starts today.') +
       ' <span class="dim">Nothing to say yet.</span>'));
   } else if (!days.length) {
@@ -5641,6 +5674,18 @@ function selfTest() {
       const a = rhStreak({ times: 2 }, d, '2026-10-14', 1, '2026-08-31');
       const b = rhStreak({ times: 2 }, d.concat('2026-10-12', '2026-10-13'), '2026-10-14', 1, '2026-08-31');
       return (a === 2 && b === 3) || JSON.stringify({ a: a, b: b });
+    });
+    ok('new chapter: a habit streak counts from its day, and an Every block missed before it is due on it', () => {
+      /* the same weeks, with a chapter on Thu 1 Oct: the week across it is the oldest looked at */
+      const d = ['2026-08-31', '2026-09-01', '2026-09-21', '2026-09-22', '2026-09-29', '2026-10-05', '2026-10-06', '2026-10-12', '2026-10-13'];
+      const a = rhStreak({ times: 2 }, d, '2026-10-14', 1, '2026-08-31', '2026-10-01');
+      const b = rhStreak({ times: 2 }, d, '2026-10-14', 1, '2026-08-31', '2026-10-14');
+      const r = { n: 1, unit: 'week' };
+      const e = everyState(r, ['2026-01-03'], '2026-01-20', '2026-01-15');
+      const f = everyState(r, ['2026-01-03'], '2026-01-20', '2026-01-20');
+      const g = everyState(r, ['2026-01-03'], '2026-01-20', '2026-01-05');
+      return (a === 2 && b === 1 && e.st === 'owed' && e.due === '2026-01-15' && f.st === 'due' && g.due === '2026-01-10') ||
+        JSON.stringify({ a: a, b: b, e: e, f: f, g: g });
     });
     ok('habits: clicking a day on the grid ticks that day, and clicking again unticks it', () => {
       if (!window.LifeOS) return 'skip: the shared tick log did not load';
