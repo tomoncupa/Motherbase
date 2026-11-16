@@ -23,7 +23,7 @@ Opening it twice does nothing. There is only ever one.
   **Drag it anywhere** by its background and it stays there.
 - **The status check** is meant to be in the way, and since 17 September it
   takes the **whole screen**, unless STATUS Settings, DESKTOP, How it comes,
-  is Red dot or Pop up (the dot plus a notification from the tray icon): then a red dot sits on the widget's button and the taskbar
+  is Red dot or Pop up (the dot plus a Windows notification, from a tray icon that is there only while the notification shows): then a red dot sits on the widget's button and the taskbar
   icon until you press it, and it opens as a box (`due|1`, `checkin`). It comes up in front of whatever you are doing,
   takes the focus and makes a sound. There is no close button and no skip:
   SAVE is the only way out, and until every scale is pressed it names the one
@@ -34,7 +34,7 @@ Opening it twice does nothing. There is only ever one.
   yourself is not followed by another ten minutes later. Walking away from one
   at night ends the night: you get one, and it closes when you answer it.
 - **Ctrl+B** writes a bullet from anywhere, even from inside another program.
-  Change it from the tray: **Bullet shortcut**, **Choose my own**, then press
+  Change it in STATUS Settings, DESKTOP, **Bullet shortcut**, **My own**, then press
   the keys you want. It needs Ctrl, Alt or Shift in it, because Windows will
   not give a plain letter to a program that is not in front.
 - **The pencil** writes a bullet without leaving the widget. It opens on
@@ -42,10 +42,17 @@ Opening it twice does nothing. There is only ever one.
 - **The chevron** opens the whole of STATUS. The chevron in its top bar takes
   you back to the widget.
 
-Right click the tray icon next to the clock for **Open STATUS**, **Check in
-now**, always on top, the shortcut, and **Quit**.
-Right clicking the widget or the app opens the same menu where the page has
-no menu of its own (2026-10-18). Coming back from the whole app after moving
+- **The S-rank overlay** (STATUS 1.0.101): what is left for an S today, in
+  a corner of the main screen (top right by default), over your windows.
+  Clicks go through it and it never takes the focus. STATUS draws the picture
+  and STATUS.exe places it (`ov|...`, `ovimg|...`, class `Overlay`). Every
+  choice is in Settings, DESKTOP, S-RANK OVERLAY.
+
+**No tray icon** since STATUS 1.0.102 (Tom, 2026-11-16: the tray holds SPEAK
+alone). Always on top, Start with Windows, the shortcut and Quit are in
+STATUS Settings, DESKTOP, THE PROGRAM. Right clicking the widget or the app
+opens a menu with Open STATUS, Check in now, always on top, the shortcut and
+Quit where the page has no menu of its own (2026-10-18). Coming back from the whole app after moving
 it, the widget shrinks into the app's top right corner and stays there.
 
 ## Its data
@@ -66,7 +73,7 @@ browser on its own. This program is only the frame around it: it runs the page
 inside Microsoft's WebView2, the engine that already ships with Windows, and
 the page tells it what to be through a proper message channel.
 
-Closing the window quits the program, so it can never sit in the tray switched
+Closing the window quits the program, so it can never sit hidden and switched
 off.
 
 ## The Main Menu's title bar

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.101, 2026-11-16">
+<meta name="mb-version" content="1.0.102, 2026-11-16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -823,6 +823,11 @@ body.deskmini .mb-toast { display: none; }
    draws the same lines in an overlay of their own. Taking this rule out
    brings the list back. */
 #deskbar .desks { display: none; }
+/* a row whose choices are too wide to sit beside their label: label above */
+.mb-row.stack { flex-direction: column; align-items: stretch; gap: var(--s-2); }
+.mb-row.stack > .lbl { flex: none; }
+/* the overlay's four corners, laid out the way they sit on the screen */
+.ovcorners { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
 body.deskmini #deskbar {
   display: flex; flex-direction: column; gap: var(--s-2);
   height: 100vh; padding: var(--s-3); background: var(--surface-1);
@@ -10153,6 +10158,34 @@ async function ovDraw(c) {
   const url = cv.toDataURL('image/png');
   return 'ovimg|' + W + '|' + H + '|' + url.slice(url.indexOf(',') + 1);
 }
+/* ── the program's own settings ──
+   Tom, 2026-11-16: the tray holds SPEAK alone, so STATUS.exe has no tray
+   icon, and what its menu did is here (1.0.102). STATUS.exe says how each
+   stands every five seconds (`deskHost`: top, key, boot) and at once after
+   a change. Open STATUS is the taskbar button; Check in now is SHOW ME ONE. */
+const DESK_KEYS = [{ id: 'ctrl+b', name: 'Ctrl+B' }, { id: 'ctrl+alt+b', name: 'Ctrl+Alt+B' }, { id: 'ctrl+shift+b', name: 'Ctrl+Shift+B' }];
+function drawProgramSettings(pane) {
+  const h = deskHostInfo || {};
+  pane.appendChild(el('div', 'mb-group', 'THE PROGRAM'));
+  pane.appendChild(toggleRow('Always on top', 'The widget stays above your other windows', h.top !== 0, v => {
+    ovPost('top|' + (v ? 1 : 0)); if (deskHostInfo) deskHostInfo.top = v ? 1 : 0; drawSettingsPane('desk');
+  }));
+  pane.appendChild(toggleRow('Start with Windows', 'STATUS opens when you sign in to the PC', !!h.boot, v => {
+    ovPost('boot|' + (v ? 1 : 0)); if (deskHostInfo) deskHostInfo.boot = v ? 1 : 0; drawSettingsPane('desk');
+  }));
+  const said = String(h.key || 'Ctrl+B');
+  const known = DESK_KEYS.find(k => k.name.toLowerCase() === said.toLowerCase());
+  pane.appendChild(UI.row('Bullet shortcut', 'Writes a bullet from anywhere' + (known ? '' : '. Now ' + said),
+    UI.segmented(DESK_KEYS.concat([{ id: 'own', name: 'My own' }]), known ? known.id : 'own', v => {
+      if (v === 'own') ovPost('keybox');
+      else { ovPost('hotkey|' + v); if (deskHostInfo) deskHostInfo.key = DESK_KEYS.find(k => k.id === v).name; }
+      setTimeout(() => drawSettingsPane('desk'), 600);
+    }))).classList.add('stack');
+  const quit = el('button', 'mb-btn mb-press mb-tap', 'QUIT STATUS');
+  quit.onclick = () => ovPost('quit');
+  pane.appendChild(UI.row('Quit', 'Closes the program until you open it again', quit));
+}
+
 /* Settings, DESKTOP: every choice, live. Only inside STATUS.exe. */
 function drawOverlaySettings(pane) {
   const o = ovCfg();
@@ -10161,11 +10194,24 @@ function drawOverlaySettings(pane) {
     S.set('desk.ov.show', v ? 1 : 0); ovSend(); drawSettingsPane('desk');
   }));
   if (!o.show) return;
-  const seg = (label, help, key, opts, after) => pane.appendChild(UI.row(label, help, UI.segmented(opts, o[key], v => {
-    S.set('desk.ov.' + key, v); ovSend(); if (after) after();
-  })));
-  seg('Position', 'Which corner of the main screen. It moves aside for the STATUS widget', 'pos',
-    [{ id: 'tl', name: 'Top left' }, { id: 'tr', name: 'Top right' }, { id: 'bl', name: 'Bottom left' }, { id: 'br', name: 'Bottom right' }]);
+  const seg = (label, help, key, opts, after) => {
+    const r = pane.appendChild(UI.row(label, help, UI.segmented(opts, o[key], v => {
+      S.set('desk.ov.' + key, v); ovSend(); if (after) after();
+    })));
+    if (opts.length > 3 || key === 'top') r.classList.add('stack');
+  };
+  const corners = el('div', 'ovcorners');
+  corners.setAttribute('role', 'radiogroup'); corners.setAttribute('aria-label', 'Position');
+  [{ id: 'tl', name: 'Top left' }, { id: 'tr', name: 'Top right' }, { id: 'bl', name: 'Bottom left' }, { id: 'br', name: 'Bottom right' }].forEach(k => {
+    const btn = el('button', 'mb-chip mb-press mb-tap' + (o.pos === k.id ? ' on' : ''), k.name);
+    btn.setAttribute('role', 'radio'); btn.setAttribute('aria-checked', o.pos === k.id ? 'true' : 'false');
+    btn.onclick = () => {
+      S.set('desk.ov.pos', k.id); ovSend();
+      corners.querySelectorAll('button').forEach(x => { const on = x === btn; x.classList.toggle('on', on); x.setAttribute('aria-checked', on ? 'true' : 'false'); });
+    };
+    corners.appendChild(btn);
+  });
+  pane.appendChild(UI.row('Position', 'Which corner of the main screen. It moves aside for the STATUS widget', corners)).classList.add('stack');
   seg('Size', 'How big the letters and words are', 'size',
     [{ id: 's', name: 'Small' }, { id: 'm', name: 'Medium' }, { id: 'l', name: 'Large' }]);
   const slide = (label, help, key, lo, hi) => {
@@ -10228,7 +10274,7 @@ function drawDeskTab(pane) {
         drawSettingsPane('desk');
       })));
     pane.appendChild(el('div', 'note', deskPop()
-      ? 'A small pop up comes from the STATUS icon by the clock, and a red dot waits on the status check button and the taskbar icon until you press either and answer.'
+      ? 'A small Windows notification comes up, and a red dot waits on the status check button and the taskbar icon until you press either and answer.'
       : deskGentle()
       ? 'A red dot goes on the status check button and on the STATUS icon in the taskbar, and waits there until you press it and answer.'
       : 'It fills the screen and takes the focus until you answer it.'));
@@ -10285,7 +10331,7 @@ function drawDeskTab(pane) {
   pane.appendChild(el('div', 'note',
     'Enter saves it as that kind of bullet, at that minute. The status check asks the same question.'));
 
-  if (HOSTED) drawOverlaySettings(pane);
+  if (HOSTED) { drawProgramSettings(pane); drawOverlaySettings(pane); }
 
   pane.appendChild(el('div', 'note',
     'Mini mode is the chevron in the top bar. Ctrl+B writes a bullet from ' +

@@ -71,7 +71,6 @@ class App : Form
     const int DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_ROUND = 2, DWMWCP_DONOTROUND = 1;
 
     WebView2 web;
-    NotifyIcon tray;
     MenuItem miTop;
     /* ── hosted first ──
        Tom, 2026-09-23: every device opens the hosted copy and joins by LIVE
@@ -111,7 +110,7 @@ class App : Form
         new System.Collections.Generic.Dictionary<uint, string[]>();
     bool dragging;
     int grabX, grabY;
-    ContextMenu trayMenu;
+    ContextMenu winMenu;     /* the right click menu, what the tray icon's menu was */
     /* where the whole app was put when it opened, and its corner before a
        status check took the screen, so going back lands where he left it */
     Point appPlaced = new Point(int.MinValue, 0);
@@ -174,7 +173,7 @@ class App : Form
         ClientSize = new Size(320, 170);
         PlaceWidget();
 
-        BuildTray();
+        BuildMenu();
         RegisterTheHotkey();
 
         dragT = new Timer();
@@ -231,8 +230,8 @@ class App : Form
         c.Settings.AreBrowserAcceleratorKeysEnabled = false;
         c.Settings.IsStatusBarEnabled = false;
         c.WebMessageReceived += Message;
-        /* Tom, 2026-10-18: a right click on the window offers the tray's
-           menu, Always on top first. Only where the page did not take the
+        /* Tom, 2026-10-18: a right click on the window offers the menu the
+           tray icon had, Always on top first. Only where the page did not take the
            right click for a menu of its own. */
         c.AddScriptToExecuteOnDocumentCreatedAsync(
             "addEventListener('contextmenu', function (e) { if (e.defaultPrevented) return; e.preventDefault();" +
@@ -322,16 +321,19 @@ class App : Form
         if (verb == "quit") { Quit(); return; }
         /* Tom, 2026-11-13: the status check can come as a red dot rather
            than the whole screen (STATUS Settings, DESKTOP, How it comes).
-           `due|1` puts a red dot on the taskbar button and the tray icon,
+           `due|1` puts a red dot on the taskbar button,
            `due|0` takes it off. The page decides when; this only paints. */
         if (verb == "due") { string d = bits.Length > 1 ? bits[1] : "0"; Due(d != "0", d == "2"); return; }
-        if (verb == "menu") { if (trayMenu != null) trayMenu.Show(this, PointToClient(Cursor.Position)); return; }
-        /* The tray's settings, asked for from STATUS's own Settings, so there
-           is one place to set them. The tray menu still works. */
+        if (verb == "menu") { if (winMenu != null) winMenu.Show(this, PointToClient(Cursor.Position)); return; }
+        /* The program's settings live in STATUS's own Settings, DESKTOP, THE
+           PROGRAM, since the tray icon went (STATUS 1.0.102, Tom: the tray
+           holds SPEAK alone). The right click menu still has them too. */
+        if (verb == "keybox") { ChooseKey(); return; }
         if (verb == "top")
         {
             onTop = bits.Length > 1 && bits[1] == "1";
-            TopMost = onTop; if (miTop != null) miTop.Checked = onTop; SaveCfg();
+            Pin(onTop); if (miTop != null) miTop.Checked = onTop; SaveCfg();
+            Sense();   /* the page's switch reads it back at once */
             return;
         }
         if (verb == "hotkey")
@@ -341,10 +343,11 @@ class App : Form
             {
                 hotkey = bits[1].ToLowerInvariant(); SaveCfg(); RegisterTheHotkey();
                 if (keysMenu != null) MarkKeys(keysMenu);
+                Sense();
             }
             return;
         }
-        if (verb == "boot") { SetBoot(bits.Length > 1 && bits[1] == "1"); return; }
+        if (verb == "boot") { SetBoot(bits.Length > 1 && bits[1] == "1"); Sense(); return; }
         /* `ov|show|pos|top`: the S-rank overlay's choices, from Settings, DESKTOP */
         if (verb == "ov")
         {
@@ -820,7 +823,11 @@ class App : Form
         catch { }
     }
 
-    void BuildTray()
+    /* ── no tray icon ──
+       Tom, 2026-11-16: the tray holds SPEAK alone; STATUS, the Main Menu and
+       OUTER HEAVEN live on the taskbar. What the tray icon's menu did is in
+       Settings, DESKTOP, THE PROGRAM, and on a right click on the window. */
+    void BuildMenu()
     {
         var menu = new ContextMenu();
         menu.MenuItems.Add(new MenuItem("Open STATUS", (s, e) => Front()));
@@ -828,7 +835,7 @@ class App : Form
         menu.MenuItems.Add("-");
         miTop = new MenuItem("Always on top", (s, e) =>
         {
-            onTop = !onTop; miTop.Checked = onTop; TopMost = onTop; SaveCfg();
+            onTop = !onTop; miTop.Checked = onTop; Pin(onTop); SaveCfg(); Sense();
         });
         miTop.Checked = onTop;
         menu.MenuItems.Add(miTop);
@@ -845,33 +852,66 @@ class App : Form
         }
         keys.MenuItems.Add("-");
         var custom = new MenuItem("Choose my own...");
-        custom.Click += (s, e) =>
-        {
-            using (var box = new KeyBox(hotkey))
-            {
-                if (box.ShowDialog() != DialogResult.OK || box.Chosen == null) return;
-                hotkey = box.Chosen; SaveCfg(); RegisterTheHotkey(); MarkKeys(keys);
-            }
-        };
+        custom.Click += (s, e) => ChooseKey();
         keys.MenuItems.Add(custom);
         menu.MenuItems.Add(keys);
         keysMenu = keys;
         menu.MenuItems.Add("-");
         menu.MenuItems.Add(new MenuItem("Quit", (s, e) => Quit()));
 
-        tray = new NotifyIcon();
-        tray.Icon = TrayIcon();
-        tray.Text = "STATUS";
-        tray.ContextMenu = menu;
-        trayMenu = menu;
-        tray.Visible = true;
-        tray.DoubleClick += (s, e) => Front();
-        tray.BalloonTipClicked += (s, e) =>
-        {
-            if (!ready) return;
-            try { web.CoreWebView2.ExecuteScriptAsync("typeof deskDot !== 'undefined' && deskDot && deskDotOpen()"); } catch { }
-        };
+        winMenu = menu;
         MarkKeys(keys);
+    }
+
+    /* Always on top, said so Windows takes it from a program that is not in
+       front: the form's own TopMost asks without SWP_NOACTIVATE and was
+       ignored when Settings turned it back on (watched 2026-11-16). */
+    [DllImport("user32.dll", SetLastError = true)] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
+    void Pin(bool top)
+    {
+        TopMost = top;
+        bool ok = SetWindowPos(Handle, new IntPtr(top ? -1 : -2), 0, 0, 0, 0, 0x1 | 0x2 | 0x10);
+        Log("always on top " + (top ? "on" : "off") + ": " + (ok ? "ok" : "refused " + Marshal.GetLastWin32Error()) +
+            ", now " + (((long)GetWindowLongPtr(Handle, -20) & 8) != 0 ? "on top" : "not on top"));
+    }
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr h, int i);
+
+    void ChooseKey()
+    {
+        using (var box = new KeyBox(hotkey))
+        {
+            if (box.ShowDialog(this) != DialogResult.OK || box.Chosen == null) return;
+            hotkey = box.Chosen; SaveCfg(); RegisterTheHotkey();
+            if (keysMenu != null) MarkKeys(keysMenu);
+            Sense();
+        }
+    }
+
+    /* ── a Windows notification with no tray icon that stays ──
+       A notification has to come from a tray icon, so one is put there for
+       the length of the notification and taken away after: 12 seconds, or
+       as soon as it is clicked or closed. Clicking it runs `then`. */
+    NotifyIcon note;
+    Timer noteT;
+    void Notify(string text, ToolTipIcon kind, Action then)
+    {
+        NoteGone();
+        note = new NotifyIcon();
+        note.Icon = plainIcon ?? Icon;
+        note.Text = "STATUS";
+        note.Visible = true;
+        note.BalloonTipClicked += (s, e) => { NoteGone(); if (then != null) then(); };
+        note.BalloonTipClosed += (s, e) => NoteGone();
+        note.ShowBalloonTip(10000, "STATUS", text, kind);
+        noteT = new Timer();
+        noteT.Interval = 12000;
+        noteT.Tick += (s, e) => NoteGone();
+        noteT.Start();
+    }
+    void NoteGone()
+    {
+        if (noteT != null) { noteT.Stop(); noteT.Dispose(); noteT = null; }
+        if (note != null) { note.Visible = false; note.Dispose(); note = null; }
     }
 
     void MarkKeys(MenuItem keys)
@@ -900,12 +940,16 @@ class App : Form
         Icon use = on ? dotIcon : plainIcon;
         if (use == null) return;
         Icon = use;
-        if (tray != null) { tray.Icon = use; tray.Text = on ? "STATUS - a status check is waiting" : "STATUS"; }
-        /* `due|2`: one small Windows notification from the tray icon as
+        /* `due|2`: one small Windows notification as
            well (Tom, 2026-11-13, "also offer a small pop up from here").
            Clicking it opens the check, the same as the widget's button. */
-        if (on && pop && tray != null)
-            tray.ShowBalloonTip(10000, "STATUS", "A status check is waiting. Click to answer it.", ToolTipIcon.None);
+        if (on && pop)
+            Notify("A status check is waiting. Click to answer it.", ToolTipIcon.None, () =>
+            {
+                if (!ready) return;
+                try { web.CoreWebView2.ExecuteScriptAsync("typeof deskDot !== 'undefined' && deskDot && deskDotOpen()"); } catch { }
+            });
+        if (!on) NoteGone();
         Log(on ? (pop ? "red dot on, pop up" : "red dot on") : "red dot off");
     }
     static Icon DotIcon(Icon from)
@@ -980,10 +1024,9 @@ class App : Form
         UnregisterHotKey(Handle, HOTKEY_ID);
         uint mod, vk;
         if (!ParseHotkey(hotkey, out mod, out vk)) { hotkey = "ctrl+b"; ParseHotkey(hotkey, out mod, out vk); }
-        if (!RegisterHotKey(Handle, HOTKEY_ID, mod, vk) && tray != null)
-            tray.ShowBalloonTip(6000, "STATUS",
-                "Another program already uses " + Pretty(hotkey) +
-                ". Pick a different one from the tray menu.", ToolTipIcon.Warning);
+        if (!RegisterHotKey(Handle, HOTKEY_ID, mod, vk))
+            Notify("Another program already uses " + Pretty(hotkey) +
+                ". Pick a different one in STATUS Settings, DESKTOP.", ToolTipIcon.Warning, null);
     }
 
     protected override void WndProc(ref Message m)
@@ -1010,20 +1053,20 @@ class App : Form
 
     /* Closing the window used to leave the launcher running with nothing to
        do, which is how a whole day went by with no check ins. Closing is
-       quitting now, and the tray is where it lives while it is not in front. */
+       quitting now. */
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
         SaveCfg();
         try { UnregisterHotKey(Handle, HOTKEY_ID); } catch { }
-        if (tray != null) { tray.Visible = false; tray.Dispose(); }
+        NoteGone();
     }
 
     void Quit()
     {
         SaveCfg();
         try { UnregisterHotKey(Handle, HOTKEY_ID); } catch { }
-        if (tray != null) { tray.Visible = false; tray.Dispose(); }
+        NoteGone();
         Application.Exit();
     }
 }
