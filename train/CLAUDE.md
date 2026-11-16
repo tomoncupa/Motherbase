@@ -291,7 +291,9 @@ lift no rule knows. Muscles are coloured by region (`Muscles.slotOf`).
 to the group the list files it under (a muscle, or Prehab as P/Rehab), never
 one already in a muscle group its own shares include, makes groups he had
 deleted, and deletes groups left empty that are not a muscle, Prehab or
-Cardio (Back, Chest, Core, Legs, Shoulders, Forearms); UNDO brings them back.
+Cardio (Back, Chest, Core, Legs, Shoulders, Forearms); UNDO brings them back. **No Adductors group** (1.0.93, Tom): Adductors still counts as a
+muscle and an adductor lift files under Glutes (`Muscles.FILE`); the
+forearm muscles are Forearm Flex. and Forearm Ext.
 Offered once more (`sortSeen` 2). A new log is seeded and sorted at once.
 Tidy suggests the list's group first. Below it, eight weeks of sets per muscle. **No targets**, at Tom's
 request: "I'd rather be told how many times I hit a muscle, I'll know if I need to

@@ -33,13 +33,24 @@
     ['Chest', ['Upper Chest', 'Lower Chest']],
     ['Back', ['Lats', 'Upper Back', 'Upper Traps', 'Lower Traps', 'Lower Back']],
     ['Shoulders', ['Front Delts', 'Side Delts', 'Rear Delts', 'Rotator Cuff']],
-    ['Arms', ['Biceps', 'Triceps', 'Forearm Flexors', 'Forearm Extensors']],
+    ['Arms', ['Biceps', 'Triceps', 'Forearm Flex.', 'Forearm Ext.']],
     ['Trunk', ['Abs', 'Obliques', 'Serratus']],
     ['Lower body', ['Quads', 'Hamstrings', 'Glutes', 'Adductors', 'Calves', 'Tibialis']],
     ['Other', ['Neck', 'Cardio']]
   ];
   var LIST = [], REGION = {};
   GROUPS.forEach(function (r) { r[1].forEach(function (m) { LIST.push(m); REGION[m] = r[0]; }); });
+  /* A muscle counted on its own but filed in another muscle's TRAIN group.
+     Tom, 2026-11-16: "I don't want adductors as a group". Its sets still
+     count toward Adductors; an adductor machine sits under Glutes, beside
+     the abductor. */
+  var FILE = { Adductors: 'Glutes' };
+  /* the TRAIN groups the list files lifts into: every muscle but those */
+  var GROUP_LIST = LIST.filter(function (m) { return !FILE[m]; });
+  /* old muscle names, read as the new ones wherever a lift carries its own
+     (Tom, 2026-11-16: "shorten it to forearm ext. and forearm flex.") */
+  var OLD = { 'Forearm Flexors': 'Forearm Flex.', 'Forearm Extensors': 'Forearm Ext.' };
+  function fileOf(m) { return FILE[m] || m; }
 
   /* Prehab is a reason for a lift, not a muscle (Tom: "We do want to add
      prehab"). A lift of one of these rules is FILED in TRAIN's Prehab group,
@@ -97,16 +108,16 @@
     ['Wall slide', 'iso', /wall slide|wall angel|scapular wall|floor slide/, { Serratus: 1, 'Lower Traps': 0.75 }],
     ['Bird dog', 'core', /bird dog/, { 'Lower Back': 1, Glutes: 0.5 }],
     ['Hip airplane', 'iso', /airplane|fire hydrant/, { Glutes: 1 }],
-    ['Forearm rotation', 'iso', /pronation|supination|leverage bar|wrist rotat|rice bucket|radial deviation|ulnar deviation/, { 'Forearm Flexors': 0.75, 'Forearm Extensors': 0.75 }],
-    ['Wrist roller', 'iso', /wrist roller/, { 'Forearm Flexors': 1, 'Forearm Extensors': 0.75 }],
-    ['Finger extension', 'iso', /finger extension|band extension|hand extensor/, { 'Forearm Extensors': 1 }],
+    ['Forearm rotation', 'iso', /pronation|supination|leverage bar|wrist rotat|rice bucket|radial deviation|ulnar deviation/, { 'Forearm Flex.': 0.75, 'Forearm Ext.': 0.75 }],
+    ['Wrist roller', 'iso', /wrist roller/, { 'Forearm Flex.': 1, 'Forearm Ext.': 0.75 }],
+    ['Finger extension', 'iso', /finger extension|band extension|hand extensor/, { 'Forearm Ext.': 1 }],
     ['Neck work', 'iso', /neck (curl|extension|flexion|bridge|harness|raise)|neck harness|4 way neck|four way neck/, { Neck: 1 }],
     ['Dead bug', 'core', /dead ?bug|mcgill|curl up/, { Abs: 1 }],
 
     /* ── conditioning and whole-body ── */
     ['Thruster', 'squat', /thruster|squat (and|to) press|wall ball/, { Quads: 1, 'Front Delts': 0.75, Glutes: 0.5, Triceps: 0.5, Abs: 0.25, Obliques: 0.25 }],
     ['Sled', 'carry', /sled|prowler/, { Quads: 1, Glutes: 0.75, Calves: 0.5 }],
-    ['Battle ropes', 'carry', /battle rope|rope wave|rope slam/, { 'Front Delts': 1, 'Side Delts': 0.5, 'Forearm Flexors': 0.5, Abs: 0.25 }],
+    ['Battle ropes', 'carry', /battle rope|rope wave|rope slam/, { 'Front Delts': 1, 'Side Delts': 0.5, 'Forearm Flex.': 0.5, Abs: 0.25 }],
     ['Turkish get up', 'carry', /turkish|get up/, { Obliques: 1, 'Front Delts': 0.5, Glutes: 0.5 }],
     ['Burpee', 'cardio', /burpee|mountain climber|jumping jack|jump rope|skipping/, { Cardio: 1 }],
     ['Deadlift row', 'pull-h', /deadlift row/, { 'Upper Back': 1, Lats: 0.75, 'Lower Back': 0.5, Biceps: 0.5, Hamstrings: 0.25 }],
@@ -121,20 +132,20 @@
     ['Kelso shrug', 'pull-h', /kelso|scapular retraction|scapular row/, { 'Upper Back': 1 }],
     ['Scapular pull up', 'pull-v', /scapular (pullup|pull|depression)/, { 'Lower Traps': 1, Lats: 0.5 }],
     ['Stair climber', 'cardio', /stair|stepmill|step mill|climber/, { Cardio: 1 }],
-    ['Climbing', 'pull-v', /^climb|rope climb|climbing|boulder/, { Lats: 1, 'Forearm Flexors': 1, Biceps: 0.75, 'Upper Back': 0.5 }],
+    ['Climbing', 'pull-v', /^climb|rope climb|climbing|boulder/, { Lats: 1, 'Forearm Flex.': 1, Biceps: 0.75, 'Upper Back': 0.5 }],
 
     /* ── hinges, before rows: "Bb Row Machine SLDL" is a stiff-leg deadlift ── */
-    ['Rack pull', 'hinge', /rack pull|block pull/, { 'Lower Back': 1, Glutes: 0.75, 'Upper Traps': 0.5, Hamstrings: 0.25, Obliques: 0.25, 'Forearm Flexors': 0.25 }],
+    ['Rack pull', 'hinge', /rack pull|block pull/, { 'Lower Back': 1, Glutes: 0.75, 'Upper Traps': 0.5, Hamstrings: 0.25, Obliques: 0.25, 'Forearm Flex.': 0.25 }],
     ['Single-leg RDL', 'hinge', /single leg (romanian|stiff)|b stance|kickstand/, { Hamstrings: 1, Glutes: 0.75, 'Lower Back': 0.25 }],
     ['Romanian deadlift', 'hinge', /romanian/, { Hamstrings: 1, Glutes: 0.75, 'Lower Back': 0.5 }],
     ['Stiff-leg deadlift', 'hinge', /stiff|straight leg deadlift/, { Hamstrings: 1, Glutes: 0.75, 'Lower Back': 0.75 }],
     ['Sumo deadlift', 'hinge', /sumo deadlift/, { Glutes: 1, Quads: 0.75, Adductors: 0.75, 'Lower Back': 0.75, Hamstrings: 0.5, Obliques: 0.25, Abs: 0.25 }],
     ['Trap bar deadlift', 'hinge', /(trap|hex) bar deadlift|^(?!.*(row|shrug|carry)).*(trap|hex) bar/, { Glutes: 1, Quads: 0.75, 'Lower Back': 0.75, Hamstrings: 0.5, Obliques: 0.25, Abs: 0.25, 'Upper Traps': 0.25 }],
-    ['Deadlift', 'hinge', /deadlift/, { 'Lower Back': 1, Glutes: 0.75, Hamstrings: 0.5, Quads: 0.5, Obliques: 0.25, Abs: 0.25, 'Upper Traps': 0.25, 'Forearm Flexors': 0.25 }],
+    ['Deadlift', 'hinge', /deadlift/, { 'Lower Back': 1, Glutes: 0.75, Hamstrings: 0.5, Quads: 0.5, Obliques: 0.25, Abs: 0.25, 'Upper Traps': 0.25, 'Forearm Flex.': 0.25 }],
 
     /* ── vertical pulls ── */
-    ['Neutral grip chin up', 'pull-v', /(neutral|parallel|hammer) grip (chinup|pullup)|(neutral|parallel) (chinup|pullup)/, { Lats: 1, Biceps: 0.75, 'Forearm Extensors': 0.25, 'Upper Back': 0.5 }],
-    ['Chin up', 'pull-v', /chinup|supinated pullup|underhand pullup/, { Biceps: 1, Lats: 0.8, 'Upper Back': 0.5, 'Lower Traps': 0.25, 'Forearm Flexors': 0.25 }],
+    ['Neutral grip chin up', 'pull-v', /(neutral|parallel|hammer) grip (chinup|pullup)|(neutral|parallel) (chinup|pullup)/, { Lats: 1, Biceps: 0.75, 'Forearm Ext.': 0.25, 'Upper Back': 0.5 }],
+    ['Chin up', 'pull-v', /chinup|supinated pullup|underhand pullup/, { Biceps: 1, Lats: 0.8, 'Upper Back': 0.5, 'Lower Traps': 0.25, 'Forearm Flex.': 0.25 }],
     ['Pull up', 'pull-v', /pullup|muscle up/, { Lats: 1, 'Upper Back': 0.5, Biceps: 0.5, 'Lower Traps': 0.5, 'Rear Delts': 0.25 }],
     ['Underhand pulldown', 'pull-v', /(underhand|reverse grip|supinated).*pulldown/, { Lats: 1, Biceps: 0.75, 'Upper Back': 0.5 }],
     ['Lat pulldown', 'pull-v', /pulldown/, { Lats: 1, 'Upper Back': 0.5, Biceps: 0.5, 'Rear Delts': 0.25 }],
@@ -154,9 +165,9 @@
     ['Rear delt fly', 'iso', /rear delt|rear lateral|reverse (pec deck|fly)|bent over (lateral|raise)/, { 'Rear Delts': 1, 'Upper Back': 0.5 }],
     ['External rotation', 'iso', /external rotat|internal rotat|cuban|rotator|\bw raise|no money|90 90|sleeper|shoulder rotation|\bl fly|band dislocat|shoulder dislocat/, { 'Rotator Cuff': 1, 'Rear Delts': 0.25 }],
     ['Y raise', 'iso', /\by raise|prone y|lower trap|\bi y t\b|ytw|\by t w|\bi t y|trap 3|cable y|incline y/, { 'Lower Traps': 1, 'Rear Delts': 0.5 }],
-    ['Shrug', 'iso', /shrug/, { 'Upper Traps': 1, 'Forearm Flexors': 0.25 }],
-    ['Suitcase carry', 'carry', /suitcase|single arm (farmer|carry)|one arm (farmer|carry)/, { Obliques: 1, 'Forearm Flexors': 1, 'Upper Traps': 0.5 }],
-    ['Carry', 'carry', /farmer|suitcase carry|carry|yoke/, { 'Forearm Flexors': 1, 'Upper Traps': 0.75, Obliques: 0.5, Abs: 0.25 }],
+    ['Shrug', 'iso', /shrug/, { 'Upper Traps': 1, 'Forearm Flex.': 0.25 }],
+    ['Suitcase carry', 'carry', /suitcase|single arm (farmer|carry)|one arm (farmer|carry)/, { Obliques: 1, 'Forearm Flex.': 1, 'Upper Traps': 0.5 }],
+    ['Carry', 'carry', /farmer|suitcase carry|carry|yoke/, { 'Forearm Flex.': 1, 'Upper Traps': 0.75, Obliques: 0.5, Abs: 0.25 }],
 
     /* ── other hinges ── */
     ['Good morning', 'hinge', /good ?morning/, { Hamstrings: 1, 'Lower Back': 0.75, Glutes: 0.5, Abs: 0.25 }],
@@ -212,11 +223,11 @@
     ['Ab work', 'core', /crunch|situp|leg raise|knee raise|v up|dragon flag|hollow|plank|\bl sit|toes to bar|\bab\b|abs\b|abdominal|vacuum/, { Abs: 1 }],
 
     /* ── arms ── */
-    ['Reverse wrist curl', 'iso', /reverse wrist|wrist extension/, { 'Forearm Extensors': 1 }],
-    ['Reverse curl', 'iso', /reverse (grip |cable )?curl|reverse grip.*curl|zottman/, { 'Forearm Extensors': 1, Biceps: 0.5 }],
-    ['Wrist curl', 'iso', /wrist|forearm|gripper|hand grip|grip trainer|finger curl|dead hang|^hang$|bar hang|pinch/, { 'Forearm Flexors': 1 }],
-    ['Hammer curl', 'iso', /hammer (curl|bicep)|bicep hammer|arm blaster hammer|cross body|neutral curl|rope curl/, { Biceps: 1, 'Forearm Extensors': 0.5 }],
-    ['Bicep curl', 'iso', /curl|\bbicep/, { Biceps: 1, 'Forearm Flexors': 0.25 }],
+    ['Reverse wrist curl', 'iso', /reverse wrist|wrist extension/, { 'Forearm Ext.': 1 }],
+    ['Reverse curl', 'iso', /reverse (grip |cable )?curl|reverse grip.*curl|zottman/, { 'Forearm Ext.': 1, Biceps: 0.5 }],
+    ['Wrist curl', 'iso', /wrist|forearm|gripper|hand grip|grip trainer|finger curl|dead hang|^hang$|bar hang|pinch/, { 'Forearm Flex.': 1 }],
+    ['Hammer curl', 'iso', /hammer (curl|bicep)|bicep hammer|arm blaster hammer|cross body|neutral curl|rope curl/, { Biceps: 1, 'Forearm Ext.': 0.5 }],
+    ['Bicep curl', 'iso', /curl|\bbicep/, { Biceps: 1, 'Forearm Flex.': 0.25 }],
     ['Tricep extension', 'iso', /tricep|pushdown|pressdown|kickback|tate|extension/, { Triceps: 1 }],
 
     /* ── cardio ── */
@@ -233,7 +244,7 @@
         var sh = RULES[i].share, main = null;
         Object.keys(sh).forEach(function (m) { if (main == null || sh[m] > sh[main]) main = m; });
         return { rule: RULES[i].name, pat: RULES[i].pat, share: sh, main: main,
-          group: PREHAB.indexOf(RULES[i].name) >= 0 ? 'Prehab' : main };
+          group: PREHAB.indexOf(RULES[i].name) >= 0 ? 'Prehab' : fileOf(main) };
       }
     }
     return null;
@@ -262,16 +273,16 @@
     var sh = null, src = null;
     if (own && typeof own === 'object') {
       sh = {};
-      Object.keys(own).forEach(function (k) { var v = +own[k]; if (v > 0) sh[k] = Math.min(1, v); });
+      Object.keys(own).forEach(function (k) { var v = +own[k]; if (v > 0) sh[OLD[k] || k] = Math.min(1, v); });
       if (Object.keys(sh).length) src = 'own'; else sh = null;
     }
     if (!sh && Array.isArray(tag) && tag.length) {
-      sh = {}; tag.forEach(function (m, i) { if (m) sh[m] = i ? 0.5 : 1; }); src = 'tag';
+      sh = {}; tag.forEach(function (m, i) { if (m) sh[OLD[m] || m] = i ? 0.5 : 1; }); src = 'tag';
     }
     if (sh) {
       var mn = mainOf(sh), byName = of(name);
       return { share: sh, main: mn, src: src,
-        group: byName && byName.group === 'Prehab' && (!group || /rehab/i.test(group)) ? 'Prehab' : mn };
+        group: byName && byName.group === 'Prehab' && (!group || /rehab/i.test(group)) ? 'Prehab' : fileOf(mn) };
     }
     var m = of(name);
     if (m) return { share: m.share, main: m.main, group: m.group, src: 'list', rule: m.rule };
@@ -285,6 +296,6 @@
   var REGION_SLOT = { Chest: 0, Back: 1, Shoulders: 2, Arms: 4, Trunk: 5, 'Lower body': 3, Other: 6 };
   function slotOf(m) { return REGION[m] ? REGION_SLOT[REGION[m]] : (/rehab/i.test(m || '') ? 7 : null); }
 
-  g.Muscles = { version: '0.2.0', LIST: LIST, REGION: REGION, GROUPS: GROUPS, RULES: RULES, PREHAB: PREHAB,
+  g.Muscles = { version: '0.2.1', LIST: LIST, GROUP_LIST: GROUP_LIST, FILE: FILE, OLD: OLD, fileOf: fileOf, REGION: REGION, GROUPS: GROUPS, RULES: RULES, PREHAB: PREHAB,
     norm: norm, of: of, forLift: forLift, mainOf: mainOf, slotOf: slotOf, REGION_SLOT: REGION_SLOT };
 })(typeof window !== 'undefined' ? window : this);
