@@ -205,8 +205,18 @@
     /** A hairline across at every step, with the number beside it. The left
         margin grows to fit the widest number, so "82,000" is never clipped. */
     c.grid = function (fmt) {
-      const labs = [];
+      let labs = [];
       for (let v = c.lo; v <= c.hi + 1e-9; v += c.step) labs.push([v, fmt ? fmt(v) : fmtNum(v, c.step)]);
+      /* a number needs its own height and a little air: in a short chart
+         every second (third...) step keeps its line and number, so 80, 81
+         and 82 are never printed over each other (2026-11-16, the home
+         screen's WEIGHT at 2 by 2) */
+      if (labs.length > 1) {
+        const size = parseFloat(document.documentElement.style.getPropertyValue('--f-1')) || 12;
+        const per = Math.abs(c.Y(labs[0][0]) - c.Y(labs[1][0]));
+        const k = per > 0 ? Math.ceil((size + 4) / per) : 1;
+        if (k > 1) labs = labs.filter((l, i) => i % k === 0);
+      }
       if (autoL) P.l = Math.max(P.l, Math.round(Math.max.apply(null, labs.map(l => String(l[1]).length)) * 7.2 + 12));
       labs.forEach(l => {
         const y = c.Y(l[0]);
@@ -276,7 +286,17 @@
     /** Words along the bottom at chosen x values: months, set numbers. */
     c.labels = function (list, o) {
       o = o || {};
+      /* none may touch the one before, as on a time axis; a lit one (the
+         third item) outranks the ones before it (2026-11-16, TRAIN volume
+         at 2 by 2 printed Oct 5, Oct 19 and Nov 2 over each other) */
+      const cw = charW(), span = l => { const x = c.X(l[0]), w = String(l[1]).length * cw; return [x - w / 2, x + w / 2]; };
+      const kept = [];
+      const fits = l => !kept.length || span(l)[0] - span(kept[kept.length - 1])[1] >= LAB_GAP;
       (list || []).forEach(l => {
+        if (l[2]) while (kept.length && !fits(l)) kept.pop();
+        if (fits(l)) kept.push(l);
+      });
+      kept.forEach(l => {
         const t = add('text', { x: c.X(l[0]), y: H - 6, 'text-anchor': 'middle' }, 'mb-lab' + (l[2] ? ' on' : ''));
         t.textContent = l[1];
       });

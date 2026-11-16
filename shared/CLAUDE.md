@@ -872,3 +872,7 @@ in Chrome on the smoke page and on the board (a cleared ramble came back).
 `HISTORY.md`, beside this file, holds the debt list, the numbered foundation
 findings other briefs cite as "foundation item N", and the app icon rework.
 Read it when working in that corner; add build stories there, not here.
+
+## Axis words never touch (2026-11-16, `chart.js`)
+
+From a HOME session, Tom: "Do this task here". `c.grid` printed a side number at every step, so a chart about 60px tall printed 80, 81 and 82 over each other; it now keeps every second (third...) step, line and number, when the steps are closer than the label size plus 4px. `c.labels` dropped nothing; it now leaves off a word that would come within `LAB_GAP` of the one before, and a lit one (third item) outranks those before it, the way `timeAxis` already did. One `chart:` smoke check, watched failing on the old file (5 numbers in 60px). Found by `tools/home-sweep.py` (WEIGHT, SLEEP, the measure card, TRAIN volume at 2 by 2), which now reports none.
