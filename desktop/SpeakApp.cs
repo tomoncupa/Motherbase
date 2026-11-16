@@ -1,229 +1,337 @@
 /* ══════════════ SPEAK.exe ══════════════
    Tom, 2026-11-10: "Speak app that also has an always on overlay widget, so
-   I can start a mini practice whenever." He chose its own PC widget over a
-   button on STATUS.
+   I can start a mini practice whenever." 2026-11-16: "speak will primarily
+   be a desktop app", then "I want speak to auto start, and I want it to be a
+   tray icon. And if I click the tray icon, I can have the four buttons always
+   available. Just give it a complete settings menu for the mini widget and
+   for the full EXE app."
 
-   A small window on top of everything with one button, TABLE TOPIC. Press
-   it and the window grows for the take and its numbers, then shrinks back
-   to where it was. The page decides the size and says so by message
-   (speak/index.html, the widget): mbsize:big, mbsize:small.
+   So SPEAK.exe is a tray icon first. Starting with Windows it sits in the
+   tray with no window. Clicking the icon pops the MINI WIDGET up beside it:
+   the four buttons (SPEAK, FITNESS, OTHER, FREE SPEAK), growing for a take
+   and shrinking back (the page says so: mbsize:big, small, wide). The FULL
+   APP is the whole of SPEAK in an ordinary window. Two windows, one tray,
+   one store. Both show SPEAK's own Settings, whose PROGRAM tab is this
+   program's settings (the page posts mbset:key=value; every window is told
+   the new values).
 
    Tom only. SPEAK is not in the client build, so this is not in Setup.exe.
    It shares STATUS.exe's and the Main Menu's store (desktop/data), so a take
    made here is in SPEAK everywhere at once.
 
    Windows' own title bar stays, coloured like the page (how-we-work: no
-   white title bar), because it is what drags the window. Its menu, a right
-   click on the bar, holds "Start with Windows", on from the first open.   */
+   white title bar), because it is what drags the window.                  */
 
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
-class Speak : Form
+/* ── the program: settings, the tray, the two windows ── */
+static class App
 {
-    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
-    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
-    [DllImport("user32.dll")] static extern IntPtr FindWindowW(string cls, string win);
-    [DllImport("user32.dll")] static extern IntPtr GetSystemMenu(IntPtr h, bool revert);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool AppendMenuW(IntPtr m, int flags, int id, string text);
-    [DllImport("user32.dll")] static extern int CheckMenuItem(IntPtr m, int id, int flags);
-    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int val, int size);
-    const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20, DWMWA_BORDER_COLOR = 34,
-              DWMWA_CAPTION_COLOR = 35, DWMWA_TEXT_COLOR = 36;
-    const int SW_RESTORE = 9, WM_SYSCOMMAND = 0x112, MF_SEPARATOR = 0x800, MF_STRING = 0,
-              MF_CHECKED = 8, MF_UNCHECKED = 0, ID_BOOT = 0x1F10;
-    const string TITLE = "SPEAK";
-
-    /* the page's two sizes, inside the frame */
-    static readonly Size SMALL = new Size(300, 260), BIG = new Size(440, 760), WIDE = new Size(1000, 820);
-    Size bigAs = Size.Empty;
-
-    WebView2 web;
-    string root, cfgPath, dataDir, pageUrl;
-    Point home = new Point(int.MinValue, int.MinValue);   /* where the small window sits */
-    bool big, bootSet;
-    /* Tom, 2026-11-16: "Is the speak exe different from speak in main menu?
-       Because I want them to be the same ... speak will primarily be a desktop
-       app." SPEAK.exe opens the whole app in an ordinary window now; the old
-       always-on-top widget is "Mini widget" in the tray's menu. */
-    bool mini;
-    Rectangle full = Rectangle.Empty;
-    string page;
-
+    public const string TITLE = "SPEAK";
+    public static readonly string Dir = AppDomain.CurrentDomain.BaseDirectory;
+    static readonly string cfgPath = Path.Combine(Dir, "speak-app.txt");
+    static readonly JavaScriptSerializer json = new JavaScriptSerializer();
+    public static NotifyIcon Tray;
+    public static Speak Full, Mini;
+    public static bool Quitting;
     static Mutex only;
+    static EventWaitHandle wake;
+    static Control marshal;   /* no window: only the program's thread, for the second-start signal */
 
-    static bool UseFolder()
-    {
-        return File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "use-folder-copy.txt"));
-    }
+    /* every setting, with its default; a line in speak-app.txt wins */
+    public static readonly Dictionary<string, string> Cfg = new Dictionary<string, string> {
+        { "hidden", "1" },     /* starting with Windows, sit in the tray with no window */
+        { "click", "mini" },   /* a click on the tray icon opens: mini or full */
+        { "miniTop", "1" },    /* the mini widget stays on top of other windows */
+        { "miniAway", "0" },   /* the mini widget tucks away when you click elsewhere */
+        { "miniPlace", "tray" },/* the mini widget pops up by the tray, or where you left it */
+        { "fullTop", "0" },    /* the full app stays on top of other windows */
+        { "close", "tray" },   /* the full app's close button: tray or quit */
+        { "at", "" }, { "full", "" },
+    };
+    public static bool On(string k) { return Cfg.ContainsKey(k) && Cfg[k] == "1"; }
 
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
         bool fresh;
         only = new Mutex(true, "Motherbase.Speak.App", out fresh);
-        if (!fresh)
-        {
-            IntPtr h = FindWindowW(null, TITLE);
-            if (h != IntPtr.Zero) { ShowWindow(h, SW_RESTORE); SetForegroundWindow(h); }
-            return;
-        }
+        wake = new EventWaitHandle(false, EventResetMode.AutoReset, "Motherbase.Speak.Show");
+        if (!fresh) { wake.Set(); return; }   /* the one already running opens its full app */
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Application.Run(new Speak());
+        try { File.Delete(Path.Combine(Dir, "speak-app.log")); } catch { }
+        Load();
+        bool boot = Array.IndexOf(args, "--tray") >= 0;
+        marshal = new Control();
+        IntPtr made = marshal.Handle;
+        MakeTray();
+        /* first run: Start with Windows on, in the tray */
+        if (!Cfg.ContainsKey("bootSet")) { SetBoot(true); Cfg["bootSet"] = "1"; Save(); }
+        else if (GetBoot()) SetBoot(true);   /* keeps the --tray in the Run key */
+        if (Array.IndexOf(args, "--mini") >= 0) ShowMini(true);
+        else if (!(boot && On("hidden"))) ShowFull();
+        new Thread(() => { while (true) { wake.WaitOne(); try { marshal.BeginInvoke((Action)ShowFull); } catch { } } }) { IsBackground = true }.Start();
+        Application.Run(new ApplicationContext());
     }
 
-    void Log(string s)
+    public static void Log(string s)
+    {
+        try { File.AppendAllText(Path.Combine(Dir, "speak-app.log"), DateTime.Now.ToString("HH:mm:ss") + "  " + s + "\r\n"); } catch { }
+    }
+
+    static void MakeTray()
+    {
+        Tray = new NotifyIcon { Icon = Hosted.OwnIcon(), Text = TITLE, Visible = true };
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("Mini widget", null, (s, e) => ShowMini(true));
+        menu.Items.Add("Open SPEAK", null, (s, e) => ShowFull());
+        menu.Items.Add("Free speak", null, (s, e) => { ShowFull(); Full.Run("openFree()"); });
+        menu.Items.Add("Drill menu", null, (s, e) => { ShowFull(); Full.Run("openMenu()"); });
+        menu.Items.Add("Settings", null, (s, e) => { ShowFull(); Full.Run("openSettings()"); });
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Quit SPEAK", null, (s, e) => Quit());
+        Tray.ContextMenuStrip = menu;
+        Tray.MouseClick += (s, e) =>
+        {
+            if (e.Button != MouseButtons.Left) return;
+            if (Cfg["click"] == "full") ShowFull(); else ShowMini(false);
+        };
+    }
+
+    public static void ShowFull()
+    {
+        if (Full == null || Full.IsDisposed) Full = new Speak(false);
+        Full.Bring();
+    }
+    /* a tray click toggles the widget; the menu always shows it */
+    public static void ShowMini(bool always)
+    {
+        if (Mini == null || Mini.IsDisposed) Mini = new Speak(true);
+        if (!always && Mini.Visible && Form.ActiveForm == Mini) { Mini.Hide(); return; }
+        Mini.PlaceMini();
+        Mini.Bring();
+    }
+
+    public static void Quit()
+    {
+        Quitting = true;
+        Save();
+        if (Tray != null) { Tray.Visible = false; Tray.Dispose(); }
+        if (Full != null && !Full.IsDisposed) Full.Close();
+        if (Mini != null && !Mini.IsDisposed) Mini.Close();
+        Application.Exit();
+    }
+
+    /* the page's PROGRAM tab: one setting changed */
+    public static void Set(string k, string v)
+    {
+        if (k == "boot") { SetBoot(v == "1"); }
+        else if (Cfg.ContainsKey(k) && k != "at" && k != "full") Cfg[k] = v;
+        else return;
+        Save();
+        if (Full != null && !Full.IsDisposed) Full.Apply();
+        if (Mini != null && !Mini.IsDisposed) Mini.Apply();
+        Tell();
+    }
+    /* what the page shows on its PROGRAM tab */
+    public static string State(bool mini)
+    {
+        var d = new Dictionary<string, object>();
+        foreach (var kv in Cfg) if (kv.Key != "at" && kv.Key != "full" && kv.Key != "bootSet") d[kv.Key] = kv.Value;
+        d["boot"] = GetBoot() ? "1" : "0";
+        d["win"] = mini ? "mini" : "full";
+        return json.Serialize(d);
+    }
+    public static void Tell()
+    {
+        if (Full != null && !Full.IsDisposed) Full.Post("{\"mb\":\"exe\",\"cfg\":" + State(false) + "}");
+        if (Mini != null && !Mini.IsDisposed) Mini.Post("{\"mb\":\"exe\",\"cfg\":" + State(true) + "}");
+    }
+
+    static void Load()
     {
         try
         {
-            File.AppendAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "speak-app.log"),
-                DateTime.Now.ToString("HH:mm:ss") + "  " + s + "\r\n");
+            if (!File.Exists(cfgPath)) return;
+            foreach (string line in File.ReadAllLines(cfgPath))
+            {
+                int eq = line.IndexOf('=');
+                if (eq < 1 || line.StartsWith("#")) continue;
+                string k = line.Substring(0, eq).Trim(), v = line.Substring(eq + 1).Trim();
+                if (k == "boot") Cfg["bootSet"] = "1";
+                else if (k == "mini") continue;   /* the old single-window switch */
+                else Cfg[k] = v;
+            }
+        }
+        catch { }
+    }
+    public static void Save()
+    {
+        try
+        {
+            var sb = new System.Text.StringBuilder("# SPEAK.exe. Delete this file to go back to the defaults.\r\n");
+            foreach (var kv in Cfg) if (kv.Value != "") sb.Append(kv.Key + "=" + kv.Value + "\r\n");
+            File.WriteAllText(cfgPath, sb.ToString());
         }
         catch { }
     }
 
-    public Speak()
+    const string RUN_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    const string RUN_NAME = "Motherbase SPEAK";
+    public static bool GetBoot()
     {
-        root = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".."));
-        cfgPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "speak-app.txt");
-        dataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
-        try { File.Delete(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "speak-app.log")); } catch { }
-        LoadCfg();
+        try { using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RUN_KEY)) return k != null && k.GetValue(RUN_NAME) != null; }
+        catch { return false; }
+    }
+    public static void SetBoot(bool on)
+    {
+        try
+        {
+            using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RUN_KEY))
+            {
+                if (on) k.SetValue(RUN_NAME, "\"" + Application.ExecutablePath + "\" --tray");
+                else if (k.GetValue(RUN_NAME) != null) k.DeleteValue(RUN_NAME);
+            }
+        }
+        catch (Exception ex) { Log("could not change start with Windows: " + ex.Message); }
+    }
+}
 
-        page = Path.Combine(root, "speak", "index.html");
-        Text = TITLE;
+/* ── one window: the full app, or the mini widget ── */
+class Speak : Form
+{
+    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int val, int size);
+    const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20, DWMWA_BORDER_COLOR = 34, DWMWA_CAPTION_COLOR = 35, DWMWA_TEXT_COLOR = 36;
+
+    /* the widget's sizes, inside the frame */
+    static readonly Size SMALL = new Size(300, 282), BIG = new Size(440, 760), WIDE = new Size(1000, 820);
+    Size bigAs = Size.Empty;
+    bool big;
+    readonly bool mini;
+    readonly WebView2 web;
+    readonly string pageUrl;
+
+    static bool UseFolder() { return File.Exists(Path.Combine(App.Dir, "use-folder-copy.txt")); }
+
+    public Speak(bool mini)
+    {
+        this.mini = mini;
+        Text = mini ? "SPEAK mini" : App.TITLE;
         StartPosition = FormStartPosition.Manual;
         BackColor = Color.FromArgb(0x08, 0x0B, 0x10);
         Icon = Hosted.OwnIcon();
-        ApplyMode();
+        if (mini) { FormBorderStyle = FormBorderStyle.FixedSingle; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false; ClientSize = SMALL; }
+        else { FormBorderStyle = FormBorderStyle.Sizable; MaximizeBox = true; Bounds = FullRect(); }
+        Apply();
 
-        web = new WebView2();
-        web.Dock = DockStyle.Fill;
-        web.DefaultBackgroundColor = BackColor;
-        web.CreationProperties = new CoreWebView2CreationProperties();
-        web.CreationProperties.UserDataFolder = dataDir;
-        pageUrl = UrlFor(mini);
+        string page = Path.Combine(Path.GetFullPath(Path.Combine(App.Dir, "..")), "speak", "index.html");
+        string q = mini ? "?widget=1&boot=0" : "?boot=0";
+        pageUrl = UseFolder() ? new Uri(page).AbsoluteUri + q : Hosted.Url + "speak/index.html" + q + "&fresh=1";
+        web = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = BackColor };
+        web.CreationProperties = new CoreWebView2CreationProperties { UserDataFolder = Path.Combine(App.Dir, "data") };
         web.CoreWebView2InitializationCompleted += Started;
         Controls.Add(web);
         web.EnsureCoreWebView2Async(null);
-
-        /* Start with Windows is on from the first open, because an overlay
-           that has to be remembered each morning is not always on. */
-        if (!bootSet) { SetBoot(true); bootSet = true; SaveCfg(); }
-        Tray();
+        if (mini) Deactivate += (s, e) => { if (App.On("miniAway") && !big && Visible) Hide(); };
     }
 
-    /* ── the tray icon, 2026-11-16 (Tom: "give Speak a desktop icon and a
-       tray icon") ── A click brings SPEAK forward; its menu starts a free
-       speak or opens the drill menu straight away. The window's close button
-       tucks it into the tray; Quit in the tray's menu ends it. */
-    NotifyIcon tray;
-    bool quitting;
-    string UrlFor(bool m)
+    /* the settings that change how this window sits */
+    public void Apply()
     {
-        string q = m ? "?widget=1&boot=0" : "?boot=0";
-        return UseFolder() ? new Uri(page).AbsoluteUri + q : Hosted.Url + "speak/index.html" + q + "&fresh=1";
+        TopMost = mini ? App.On("miniTop") : App.On("fullTop");
     }
-    void ApplyMode()
-    {
-        big = false;
-        if (mini)
-        {
-            FormBorderStyle = FormBorderStyle.FixedSingle;
-            MaximizeBox = false;
-            TopMost = true;
-            ClientSize = SMALL;
-            Place();
-            return;
-        }
-        FormBorderStyle = FormBorderStyle.Sizable;
-        MaximizeBox = true;
-        TopMost = false;
-        var wa = Screen.PrimaryScreen.WorkingArea;
-        bool seen = false;
-        foreach (var sc in Screen.AllScreens) if (!full.IsEmpty && sc.WorkingArea.IntersectsWith(full)) seen = true;
-        if (full.IsEmpty || !seen)
-        {
-            int w = Math.Min(1100, wa.Width - 40), h = Math.Min(860, wa.Height - 40);
-            full = new Rectangle(wa.Left + (wa.Width - w) / 2, wa.Top + (wa.Height - h) / 2, w, h);
-        }
-        Bounds = full;
-    }
-    void SetMini(bool m)
-    {
-        if (m == mini) return;
-        mini = m;
-        ApplyMode();
-        try { if (web != null && web.CoreWebView2 != null) web.CoreWebView2.Navigate(UrlFor(mini)); } catch { }
-        SaveCfg();
-    }
-    void Tray()
-    {
-        tray = new NotifyIcon { Icon = Icon, Text = TITLE, Visible = true };
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("Open SPEAK", null, (s, e) => Bring());
-        menu.Items.Add("Free speak", null, (s, e) => { Bring(); Run("openFree()"); });
-        menu.Items.Add("Drill menu", null, (s, e) => { Bring(); Run("openMenu()"); });
-        var mw = new ToolStripMenuItem("Mini widget") { Checked = mini };
-        mw.Click += (s, e) => { SetMini(!mini); mw.Checked = mini; Bring(); };
-        menu.Items.Add(mw);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Quit SPEAK", null, (s, e) => { quitting = true; Close(); });
-        tray.ContextMenuStrip = menu;
-        tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) Bring(); };
-    }
-    void Bring()
+
+    public void Bring()
     {
         if (!Visible) Show();
         if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
         Activate();
     }
-    void Run(string js)
+    public void Run(string js)
     {
-        try { if (web != null && web.CoreWebView2 != null) web.CoreWebView2.ExecuteScriptAsync(js); } catch { }
+        try { if (web.CoreWebView2 != null) web.CoreWebView2.ExecuteScriptAsync(js); else pending = js; } catch { }
+    }
+    string pending;
+    public void Post(string j)
+    {
+        try { if (web.CoreWebView2 != null) web.CoreWebView2.PostWebMessageAsJson(j); } catch { }
+    }
+
+    static Rectangle FullRect()
+    {
+        Rectangle r = Rectangle.Empty;
+        string[] f = (App.Cfg.ContainsKey("full") ? App.Cfg["full"] : "").Split(',');
+        int x, y, w, h;
+        if (f.Length == 4 && int.TryParse(f[0], out x) && int.TryParse(f[1], out y) && int.TryParse(f[2], out w) && int.TryParse(f[3], out h) && w > 200 && h > 200)
+            r = new Rectangle(x, y, w, h);
+        bool seen = false;
+        foreach (var sc in Screen.AllScreens) if (!r.IsEmpty && sc.WorkingArea.IntersectsWith(r)) seen = true;
+        if (r.IsEmpty || !seen)
+        {
+            var wa = Screen.PrimaryScreen.WorkingArea;
+            int w2 = Math.Min(1100, wa.Width - 40), h2 = Math.Min(860, wa.Height - 40);
+            r = new Rectangle(wa.Left + (wa.Width - w2) / 2, wa.Top + (wa.Height - h2) / 2, w2, h2);
+        }
+        return r;
+    }
+
+    /* the widget pops up by the tray, bottom right, or where he left it */
+    public void PlaceMini()
+    {
+        if (big) return;
+        var wa = Screen.PrimaryScreen.WorkingArea;
+        Size s = SizeFromClientSize(SMALL);
+        int x = wa.Right - s.Width - 12, y = wa.Bottom - s.Height - 12;
+        if (App.Cfg["miniPlace"] == "left")
+        {
+            string[] p = App.Cfg["at"].Split(',');
+            int ax, ay;
+            if (p.Length == 2 && int.TryParse(p[0], out ax) && int.TryParse(p[1], out ay))
+                foreach (var sc in Screen.AllScreens) if (sc.WorkingArea.Contains(new Rectangle(ax, ay, 80, 40))) { x = ax; y = ay; }
+        }
+        ClientSize = SMALL;
+        Location = new Point(x, y);
     }
 
     void Started(object sender, CoreWebView2InitializationCompletedEventArgs e)
     {
         if (!e.IsSuccess)
         {
-            MessageBox.Show("The web engine would not start.\n\n" +
-                (e.InitializationException == null ? "" : e.InitializationException.Message), TITLE);
-            Application.Exit();
+            MessageBox.Show("The web engine would not start.\n\n" + (e.InitializationException == null ? "" : e.InitializationException.Message), App.TITLE);
             return;
         }
-        Log("web engine started, opening " + pageUrl);
+        App.Log((mini ? "mini" : "full") + ": web engine started, opening " + pageUrl);
         var c = web.CoreWebView2;
         c.Settings.AreDefaultContextMenusEnabled = false;
         c.Settings.IsZoomControlEnabled = false;
         c.Settings.IsStatusBarEnabled = false;
         c.Settings.AreBrowserAcceleratorKeysEnabled = false;
-        /* the microphone, and the camera for the EYES drills, without asking
-           every time: this window only ever shows SPEAK */
+        /* the microphone and the camera, without asking every time: these windows only ever show SPEAK */
         c.PermissionRequested += (s2, e2) =>
         {
-            if (e2.PermissionKind == CoreWebView2PermissionKind.Microphone ||
-                e2.PermissionKind == CoreWebView2PermissionKind.Camera)
+            if (e2.PermissionKind == CoreWebView2PermissionKind.Microphone || e2.PermissionKind == CoreWebView2PermissionKind.Camera)
                 e2.State = CoreWebView2PermissionState.Allow;
         };
-        c.NewWindowRequested += (s2, e2) =>
-        {
-            e2.Handled = true;
-            try { System.Diagnostics.Process.Start(e2.Uri); } catch { }
-        };
+        c.NewWindowRequested += (s2, e2) => { e2.Handled = true; try { System.Diagnostics.Process.Start(e2.Uri); } catch { } };
         c.NavigationCompleted += (s2, e2) =>
-            Log("page loaded: " + (e2.IsSuccess ? "yes" : "NO, " + e2.WebErrorStatus));
+        {
+            App.Log((mini ? "mini" : "full") + ": page loaded: " + (e2.IsSuccess ? "yes" : "NO, " + e2.WebErrorStatus));
+            if (pending != null) { string js = pending; pending = null; Run(js); }
+        };
         Caption(c);
         c.WebMessageReceived += Message;
-        /* tells the page Claude can rewrite a take here (speak, possible content) */
-        c.AddScriptToExecuteOnDocumentCreatedAsync("window.MB_REFINE=1;");
+        /* tells the page Claude can rewrite a take here, and what this program's settings are */
+        c.AddScriptToExecuteOnDocumentCreatedAsync("window.MB_REFINE=1;window.MB_EXE=" + App.State(mini) + ";");
         c.Navigate(pageUrl);
     }
 
@@ -232,31 +340,31 @@ class Speak : Form
         string m;
         try { m = e.TryGetWebMessageAsString(); } catch { return; }
         if (m == null) return;
-        if (m.StartsWith("mbsize:") && !mini) return;
-        if (m == "mbsize:big") Grow(BIG);
-        else if (m == "mbsize:small") Grow(SMALL);
-        else if (m == "mbsize:wide") Grow(WIDE);
-        else if (m.StartsWith("mbrefine:")) Refine.Ask(m.Substring(9), Log, s => BeginInvoke((Action)(() => { try { web.CoreWebView2.PostWebMessageAsJson(s); } catch { } })));
+        if (m.StartsWith("mbsize:")) { if (!mini) return; if (m == "mbsize:big") Grow(BIG); else if (m == "mbsize:small") Grow(SMALL); else if (m == "mbsize:wide") Grow(WIDE); }
+        else if (m.StartsWith("mbrefine:")) Refine.Ask(m.Substring(9), App.Log, s => BeginInvoke((Action)(() => Post(s))));
+        else if (m.StartsWith("mbset:"))
+        {
+            string kv = m.Substring(6); int eq = kv.IndexOf('=');
+            if (eq > 0) App.Set(kv.Substring(0, eq), kv.Substring(eq + 1));
+        }
+        else if (m == "mbopen:full") { if (mini) Hide(); App.ShowFull(); }
+        else if (m == "mbopen:mini") App.ShowMini(true);
         else if (m.StartsWith("mbcap:"))
         {
             string[] p = m.Substring(6).Split(',');
             int r, g, b;
-            if (p.Length == 3 && int.TryParse(p[0], out r) && int.TryParse(p[1], out g) && int.TryParse(p[2], out b))
-                PaintBar(Color.FromArgb(r, g, b));
+            if (p.Length == 3 && int.TryParse(p[0], out r) && int.TryParse(p[1], out g) && int.TryParse(p[2], out b)) PaintBar(Color.FromArgb(r, g, b));
         }
     }
 
-    /* ── two sizes ──
-       Small sits where he put it. Big keeps the same top left corner where
-       it fits, and moves just enough to stay on the screen where it does
-       not. Back to small, it goes home, wherever big had to move to. */
-    void Grow(bool on) { Grow(on ? BIG : SMALL); }
-    /* a third size, WIDE, for refining a take into content (SPEAK 1.0.19) */
+    /* ── the widget's sizes ── Big keeps the same top left corner where it
+       fits, and moves just enough to stay on the screen where it does not.
+       Back to small, it goes back where it was. */
+    Point home;
     void Grow(Size to)
     {
         bool on = to != SMALL;
         if (on == big && (!on || to == bigAs)) return;
-        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
         if (on)
         {
             if (!big) home = Location;
@@ -267,6 +375,7 @@ class Speak : Form
             int y = Math.Max(wa.Top, Math.Min(Top, wa.Bottom - want.Height));
             big = true;
             Bounds = new Rectangle(x, y, want.Width, want.Height);
+            if (!Visible) Show();
             Activate();
         }
         else
@@ -274,132 +383,33 @@ class Speak : Form
             big = false;
             ClientSize = SMALL;
             Location = home;
-            SaveCfg();
         }
-    }
-
-    void Place()
-    {
-        var wa = Screen.PrimaryScreen.WorkingArea;
-        Size s = SizeFromClientSize(SMALL);
-        int x = home.X, y = home.Y;
-        bool seen = false;
-        foreach (var sc in Screen.AllScreens)
-            if (sc.WorkingArea.Contains(new Rectangle(x, y, 80, 40))) seen = true;
-        if (home.X == int.MinValue || !seen) { x = wa.Right - s.Width - 16; y = wa.Bottom - s.Height - 16; }
-        Location = new Point(x, y);
-        home = Location;
     }
 
     protected override void OnMove(EventArgs e)
     {
         base.OnMove(e);
-        if (mini && !big && WindowState == FormWindowState.Normal && IsHandleCreated) home = Location;
-        if (!mini && WindowState == FormWindowState.Normal && IsHandleCreated) full = Bounds;
+        if (!IsHandleCreated || WindowState != FormWindowState.Normal) return;
+        if (mini && !big && Visible) App.Cfg["at"] = Left + "," + Top;
+        if (!mini) App.Cfg["full"] = Left + "," + Top + "," + Width + "," + Height;
     }
     protected override void OnResizeEnd(EventArgs e)
     {
         base.OnResizeEnd(e);
-        if (!mini && WindowState == FormWindowState.Normal) { full = Bounds; SaveCfg(); }
-    }
-
-    void LoadCfg()
-    {
-        try
-        {
-            if (!File.Exists(cfgPath)) return;
-            foreach (string line in File.ReadAllLines(cfgPath))
-            {
-                int eq = line.IndexOf('=');
-                if (eq < 1) continue;
-                string k = line.Substring(0, eq).Trim(), v = line.Substring(eq + 1).Trim();
-                if (k == "boot") bootSet = true;
-                else if (k == "mini") mini = v == "1";
-                else if (k == "full")
-                {
-                    string[] f = v.Split(',');
-                    int fx, fy, fw, fh;
-                    if (f.Length == 4 && int.TryParse(f[0], out fx) && int.TryParse(f[1], out fy) && int.TryParse(f[2], out fw) && int.TryParse(f[3], out fh) && fw > 200 && fh > 200)
-                        full = new Rectangle(fx, fy, fw, fh);
-                }
-                else if (k == "at")
-                {
-                    string[] p = v.Split(',');
-                    int x, y;
-                    if (p.Length == 2 && int.TryParse(p[0], out x) && int.TryParse(p[1], out y)) home = new Point(x, y);
-                }
-            }
-        }
-        catch { }
-    }
-
-    void SaveCfg()
-    {
-        try
-        {
-            File.WriteAllText(cfgPath,
-                "# SPEAK.exe. Delete this file to go back to the defaults.\r\n" +
-                "at=" + home.X + "," + home.Y + "\r\n" +
-                "boot=" + (GetBoot() ? "1" : "0") + "\r\n" +
-                "mini=" + (mini ? "1" : "0") + "\r\n" +
-                (full.IsEmpty ? "" : "full=" + full.X + "," + full.Y + "," + full.Width + "," + full.Height + "\r\n"));
-        }
-        catch { }
+        if (!mini && WindowState == FormWindowState.Normal) { App.Cfg["full"] = Left + "," + Top + "," + Width + "," + Height; App.Save(); }
+        if (mini) App.Save();
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        /* the close button tucks SPEAK into the tray; Windows shutting down,
-           or Quit in the tray's menu, really closes it */
-        if (!quitting && e.CloseReason == CloseReason.UserClosing && tray != null)
+        /* the widget always tucks away; the full app tucks into the tray or
+           quits, as the PROGRAM tab says; Windows shutting down closes it */
+        if (!App.Quitting && e.CloseReason == CloseReason.UserClosing)
         {
-            e.Cancel = true;
-            SaveCfg();
-            Hide();
-            return;
+            if (mini || App.Cfg["close"] != "quit") { e.Cancel = true; App.Save(); Hide(); return; }
+            e.Cancel = true; App.Quit(); return;
         }
         base.OnFormClosing(e);
-        SaveCfg();
-        if (tray != null) { tray.Visible = false; tray.Dispose(); }
-    }
-
-    /* ── start with Windows, in the title bar's own menu ── */
-    const string RUN_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    const string RUN_NAME = "Motherbase SPEAK";
-    bool GetBoot()
-    {
-        try
-        {
-            using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RUN_KEY))
-                return k != null && k.GetValue(RUN_NAME) != null;
-        }
-        catch { return false; }
-    }
-    void SetBoot(bool on)
-    {
-        try
-        {
-            using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RUN_KEY))
-            {
-                if (on) k.SetValue(RUN_NAME, "\"" + Application.ExecutablePath + "\"");
-                else if (k.GetValue(RUN_NAME) != null) k.DeleteValue(RUN_NAME);
-            }
-            Log("start with Windows: " + (on ? "on" : "off"));
-        }
-        catch (Exception ex) { Log("could not change start with Windows: " + ex.Message); }
-    }
-
-    protected override void WndProc(ref Message m)
-    {
-        if (m.Msg == WM_SYSCOMMAND && ((int)m.WParam & 0xFFF0) == ID_BOOT)
-        {
-            bool on = !GetBoot();
-            SetBoot(on);
-            CheckMenuItem(GetSystemMenu(Handle, false), ID_BOOT, on ? MF_CHECKED : MF_UNCHECKED);
-            SaveCfg();
-            return;
-        }
-        base.WndProc(ref m);
     }
 
     /* ── the title bar wears the page ── (as MenuApp.cs) */
@@ -415,7 +425,6 @@ class Speak : Form
             "if(v&&v!==last){last=v;chrome.webview.postMessage('mbcap:'+v);}}catch(e){}}" +
             "addEventListener('load',tick);setInterval(tick,1000);setTimeout(tick,50);})();");
     }
-
     void PaintBar(Color bg)
     {
         bool dark = (bg.R * 299 + bg.G * 587 + bg.B * 114) / 1000 < 128;
@@ -431,13 +440,9 @@ class Speak : Form
         catch { }
     }
     static int Ref(Color c) { return c.R | (c.G << 8) | (c.B << 16); }
-
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
         PaintBar(Color.FromArgb(0x08, 0x0B, 0x10));
-        IntPtr sm = GetSystemMenu(Handle, false);
-        AppendMenuW(sm, MF_SEPARATOR, 0, null);
-        AppendMenuW(sm, MF_STRING | (GetBoot() || !bootSet ? MF_CHECKED : MF_UNCHECKED), ID_BOOT, "Start with Windows");
     }
 }

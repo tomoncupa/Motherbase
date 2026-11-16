@@ -620,9 +620,15 @@ Tom: *"Is the speak exe different from speak in main menu? Because I want them t
 - **Two minutes at least**: SPEAK PRACTICE, the topics and FREE SPEAK keep STOP locked as KEEP GOING m:ss until TARGETS' shortest time, now 120 s (red light 180 s). Tom: "set a minimum speaking time of 2 minutes".
 - **Pace targets for a direct speaker** (Tom's authority style, measured against Faizan Asif's 277 wpm and his own 141 to 165): Talking head 160 to 190, Short-form 170 to 200, Live 160 to 190. A band he saved in TARGETS still wins.
 
-## SPEAK.exe tray and desktop icon, 2026-11-16
+## SPEAK.exe: the tray, the mini widget and the full app, 2026-11-16 (SPEAK 1.0.31)
 
-Tom: "give Speak a desktop icon and a tray icon". SPEAK.exe has a tray icon (`Tray` in `desktop/SpeakApp.cs`): a click brings it forward, its menu has Open SPEAK, Free speak, Drill menu and Quit SPEAK. The window's close button tucks it into the tray; Quit or Windows shutting down really closes it. A `SPEAK.lnk` on his desktop opens `desktop/SPEAK.exe` (made once by hand from a session, not by the program).
+Tom: *"I want speak to auto start, and I want it to be a tray icon. And if I click the tray icon, I can have the four buttons always available. Just give it a complete settings menu for the mini widget and for the full EXE app."*
+
+- **A tray icon first** (`desktop/SpeakApp.cs`, `App`). Start with Windows writes `SPEAK.exe --tray` to the Run key; with "Start in the tray" on, no window opens at boot. Opening SPEAK again (the desktop shortcut) signals the running copy, which opens the full app.
+- **Two windows, one store**: the **mini widget** (`?widget=1`, the four stacked buttons, growing for a take and shrinking back) and the **full app**. A left click on the tray icon opens the widget by the tray (click again to tuck it away); the right-click menu has Mini widget, Open SPEAK, Free speak, Drill menu, Settings and Quit SPEAK.
+- **PROGRAM** tab, first in SPEAK's Settings inside SPEAK.exe (`drawProgram`), in both windows: Start with Windows, Start in the tray, what a tray click opens (Mini widget or Full app), where the widget opens (by the tray or where it was left), widget on top, widget tucks away when clicking elsewhere, full app on top, and the full app's close button (into the tray or quit). The page posts `mbset:key=value`; the program saves `speak-app.txt` and tells every window (`{mb:'exe', cfg}`, `window.MB_EXE`).
+- **The widget's top row** has today's takes, a button to the full app (`mbopen:full`) and Settings.
+- A `SPEAK.lnk` on his desktop opens `desktop/SPEAK.exe`.
 
 ## DRILL MENU, added 2026-11-16 (SPEAK 1.0.26)
 

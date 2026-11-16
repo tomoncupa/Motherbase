@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.30, 2026-11-16">
+<meta name="mb-version" content="1.0.31, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -210,7 +210,9 @@ textarea.scx{width:100%;min-height:calc(var(--s-10) * 2);margin-top:var(--s-3);l
 #wid{display:none}
 body.widget>header,body.widget>#nav,body.widget>main{display:none}
 body.widget #wid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:var(--s-3);padding:var(--s-3) var(--s-4)}
-#wid .wtop{display:flex;align-items:baseline;gap:var(--s-3);min-width:0}
+#wid .wtop{display:flex;align-items:center;gap:var(--s-2);min-width:0}
+#wid .wic{background:none;border:0;color:var(--text-muted);padding:0;width:var(--s-5);height:var(--s-5);display:grid;place-items:center;cursor:pointer;flex:none}
+#wid .wic:hover{color:var(--text-1)}
 #wid .logo{font-size:var(--f-3)}
 #wid .muted{flex:1;min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:none;border:0;color:var(--text-muted);font:inherit;cursor:pointer;text-decoration:underline;min-height:var(--tap)}
 #wid .wbtns{display:flex;flex-direction:column;gap:var(--s-2)}
@@ -239,7 +241,7 @@ body.widget #wid{flex:1;display:flex;flex-direction:column;justify-content:cente
 <main class="mb-scroll"><div class="wrap" id="main"></div></main>
 
 <div id="wid">
-  <div class="wtop"><div class="logo">SPE<b>AK</b></div><button class="muted mb-tap" id="widSub" aria-label="Today's takes"></button></div>
+  <div class="wtop"><div class="logo">SPE<b>AK</b></div><button class="muted mb-tap" id="widSub" aria-label="Today's takes"></button><button class="wic mb-tap" id="widFull" aria-label="Open the full app"><span data-icon="link"></span></button><button class="wic mb-tap" id="widSet" aria-label="Settings"><span data-icon="settings"></span></button></div>
   <div class="wbtns">
     <button class="mb-btn go mb-press mb-tap" id="widGo" data-d="topics" aria-label="Speak practice">SPEAK</button>
     <button class="mb-btn mb-press mb-tap" data-d="fitness" aria-label="Fitness topic">FITNESS</button>
@@ -3583,11 +3585,47 @@ function showTake(t, html) {
 
 /* ══════════════ settings ══════════════ */
 function openSettings() {
-  UI.settings(APP.id, [
+  const tabs = [
     { id: 'targets', name: 'TARGETS', draw: drawTargets },
     { id: 'crutch', name: 'CRUTCHES', draw: drawCrutch },
     { id: 'gear', name: 'MIC & CAMERA', draw: drawGear },
-  ], { order: ['targets', 'crutch', 'gear', 'data'] });
+  ];
+  if (window.MB_EXE) tabs.unshift({ id: 'program', name: 'PROGRAM', draw: drawProgram });
+  UI.settings(APP.id, tabs, { order: (window.MB_EXE ? ['program'] : []).concat(['targets', 'crutch', 'gear', 'data']) });
+}
+/* PROGRAM: SPEAK.exe's own settings, in the mini widget and the full app
+   alike (Tom, 2026-11-16: "give it a complete settings menu for the mini
+   widget and for the full EXE app"). Each change goes to the program as
+   mbset:key=value; it tells every window the new values (MB_EXE). */
+try {
+  window.chrome.webview.addEventListener('message', e => {
+    const d = e.data;
+    if (d && d.mb === 'exe' && d.cfg) window.MB_EXE = Object.assign({}, window.MB_EXE || {}, d.cfg);
+  });
+} catch (e) {}
+function exeSet(k, v) {
+  window.MB_EXE = Object.assign({}, window.MB_EXE || {}, { [k]: String(v) });
+  try { window.chrome.webview.postMessage('mbset:' + k + '=' + v); } catch (e) {}
+}
+function drawProgram(p) {
+  const x = window.MB_EXE || {}, on = k => String(x[k]) === '1';
+  const tog = (k, name, note) => p.appendChild(UI.row(name, note, UI.toggle(on(k), v => exeSet(k, v ? 1 : 0))));
+  p.appendChild(el('h3', null, 'STARTING'));
+  tog('boot', 'Start with Windows', 'SPEAK starts when you sign in to the PC');
+  tog('hidden', 'Start in the tray', 'starting with Windows, no window opens; SPEAK waits in the tray');
+  p.appendChild(el('h3', null, 'THE TRAY ICON'));
+  p.appendChild(UI.row('A click on the tray icon opens', 'the other is in the icon\u2019s right-click menu',
+    UI.segmented([{ id: 'mini', name: 'Mini widget' }, { id: 'full', name: 'Full app' }], x.click || 'mini', v => exeSet('click', v))));
+  p.appendChild(el('h3', null, 'MINI WIDGET'));
+  p.appendChild(UI.row('Where it opens', 'by the tray, or where you last left it',
+    UI.segmented([{ id: 'tray', name: 'By the tray' }, { id: 'left', name: 'Where I left it' }], x.miniPlace || 'tray', v => exeSet('miniPlace', v))));
+  tog('miniTop', 'On top of other windows', 'stays above whatever you are working in');
+  tog('miniAway', 'Tuck away when I click elsewhere', 'it hides itself when you click another window, except during a take');
+  p.appendChild(el('h3', null, 'FULL APP'));
+  tog('fullTop', 'On top of other windows', 'stays above whatever you are working in');
+  p.appendChild(UI.row('The close button', 'Quit is always in the tray icon\u2019s menu',
+    UI.segmented([{ id: 'tray', name: 'Into the tray' }, { id: 'quit', name: 'Quits SPEAK' }], x.close || 'tray', v => exeSet('close', v))));
+  p.appendChild(el('p', 'muted', 'These belong to SPEAK on this PC. Camera, transcript and targets are in the other tabs.'));
 }
 $('#bSet').onclick = openSettings;
 function numField(v, on) {
@@ -3682,6 +3720,10 @@ function widget() {
   document.body.classList.add('widget');
   widSub();
   $('#widSub').onclick = () => { widSize('big'); openTodayTakes(); };
+  $('#widSet').onclick = () => { widSize('big'); openSettings(); };
+  $('#widFull').onclick = () => { try { window.chrome.webview.postMessage('mbopen:full'); } catch (e) {} };
+  if (!window.MB_EXE) $('#widFull').style.display = 'none';
+  paintIcons($('#wid'));
   /* four buttons stacked, Tom 2026-11-16: SPEAK PRACTICE, FITNESS TOPIC,
      OTHER TOPIC and FREE SPEAK, in a 300 x 260 window; FREE SPEAK opens its
      jumping off points first */
