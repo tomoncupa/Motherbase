@@ -909,8 +909,9 @@ function listen() {
   q.once('value').then(function () {
     if (q !== query || !started) return;
     loaded = true; say();
+    mark('first');
     /* Anything written while this device was away goes up now. */
-    push('open').then(function () { if (due()) check(); });
+    push('open').then(function () { mark('sent', 1); if (due()) check(); });
   }, function () {});
 }
 function unlisten() {
@@ -928,12 +929,15 @@ function start() {
   /* The signed-in account is the source of truth for the uid, not the one we
      wrote down: a token can expire and a stored uid would then address a
      path nothing can read. The smoke checks hand in a stand-in instead. */
+  took = {};
   var found = probe ? Promise.resolve().then(probe) : loadSDK().then(function () {
+    mark('sdk');
     auth = g.firebase.auth(app());
     return new Promise(function (res) {
       var off = auth.onAuthStateChanged(function (u) { off(); res(u); });
     });
   }).then(function (u) {
+    mark('auth');
     return u ? { uid: u.uid, email: u.email || '', db: g.firebase.database(app()) } : null;
   });
   /* 0.2.3: TRAIN's sets are kept out of the open (records.js, KEPT OUT). A
@@ -942,7 +946,7 @@ function start() {
      smoke checks' stand-in store has no `need` and goes straight on. */
   found = found.then(function (me) {
     var R = store();
-    return me && !probe && R && R.need ? R.need().then(function () { return me; }) : me;
+    return me && !probe && R && R.need ? R.need().then(function () { mark('need'); return me; }) : me;
   });
   /* 0.2.9 (2026-11-16): and until IndexedDB has really answered. Rec.ready
      and Rec.need go ahead on localStorage alone after 2.5 s, and the desktop
@@ -953,7 +957,7 @@ function start() {
     var R = store();
     if (!me || probe || !R || !R.whole) return me;
     return Promise.race([R.whole(), new Promise(function (res) { setTimeout(res, 60000); })])
-      .then(function () { return me; }, function () { return me; });
+      .then(function () { mark('whole'); return me; }, function () { return me; });
   });
   return found.then(function (me) {
     if (!me) { signedOut(); return false; }
@@ -987,6 +991,24 @@ function start() {
     note('', 1);
     return true;
   }).catch(function (e) { note(e && e.message ? e.message : 'could not start', 0); return false; });
+}
+
+/* ── how long a start took, step by step (0.2.11, 2026-11-16) ──
+   Tom: "keep TRAIN to caring about the last month". Before changing what a
+   start loads, this says where its time goes: milliseconds since the page was
+   asked for when the library was in (sdk), Google answered (auth), TRAIN's
+   sets were in (need), IndexedDB had answered (whole), the cloud's first
+   answer was merged (first) and the first send was done (sent). The first
+   step of each start only; kept on `mb.cloud` as `took`. */
+var took = {};
+function mark(k, save) {
+  if (probe || took[k] != null) return;
+  try { took[k] = Math.round(g.performance.now()); } catch (e) { return; }
+  if (save) {
+    cfg.took = Object.keys(took).map(function (n) { return n + ' ' + took[n]; }).join(', ') +
+      ' ms, ' + new Date().toLocaleString();
+    csave();
+  }
 }
 
 function onErr(e) {
@@ -1407,7 +1429,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.2.10',
+  VERSION: '0.2.11',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
