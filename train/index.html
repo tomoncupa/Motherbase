@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.90, 2026-11-16">
+<meta name="mb-version" content="1.0.91, 2026-11-16">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -115,6 +115,7 @@
 <script src="../shared/io.js"></script>
 <script src="../shared/icons.js"></script>
 <script src="../shared/chart.js"></script>
+<script src="../shared/muscles.js"></script>
 <script src="../shared/range.js"></script>
 <script src="../shared/health.js"></script>
 
@@ -884,7 +885,9 @@ main.mb-scroll:has(> #main.mv-r),main.mb-scroll:has(> #main.mv-l){overflow-x:hid
 /* Eight weeks of sets per muscle. Read-only: a cell is too small to be a
    target, so the arrows above are how a week is opened. */
 .heat{display:grid;gap:var(--s-1);align-items:center;font-size:var(--f-1)}
-.heat .hn{color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+/* a muscle name wraps onto a second line, never cut off (2026-11-16:
+   "Forearm Extensors" is longer than any old group name) */
+.heat .hn{color:var(--text-2);overflow-wrap:anywhere;line-height:1.15;
   display:flex;align-items:center;gap:var(--s-2);min-width:0}
 .heat .hh{text-align:center;color:var(--text-muted)}
 .heat .hh.on{color:var(--accent);font-weight:var(--w-bold)}
@@ -1205,7 +1208,11 @@ TRAIN.DEFAULT_CATS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Forear
   'Core', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Lower Back', 'Cardio'];
 TRAIN.CAT_SLOT = { Chest: 0, Back: 1, Shoulders: 2, Quads: 3, Biceps: 4, Core: 5, Cardio: 6,
   Forearms: 7, Calves: 8, Hamstrings: 9, Glutes: 10, 'Lower Back': 11, Triceps: 6 };
-TRAIN.catSlot = function (nm) { return TRAIN.CAT_SLOT[nm] != null ? TRAIN.CAT_SLOT[nm] : 0; };
+TRAIN.catSlot = function (nm) {
+  if (TRAIN.CAT_SLOT[nm] != null) return TRAIN.CAT_SLOT[nm];
+  var s = window.Muscles ? Muscles.slotOf(nm) : null;
+  return s != null ? s : 0;
+};
 /* The two groups a fresh TRAIN made until 1.0.58. Only rows keyed `legs` and
    `arms` are these; a group a FitNotes import named Legs is keyed `fn<id>`
    and is the person's own. */
@@ -1321,6 +1328,19 @@ TRAIN.DEFAULT_EX = {
 /* Made once, and only when there are none: an import brings its own and must
    not find these sitting in the way. */
 TRAIN.seedCats = function () {
+  if (Object.keys(TRAIN.cats()).length) return 0;
+  var r = TRAIN.seedCatsOld();
+  /* Tom, 2026-11-16: a new log starts in the muscle groups, not the old
+     broad ones. The starters are seeded as before, then sorted with no
+     sheet: nothing has been logged, so nothing of his is being moved. */
+  if (r && !CLIENT) {
+    TRAIN._catC = null; TRAIN._exC = null; TRAIN._musC = null;
+    var p = TRAIN.sortProposals();
+    if (p.length) TRAIN.applySort(p);
+  }
+  return r;
+};
+TRAIN.seedCatsOld = function () {
   if (Object.keys(TRAIN.cats()).length) return 0;
   var made = 0;
   TRAIN.DEFAULT_CATS.forEach(function (nm, i) {
@@ -1468,22 +1488,34 @@ TRAIN.catByWord = function (nm, also) {
   };
   return hit([w]) || (also && TRAIN.CAT_ALSO[w] ? hit(TRAIN.CAT_ALSO[w]) : null);
 };
+/* Tom, 2026-11-16: split Back into its parts, no Core and no Legs groups,
+   add Prehab. Every movement is offered a move to the group the suite's
+   master list files it under (`TRAIN.musOf(id).group`): a muscle, or
+   Prehab. Offered only when the name tells (a lift no rule knows stays),
+   and never for a lift already in a muscle group that its own muscles
+   include, so one he moved by hand from Lats to Upper Back stays put. A
+   lift in a muscle group it does not train at all (a leg curl filed under
+   Biceps) is offered. A group he deleted is made again here: he asked for
+   these groups. Sorted in the master list's order. */
+TRAIN.SORT_MASTER = function () { return (window.Muscles ? Muscles.LIST : []).concat(['Prehab', 'Cardio']); };
+TRAIN.isMasterCat = function (nm) {
+  var w = TRAIN.catWord(nm);
+  if (/rehab/.test(w)) return 'Prehab';
+  var hit = null;
+  TRAIN.SORT_MASTER().forEach(function (m) { if (!hit && TRAIN.catWord(m) === w) hit = m; });
+  return hit;
+};
 TRAIN.sortProposals = function () {
-  var ex = TRAIN.exercises(), out = [], to = {}, fine = {};
-  TRAIN.SORT_RULES.forEach(function (r) {
-    var k = TRAIN.catByWord(r[0]);
-    to[r[0]] = k || (Rec.tombstone('excat', null, TRAIN.catId(r[0])) ? false : null);
-    if (k) fine[k] = 1;
-  });
+  if (!window.Muscles) return [];
+  var ex = TRAIN.exercises(), cats = TRAIN.cats(), out = [], M = TRAIN.SORT_MASTER();
   Object.keys(ex).forEach(function (id) {
-    var e = ex[id];
-    if (fine[e.cat]) return;
-    for (var i = 0; i < TRAIN.SORT_RULES.length; i++) {
-      var g = TRAIN.SORT_RULES[i][0];
-      if (!TRAIN.SORT_RULES[i][1].test(e.name || '')) continue;
-      if (to[g] !== false) out.push({ id: id, name: e.name, from: e.cat, group: g, to: to[g], gi: i });
-      break;
-    }
+    var e = ex[id], cur = cats[e.cat], mu = TRAIN.musOf(id);
+    if (mu.src === 'group' || !mu.group) return;
+    var curM = cur ? TRAIN.isMasterCat(cur.name) : null;
+    if (curM === mu.group) return;
+    if (curM && (mu.share[curM] || curM === 'Prehab')) return;
+    var k = mu.group === 'Prehab' ? TRAIN.catByWord('Prehab') || TRAIN.catByWord('P/Rehab') : TRAIN.catByWord(mu.group);
+    out.push({ id: id, name: e.name, from: e.cat, group: mu.group, to: k || null, gi: M.indexOf(mu.group) });
   });
   return out.sort(function (a, b) { return a.gi - b.gi || String(a.name).localeCompare(b.name); });
 };
@@ -1495,25 +1527,43 @@ TRAIN.sortSkip = function () {
    what it did so UNDO can put every one back. UNDO leaves a group it made:
    `fillCats` would have made that same group on the next open, and deleting
    it would leave a tombstone that keeps it away for good. */
+/* Moves the ones switched on, makes any group that is missing (Prehab is
+   made as P/Rehab, the name TRAIN gives it), and then deletes any group
+   left empty that is not a muscle, Prehab or Cardio: an emptied Back, Legs
+   or Shoulders. Hands back what it did so UNDO puts every lift back and
+   brings back every group it deleted. UNDO leaves a group it made. */
 TRAIN.applySort = function (moves) {
-  var cats = TRAIN.cats(), ord = 0, made = {}, done = [];
+  var cats = TRAIN.cats(), ord = 0, made = {}, done = [], gone = [];
   Object.keys(cats).forEach(function (k) { if ((cats[k].ord | 0) > ord) ord = cats[k].ord | 0; });
   moves.forEach(function (m) {
     var to = m.to;
     if (!to) {
-      to = TRAIN.catId(m.group);
+      var nm = m.group === 'Prehab' ? 'P/Rehab' : m.group;
+      to = TRAIN.catId(nm);
       if (!made[to] && !TRAIN.cats()[to]) {
-        Rec.set('excat', null, to, { name: m.group, slot: TRAIN.catSlot(m.group), ord: ++ord });
-        made[to] = 1;
+        Rec.set('excat', null, to, { name: nm, slot: TRAIN.catSlot(m.group), ord: ++ord });
+        made[to] = 1; TRAIN._catC = null;
       }
     }
     TRAIN.patchExercise(m.id, { cat: to });
     done.push({ id: m.id, from: m.from });
   });
-  return { moved: done, made: Object.keys(made) };
+  TRAIN._catC = null; TRAIN._exC = null; TRAIN._musC = null;
+  var ex = TRAIN.exercises(), used = {};
+  Object.keys(ex).forEach(function (id) { if (ex[id].cat) used[ex[id].cat] = 1; });
+  var now = TRAIN.cats();
+  if (done.length) Object.keys(now).forEach(function (k) {
+    if (used[k] || made[k] || TRAIN.isMasterCat(now[k].name)) return;
+    gone.push({ key: k, row: JSON.parse(JSON.stringify(now[k])) });
+    Rec.del('excat', null, k);
+  });
+  TRAIN._catC = null;
+  return { moved: done, made: Object.keys(made), gone: gone };
 };
 TRAIN.undoSort = function (did) {
+  (did.gone || []).forEach(function (g) { Rec.set('excat', null, g.key, g.row); });
   did.moved.forEach(function (m) { TRAIN.patchExercise(m.id, { cat: m.from }); });
+  TRAIN._catC = null; TRAIN._exC = null; TRAIN._musC = null;
 };
 
 TRAIN.seedId = function (name) {
@@ -3977,7 +4027,7 @@ function drawList(host, q, cats, exs) {
   if (!q && !TRAIN.picking) {
     /* Offered here once; after that it lives in More. Not on a client's
        profile, where the groups are theirs to keep. */
-    if (!CLIENT && !TRAIN.pickInto && Rec.setting(APP.id, 'sortSeen') !== 1) {
+    if (!CLIENT && !TRAIN.pickInto && Rec.setting(APP.id, 'sortSeen') !== 2) {
       var skip = TRAIN.sortSkip(), props = TRAIN.sortProposals().filter(function (p) { return !skip[p.id]; });
       if (props.length) host.appendChild(sortOffer(props));
     }
@@ -4050,11 +4100,12 @@ function sortOffer(props) {
   var said = groups.length > 1 ? groups.slice(0, -1).join(', ') + ' or ' + groups[groups.length - 1] : groups[0];
   var box = UI.el('div', 'sortoffer');
   var msg = UI.el('div', 'msg');
-  msg.textContent = props.length + (props.length === 1 ? ' exercise fits ' : ' exercises fit ') + said + '.';
+  msg.textContent = props.length + (props.length === 1 ? ' exercise can move into the muscle it trains' : ' exercises can move into the muscles they train') +
+    (groups.length <= 3 ? ': ' + said + '.' : ', ' + groups.length + ' groups.');
   var no = UI.el('button', 'mb-btn mb-press mb-tap');
   no.type = 'button'; no.textContent = 'NOT NOW';
   no.onclick = function () {
-    Rec.setting(APP.id, 'sortSeen', 1);
+    Rec.setting(APP.id, 'sortSeen', 2);
     draw();
     UI.toast('Kept in More, Sort Into Groups');
   };
@@ -4133,6 +4184,7 @@ TRAIN.exerciseDialog = function (exId, prefill) {
   if (!Object.keys(cats).length) { TRAIN.seedCats(); cats = TRAIN.cats(); }
   var kind = cur ? TRAIN.kindOf(exId) : 'wr';
   var nameEl = null, sel = null, inc = null, rest = null, also = {}, barSw = null, barOn = null, asOn = null;
+  var mus = {}, musTouched = false, musReset = false, catTouched = false;
   var wu = cur && (cur.wu === 'kg' || cur.wu === 'lb') ? cur.wu : '';
   if (cur && cur.also) Object.keys(cur.also).forEach(function (k) { also[k] = cur.also[k]; });
 
@@ -4159,7 +4211,7 @@ TRAIN.exerciseDialog = function (exId, prefill) {
       newCat.textContent = 'NEW CATEGORY';
       newCat.onclick = function (ev) {
         ev.preventDefault();
-        TRAIN.categoryDialog(null, function (key) { fillCats(key); paintAlso(); });
+        TRAIN.categoryDialog(null, function (key) { fillCats(key); catTouched = true; });
       };
       b.appendChild(newCat);
 
@@ -4201,30 +4253,62 @@ TRAIN.exerciseDialog = function (exId, prefill) {
       });
       b.appendChild(UI.row('Rest time', 'Seconds. Blank uses the default', rest));
 
-      /* Tom, 2026-09-05: "1 set of pull ups as 1/2 a set of biceps." A set
-         adds one to its own group and this fraction to each group here. */
-      var SHARES = [0.25, 0.5, 0.75];
-      var aw = UI.el('div', CHIPS);
-      var paintAlso = function () {
-        aw.innerHTML = '';
-        TRAIN.catsSorted().forEach(function (id) {
-          if (id === sel.value) return;
-          var v = also[id] || 0;
-          var c = UI.el('button', CHIP + ' mb-press' + (v ? ' on' : ''),
-            UI.esc(TRAIN.cats()[id].name) + (v ? ' <b>' + v + '</b>' : ''));
+      /* What it trains (Tom, 2026-11-16: when people put a new movement
+         "they're meant to put what muscle groups it hits and also what are
+         the side muscles"). Filled from the name by the suite's master list
+         until he changes something; then `mus` on the row is his and wins
+         everywhere, TRAIN, FORGE and COACH alike. A side muscle steps
+         0.5, 0.75, 1, 0.25, then off. */
+      var LIST = window.Muscles ? Muscles.LIST : [];
+      var fromName = function () {
+        var r = window.Muscles ? Muscles.forLift(String(nameEl.value || ''), null, null, sel.value && TRAIN.cats()[sel.value] ? TRAIN.cats()[sel.value].name : null) : { share: {} };
+        return JSON.parse(JSON.stringify(r.share || {}));
+      };
+      mus = cur && cur.mus ? JSON.parse(JSON.stringify(cur.mus)) : (cur ? JSON.parse(JSON.stringify(TRAIN.musOf(exId).share)) : fromName());
+      var mainSel = document.createElement('select');
+      mainSel.className = SEL;
+      var mwrap = UI.el('div', CHIPS), mnote = UI.el('div', 'empty');
+      var paintMus = function () {
+        var main = window.Muscles ? Muscles.mainOf(mus) : null;
+        mainSel.innerHTML = '';
+        var o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'Pick one'; mainSel.appendChild(o0);
+        LIST.forEach(function (m) { var o = document.createElement('option'); o.value = m; o.textContent = m; mainSel.appendChild(o); });
+        mainSel.value = main && LIST.indexOf(main) >= 0 ? main : '';
+        mwrap.innerHTML = '';
+        LIST.forEach(function (m) {
+          if (m === main) return;
+          var v = mus[m] || 0;
+          var c = UI.el('button', CHIP + ' mb-press' + (v ? ' on' : ''), UI.esc(m) + (v ? ' <b>' + v + '</b>' : ''));
           c.onclick = function (e) {
             e.preventDefault();
-            var i = SHARES.indexOf(v);
-            var next = v === 0 ? SHARES[1] : (i === SHARES.length - 1 ? 0 : SHARES[i + 1]);
-            if (next) also[id] = next; else delete also[id];
-            paintAlso(); Mobile.haptic('select');
+            var STEP = [0, 0.5, 0.75, 1, 0.25], i = STEP.indexOf(v), n = STEP[(i < 0 ? 0 : i + 1) % STEP.length];
+            if (n) mus[m] = n; else delete mus[m];
+            musTouched = true; paintMus(); Mobile.haptic('select');
           };
-          aw.appendChild(c);
+          mwrap.appendChild(c);
         });
+        mnote.textContent = musTouched || (cur && cur.mus) ? 'Set by you. This wins over the name everywhere.' : 'Read from the name. Change anything to set it yourself.';
       };
-      paintAlso();
-      sel.addEventListener('change', paintAlso);
-      b.appendChild(UI.row('Also works', 'Tap for a half, again for three quarters, a quarter, then off', aw));
+      mainSel.onchange = function () {
+        var old = window.Muscles ? Muscles.mainOf(mus) : null;
+        if (old && old !== mainSel.value) delete mus[old];
+        if (mainSel.value) mus[mainSel.value] = 1;
+        musTouched = true;
+        if (!catTouched && mainSel.value) { var k = TRAIN.catByWord(mainSel.value); if (k) sel.value = k; }
+        paintMus();
+      };
+      sel.addEventListener('change', function () { catTouched = true; });
+      nameEl.addEventListener('input', function () { if (!musTouched && !(cur && cur.mus)) { mus = fromName(); paintMus(); } });
+      paintMus();
+      b.appendChild(UI.row('Main muscle', 'Counts one set for every set', mainSel));
+      b.appendChild(UI.row('Side muscles', 'Tap for a half, again for three quarters, a full set, a quarter, then off', mwrap));
+      b.appendChild(mnote);
+      if (cur && cur.mus) {
+        var back = UI.el('button', 'mb-btn mb-press mb-tap');
+        back.textContent = 'GO BACK TO THE NAME';
+        back.onclick = function (ev) { ev.preventDefault(); musReset = true; musTouched = false; cur = Object.assign({}, cur, { mus: null }); mus = fromName(); paintMus(); };
+        b.appendChild(back);
+      }
 
       if (cur) {
         var del = UI.el('button', 'mb-btn bad mb-press mb-tap');
@@ -4259,6 +4343,9 @@ TRAIN.exerciseDialog = function (exId, prefill) {
         };
         if (barOn !== null) changes.bar = barOn;
         if (asOn !== null) changes.assist = asOn;
+        if (musTouched && Object.keys(mus).length) changes.mus = mus;
+        else if (musReset) changes.mus = null;
+        TRAIN._musC = null;
         if (exId) {
           TRAIN.patchExercise(exId, changes);
           /* a rename or the Assisted switch can turn which way records go */
@@ -5985,6 +6072,34 @@ TRAIN.recordsFor = function (exId, range) {
    Sets can be fractional now. That is the honest shape: pretending a pull-up
    gives biceps a whole set or none of one is the thing that made the number
    not mean anything. */
+/* What a lift trains, read by the suite's one rule (`shared/muscles.js`,
+   Muscles.forLift): its own correction (`exercise.mus`), FORGE's tag for
+   the name, the master list, else the group it is filed in. FORGE and COACH
+   ask the same function with the same rows, so none of the three can
+   disagree (Tom, 2026-11-16). Cached per exercise until the rows change. */
+TRAIN.musOf = function (exId) {
+  var exs = TRAIN.exercises(), ex = exs[exId];
+  var c = TRAIN._musC;
+  if (!c || c.ex !== exs) c = TRAIN._musC = { ex: exs, m: {} };
+  if (c.m[exId]) return c.m[exId];
+  var cats = TRAIN.cats(), gname = ex && ex.cat && cats[ex.cat] ? cats[ex.cat].name : null, also = null;
+  if (ex && ex.also) { also = {}; Object.keys(ex.also).forEach(function (k) { if (cats[k]) also[cats[k].name] = ex.also[k]; }); }
+  var tag = null;
+  if (ex && ex.name && !CLIENT) { var t = Rec.get('ftag', null, String(ex.name).trim().toLowerCase()); tag = t && t.mus; }
+  var r = window.Muscles ? Muscles.forLift(ex ? ex.name : '', ex && ex.mus, tag, gname, also)
+    : { share: gname ? (function () { var o = {}; o[gname] = 1; return o; })() : {}, main: gname, group: gname, src: 'group' };
+  return (c.m[exId] = r);
+};
+TRAIN.musSlot = function (m) {
+  var s = window.Muscles ? Muscles.slotOf(m) : null;
+  if (s != null) return s;
+  var k = TRAIN.catByWord(m); return k && TRAIN.cats()[k] ? TRAIN.cats()[k].slot : 0;
+};
+/* The two muscle views (Tom, 2026-11-16). DIRECT counts each real set once,
+   toward the lift's main muscle: whole numbers. VOLUME counts every muscle a
+   set trains by its share, so a chin up is 1 set of biceps and 0.8 of lats:
+   that is where the decimals live. */
+TRAIN.musView = function () { return Rec.setting(APP.id, 'musView') === 'volume' ? 'volume' : 'direct'; };
 TRAIN.breakdown = function (from, to, by, off) {
   var exs = TRAIN.exercises(), cats = TRAIN.cats(), out = {}, days = {};
   Object.keys(TRAIN.idx.byDate).forEach(function (d) {
@@ -5998,7 +6113,11 @@ TRAIN.breakdown = function (from, to, by, off) {
         o.sets += share; o.reps += (s.r || 0) * share; o.vol += vol * share;
         o.days[d] = 1;
       };
-      if (by === 'category') {
+      if (by === 'direct' || by === 'volume') {
+        var mu = TRAIN.musOf(s.ex);
+        if (by === 'direct') put(mu.main || '?', 1);
+        else Object.keys(mu.share).forEach(function (m) { put(m, mu.share[m]); });
+      } else if (by === 'category') {
         put(ex && ex.cat ? ex.cat : '?', 1);
         var also = (ex && ex.also) || null;
         if (also) Object.keys(also).forEach(function (c) {
@@ -6012,14 +6131,15 @@ TRAIN.breakdown = function (from, to, by, off) {
   });
   var rows = Object.keys(out).map(function (k) {
     var o = out[k];
-    var name = by === 'category'
+    var musc = by === 'direct' || by === 'volume';
+    var name = musc ? (k === '?' ? 'No muscle yet' : k) : by === 'category'
       ? (cats[k] ? cats[k].name : 'Uncategorised')
       : (exs[k] ? exs[k].name : k);
     /* A whole number stays whole; a half set shows as a half. */
     return { key: k, name: name, sets: Math.round(o.sets * 10) / 10,
              reps: Math.round(o.reps), vol: o.vol,
              workouts: Object.keys(o.days).length,
-             slot: by === 'category' && cats[k] ? cats[k].slot : null };
+             slot: musc ? TRAIN.musSlot(k) : by === 'category' && cats[k] ? cats[k].slot : null };
   });
   rows.sort(function (a, b) { return b.vol - a.vol || b.sets - a.sets; });
   return { rows: rows, workouts: Object.keys(days).length };
@@ -7906,7 +8026,7 @@ TRAIN.categoriesDialog = function () {
    a row with a switch, grouped under where it would go, and the switches
    start on except for the ones he turned off last time. */
 TRAIN.sortDialog = function () {
-  Rec.setting(APP.id, 'sortSeen', 1);
+  Rec.setting(APP.id, 'sortSeen', 2);
   var props = TRAIN.sortProposals(), skip = TRAIN.sortSkip(), cats = TRAIN.cats();
   if (!props.length) { UI.toast('Nothing to sort'); draw(); return; }
   var on = {};
@@ -7916,7 +8036,7 @@ TRAIN.sortDialog = function () {
     body: function (b) {
       var note = UI.el('div', 'empty');
       note.style.marginBottom = 'var(--s-3)';
-      note.textContent = 'Each one moves to the group it is under. Past sets move with it.';
+      note.textContent = 'Each one moves to the muscle it trains most, or Prehab. Past sets move with it. Groups left empty, like Legs or Back, are removed.';
       b.appendChild(note);
       var last = null;
       props.forEach(function (p) {
@@ -7924,7 +8044,7 @@ TRAIN.sortDialog = function () {
           last = p.group;
           var n = props.filter(function (x) { return x.group === p.group; }).length;
           var h = UI.el('div', 'mb-group');
-          h.textContent = (p.to ? cats[p.to].name : p.group + ', new group').toUpperCase() + ' · ' + n;
+          h.textContent = (p.to && cats[p.to] ? cats[p.to].name : p.group + ', new group').toUpperCase() + ' · ' + n;
           b.appendChild(h);
         }
         var from = cats[p.from];
@@ -7969,6 +8089,8 @@ TRAIN.sortDialog = function () {
    kilo on another. */
 TRAIN.TIDY_PLUS = ['Front Delts', 'Side Delts', 'Rear Delts', 'Quads', 'Hamstrings', 'Glutes', 'Calves',
   'P/Rehab', 'Cardio', 'Traps', 'Adductors', 'Lower Back', 'Neck', 'Mobility', 'Plyo'];
+/* every muscle on the master list may be offered too (2026-11-16) */
+if (window.Muscles) Muscles.LIST.forEach(function (m) { if (TRAIN.TIDY_PLUS.indexOf(m) < 0) TRAIN.TIDY_PLUS.push(m); });
 /* other names a group goes by, as `catWord` reads them */
 TRAIN.TIDY_ALSO = { 'P/Rehab': ['prehab', 'rehab'], Core: ['core', 'ab', 'abdominal'], Calves: ['calf'],
   Hamstrings: ['hamstring', 'ham'], Quads: ['quadricep'], Traps: ['trapezius'], Plyo: ['plyometric'],
@@ -8008,6 +8130,14 @@ TRAIN.tidyCatKey = function (nm) {
    this log does not have yet. Null when it reads as nothing, or as a group
    the log lacks and is not offered (Chest, Core). */
 TRAIN.tidySuggest = function (name) {
+  /* The suite's master list first (2026-11-16), so Tidy suggests the same
+     group the sort sheet moves to; its own rules only for what the list
+     does not know. */
+  var mm = window.Muscles ? Muscles.of(name) : null;
+  if (mm && mm.group) {
+    var gk = mm.group === 'Prehab' ? (TRAIN.catByWord('Prehab') || TRAIN.catByWord('P/Rehab')) : TRAIN.catByWord(mm.group);
+    return { name: mm.group === 'Prehab' ? 'P/Rehab' : mm.group, key: gk || null };
+  }
   var s = fold(name), g = null;
   for (var i = 0; i < TRAIN.TIDY_RULES.length; i++) if (TRAIN.TIDY_RULES[i][1].test(s)) { g = TRAIN.TIDY_RULES[i][0]; break; }
   if (!g) g = TRAIN.noteCat(s);
@@ -11463,8 +11593,8 @@ function musclesHtml(rows, week) {
   if (!rows.length) return '';
   var top = rows[0].sets || 1;
   return '<div>' + (week
-      ? '<div class="mhead"><h3>SETS PER MUSCLE</h3><span>SETS</span><span>HIT</span></div>'
-      : '<h3>SETS PER MUSCLE</h3>') +
+      ? '<div class="mhead"><h3>' + musHead() + '</h3><span>SETS</span><span>HIT</span></div>'
+      : '<h3>' + musHead() + '</h3>') +
     '<div class="musc">' + rows.map(function (r) {
       var col = r.slot != null ? TRAIN.slotColor(r.slot) : 'var(--accent)';
       return '<div class="mrow2' + (week ? ' wk' : '') + '">' +
@@ -11473,8 +11603,9 @@ function musclesHtml(rows, week) {
         '<b>' + r.sets + '</b>' + (week ? '<em>' + r.workouts + '×</em>' : '') + '</div>';
     }).join('') + '</div></div>';
 }
+function musHead() { return TRAIN.musView() === 'volume' ? 'VOLUME PER MUSCLE' : 'SETS PER MUSCLE'; }
 function muscleRows(from, to, off) {
-  return TRAIN.breakdown(from, to, 'category', off).rows
+  return TRAIN.breakdown(from, to, TRAIN.musView(), off).rows
     .filter(function (r) { return r.sets > 0; })
     .sort(function (a, b) { return b.sets - a.sets || b.workouts - a.workouts; });
 }
@@ -11954,6 +12085,11 @@ function drawWeek(m) {
   nav.appendChild(back); nav.appendChild(t); nav.appendChild(fwd);
   m.appendChild(nav);
 
+  /* Which muscle view the week, its card and the eight weeks use (Tom,
+     2026-11-16): DIRECT, real sets toward each lift's main muscle, first;
+     VOLUME, every muscle a set trains by its share. */
+  m.appendChild(UI.segmented([{ id: 'direct', name: 'DIRECT SETS' }, { id: 'volume', name: 'WEEKLY VOLUME' }],
+    TRAIN.musView(), function (v) { Rec.setting(APP.id, 'musView', v); Mobile.feedback('select'); draw(); }));
   m.appendChild(TRAIN.weekCard(start));
   var sh = UI.el('button', 'mb-btn mb-press mb-tap');
   sh.style.width = '100%';
@@ -11966,16 +12102,18 @@ function drawWeek(m) {
 function weekHeat(start, cur) {
   var endW = Day.shift(start, 21) < cur ? Day.shift(start, 21) : cur, weeks = [];
   for (var i = 7; i >= 0; i--) weeks.push(Day.shift(endW, -7 * i));
-  var cats = TRAIN.cats();
+  var view = TRAIN.musView();
   var per = weeks.map(function (w) {
     var o = {};
-    TRAIN.breakdown(w, Day.shift(w, 6), 'category').rows.forEach(function (r) { o[r.key] = r.sets; });
+    TRAIN.breakdown(w, Day.shift(w, 6), view).rows.forEach(function (r) { o[r.key] = r.sets; });
     return o;
   });
-  var ids = TRAIN.catsSorted().filter(function (k) { return per.some(function (o) { return o[k] > 0; }); });
+  var order = (window.Muscles ? Muscles.LIST : []).slice();
+  per.forEach(function (o) { Object.keys(o).forEach(function (k) { if (order.indexOf(k) < 0) order.push(k); }); });
+  var ids = order.filter(function (k) { return per.some(function (o) { return o[k] > 0; }); });
   var card = UI.el('div', 'exblock pad');
   var lab = UI.el('div', 'fieldlabel');
-  lab.textContent = 'SETS PER MUSCLE · 8 WEEKS';
+  lab.textContent = (view === 'volume' ? 'WEEKLY VOLUME' : 'DIRECT SETS') + ' · 8 WEEKS';
   card.appendChild(lab);
   if (!ids.length) {
     var e = UI.el('div', 'empty'); e.textContent = 'No sessions in these weeks'; card.appendChild(e);
@@ -11991,15 +12129,15 @@ function weekHeat(start, cur) {
     grid.appendChild(hh);
   });
   ids.forEach(function (k) {
-    var c = cats[k], col = TRAIN.slotColor(c.slot);
+    var col = TRAIN.slotColor(TRAIN.musSlot(k));
     var nm = UI.el('span', 'hn');
-    nm.innerHTML = '<i class="dot" style="background:' + col + '"></i>' + UI.esc(c.name);
+    nm.innerHTML = '<i class="dot" style="background:' + col + '"></i>' + UI.esc(k === '?' ? 'No muscle yet' : k);
     grid.appendChild(nm);
     var mx = Math.max.apply(null, per.map(function (o) { return o[k] || 0; })) || 1;
     per.forEach(function (o, j) {
       var v = o[k] || 0;
       var cell = UI.el('span', 'hc' + (weeks[j] === start ? ' on' : ''));
-      cell.textContent = v ? String(Math.round(v)) : '';
+      cell.textContent = v ? String(view === 'volume' ? Math.round(v * 10) / 10 : Math.round(v)) : '';
       if (v) cell.style.background = 'color-mix(in srgb, ' + col + ' ' + Math.round(18 + 42 * v / mx) + '%, var(--surface-2))';
       grid.appendChild(cell);
     });

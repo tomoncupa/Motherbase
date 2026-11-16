@@ -275,8 +275,25 @@ block, and TRAIN is not in `Chapter.APPS`.
 ### The week
 
 Analysis opens on WEEKLY: sessions, sets, reps and volume, then sets per muscle
-(half a set for a muscle an exercise also works) and HIT, the number of sessions
-that trained it. Below it, eight weeks of sets per muscle. **No targets**, at Tom's
+and HIT, the number of sessions that trained it. **Two muscle views** (1.0.91,
+Tom 2026-11-16), a switch under the week's dates, kept in `train.musView`:
+DIRECT SETS (the default) counts each real set once toward the lift's main
+muscle, whole numbers; WEEKLY VOLUME counts every muscle a set trains by its
+share (a chin up: Biceps 1, Lats 0.8), with decimals. The card, the session
+card and the eight weeks follow it. **What a lift trains is `TRAIN.musOf`,
+which asks `shared/muscles.js` `Muscles.forLift`**: the lift's own `mus`, then
+FORGE's `ftag`, then the master list, then its group. FORGE asks the same, so
+they cannot disagree. Edit Exercise's Main muscle and Side muscles fill from
+the name until changed; a change writes `exercise.mus` ({Muscle: share}) and
+wins everywhere; GO BACK TO THE NAME clears it. `also` is read only for a
+lift no rule knows. Muscles are coloured by region (`Muscles.slotOf`).
+**Groups follow the master list** (1.0.91): Sort Into Groups moves each lift
+to the group the list files it under (a muscle, or Prehab as P/Rehab), never
+one already in a muscle group its own shares include, makes groups he had
+deleted, and deletes groups left empty that are not a muscle, Prehab or
+Cardio (Back, Chest, Core, Legs, Shoulders, Forearms); UNDO brings them back.
+Offered once more (`sortSeen` 2). A new log is seeded and sorted at once.
+Tidy suggests the list's group first. Below it, eight weeks of sets per muscle. **No targets**, at Tom's
 request: "I'd rather be told how many times I hit a muscle, I'll know if I need to
 hit more."
 
