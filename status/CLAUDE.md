@@ -19,6 +19,15 @@ stays small enough for per-module sessions.
 - Report past 1024px is CSS columns; Day keeps one column. `draw()` holds a draw that arrives mid-draw (`drawOnce`).
 - Install files: `status/manifest.json` and its icons.
 
+## New chapter (Tom, 2026-11-16; 1.0.98)
+
+The rule is `shared/chapter.js`; `Chapter.from('status')` is the day STATUS counts from.
+- **One cut.** `countFrom()` is the LATER of FRESH START (`fresh.from`) and the chapter. Nothing reads `fresh.from` to count with; only the fresh start settings and the offer's own bookkeeping do. `countWhy()` says which set it, `countSay(d)` is the one quiet line ("Counting from Mon, 16 Nov in Comeback. Every day before it is still saved.", or "in this chapter", or ", your fresh start").
+- **Cut:** the rank (`adherence`: its letter, %, days logged, week grid columns, training want), the letter run, the Last 28 days counts (`hit/N` over days from the cut, "since 16 Nov" on the card, earlier cells drawn faded with `.pre`), and open to-dos older than the cut fold into one line ("from before this chapter").
+- **Kept:** every reading, meal, spend and line, every day view and graph, TDEE and the weight chart (physiology, not adherence), the weight goal's pace (it looks forward from now), Money's totals, A GOOD DAY (weeks 2 to 13, savouring), `daysLoggedAll()` and the sheet export summary.
+- **The offer:** never asked when the cut is after the last day touched, or a chapter started after it. START FRESH TODAY hides when the cut is already today; with a chapter later than the fresh start, Fresh start's note says the chapter's line instead, so COUNT EVERY DAY AGAIN does not look broken.
+- `shared/grade.js` needed nothing: it grades one day.
+
 ## Rule, Tom, 2026-10-02
 
 **On a wide window, lay things out side by side; never fold text.** Said on a 5120x1440 screen where the home screen gives STATUS a 2560-wide frame: "minimize the need for scrolling", yes to "apps use the width", no to hiding anything behind "show more". The phone layout does not change for any of it.

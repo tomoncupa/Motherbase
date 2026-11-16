@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.97, 2026-11-16">
+<meta name="mb-version" content="1.0.98, 2026-11-16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -23,6 +23,7 @@
 <script src="../shared/todoist.js"></script>
 <script src="../shared/dose.js"></script>
 <script src="../shared/grade.js"></script>
+<script src="../shared/chapter.js"></script>
 <script src="../shared/chart.js"></script>
 <script src="../shared/mobile.js"></script>
 <script src="../shared/sound.js"></script>
@@ -738,6 +739,9 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
 .grid28 i{aspect-ratio:1;border-radius:2px;background:var(--surface-3);display:block}
 .grid28 i.on{background:var(--cell,var(--accent))}
 .grid28 i.part{background:var(--cell,var(--accent));opacity:.35}
+/* before a fresh start or a chapter: kept, drawn faded, not counted */
+.grid28 i.pre{opacity:.3}
+.grid28 i.part.pre{opacity:.12}
 
 .conf{height:4px;border-radius:2px;background:var(--surface-3);overflow:hidden;margin-top:var(--s-2)}
 .conf i{display:block;height:100%;background:var(--accent);border-radius:2px}
@@ -4737,9 +4741,9 @@ function drawJournal(m) {
   }
 
   const wrap = el('div', 'list');
-  /* Open to-dos from before a fresh start fold into one line, so coming back
-     does not open on a wall of them. They are the same rows, untouched. */
-  const from = freshFrom();
+  /* Open to-dos from before a fresh start or a chapter fold into one line, so
+     coming back does not open on a wall of them. The same rows, untouched. */
+  const from = countFrom();
   const old = x => !!from && d >= from && x.kind === 'todo' && !x.done && !x.cancelled &&
     !!x.carried && (x.due || x.date) < from;
   const foldN = list.filter(old).length;
@@ -4811,7 +4815,7 @@ function drawJournal(m) {
   c.appendChild(wrap);
   if (foldN) {
     const tg = el('button', 'jfold mb-press mb-tap',
-      (FOLD_OPEN ? 'Hide' : 'Show') + ' ' + foldN + ' to-do' + (foldN === 1 ? '' : 's') + ' from before your fresh start');
+      (FOLD_OPEN ? 'Hide' : 'Show') + ' ' + foldN + ' to-do' + (foldN === 1 ? '' : 's') + ' from before ' + ((countWhy() || {}).kind === 'chapter' ? 'this chapter' : 'your fresh start'));
     tg.onclick = () => { FOLD_OPEN = !FOLD_OPEN; Mobile.feedback('select'); draw(); };
     c.appendChild(tg);
     if (FOLD_OPEN) c.appendChild(fold);
@@ -5997,6 +6001,41 @@ function trainedOn(date) { return Grade.trainedOn(date); }
    One date, not a list, so a person who lapses often never collects chapters. */
 const freshFrom = () => S.get('fresh.from', '') || null;
 
+/* ══════════════ WHERE COUNTING STARTS ══════════════
+   Tom, 2026-11-16, NEW CHAPTER: every app counts from a day of its own,
+   `Chapter.from('status')` (shared/chapter.js). STATUS already had FRESH
+   START, so there is one cut, not two: the LATER of the fresh start and the
+   chapter. Everything that judges a stretch reads this, never `fresh.from`
+   directly: the rank, its week grid and training want, the letter run, the
+   Last 28 days counts, the folded to-dos. Every reading, meal, spend and line
+   stays saved and drawn; only the counting moves. */
+function chapterFrom() {
+  const C = window.Chapter;
+  try { return C && C.from ? C.from('status') : null; } catch (e) { return null; }
+}
+function countFrom() {
+  const f = freshFrom(), c = chapterFrom();
+  return f && c ? (f > c ? f : c) : (f || c);
+}
+/* Which of the two set it, for the one quiet line that says so. A tie goes
+   to the chapter, which has a name. */
+function countWhy() {
+  const f = freshFrom(), c = chapterFrom();
+  if (c && (!f || c >= f)) {
+    const ch = window.Chapter.current();
+    return { kind: 'chapter', name: ch && ch.name ? ch.name : '' };
+  }
+  return f ? { kind: 'fresh' } : null;
+}
+/* "Counting from Mon, 16 Nov in Cut. Every day before it is still saved." */
+function countSay(from) {
+  const w = countWhy() || {};
+  const where = w.kind === 'chapter'
+    ? (w.name ? ' in <b>' + esc(w.name) + '</b>' : ' in this chapter')
+    : ', your fresh start';
+  return 'Counting from <b>' + esc(Day.label(from)) + '</b>' + where + '. Every day before it is still saved.';
+}
+
 /* Machine-written todos (WEALTH's bills, ARC's reviews, the morning brief)
    are not the person showing up. */
 const NOT_YOU = { wealth: 1, arc: 1, brief: 1 };
@@ -6039,8 +6078,11 @@ function freshOffer(tries) {
   if (touched(t)) return;
   const last = lastTouched();
   if (!last || Day.diff(t, last) < 3) return;
-  const from = freshFrom();
+  const from = countFrom();
   if (from && from > last) return;
+  /* a chapter begun since the last day touched is already a restart */
+  const ch = window.Chapter && Chapter.current ? Chapter.current() : null;
+  if (ch && ch.start > last) return;
   if (S.get('fresh.asked', '') === last) return;
   const n = daysLoggedAll();
   openSheet('Welcome back', body => {
@@ -6122,8 +6164,8 @@ function dayScore(date) {
    Today is never in here. It moves all day and a rank that moves all day is
    one you stop reading; it is shown beside this instead. */
 function adherence(days) {
-  const rows = [], from = freshFrom();
-  /* A fresh start cuts the window: days before it are kept and still drawn
+  const rows = [], from = countFrom();
+  /* A fresh start or a chapter cuts the window: days before it are kept and still drawn
      on Trends, they just stop counting towards the letter. */
   for (let i = days; i >= 1; i--) {
     const d = Day.shift(Day.today(), -i);
@@ -6312,7 +6354,7 @@ function daySheet(date) {
 function letterRun(days) {
   const wrap = el('div', 'lrun');
   const today = Day.today();
-  const from = freshFrom();
+  const from = countFrom();
   for (let i = days - 1; i >= 0; i--) {
     const d = Day.shift(today, -i);
     if (from && d < from) continue;
@@ -6494,7 +6536,7 @@ function rankCard() {
      three Fs average to the same place as seven Cs, and they are not the same
      week. Tap any day for its working. */
   if (!a.span) {
-    /* a fresh start made today: nothing behind it yet */
+    /* a fresh start or a chapter made today: nothing behind it yet */
   } else if (days === 7) {
     c.appendChild(el('label', 'fl', 'Each pillar, each day'));
     c.appendChild(weekGrid(a));
@@ -6503,8 +6545,9 @@ function rankCard() {
     c.appendChild(letterRun(days));
   }
 
-  /* training, said plainly, because it is the only thing that moves a letter */
-  c.appendChild(el('div', 'note',
+  /* training, said plainly, because it is the only thing that moves a letter;
+     not on a cut made today, where there is no stretch to train in yet */
+  if (a.span) c.appendChild(el('div', 'note',
     a.hitTraining
       ? '<b>' + a.sessions + ' sessions</b> against ' + a.want + '. Raised a letter.'
       : '<b>' + a.sessions + ' sessions</b> against ' + a.want + '. A letter is waiting.'));
@@ -6514,8 +6557,7 @@ function rankCard() {
       a.worst.map(w => esc(w[0])).join(', ') + '.'));
   }
   if (a.from) {
-    c.appendChild(el('div', 'note',
-      'Counting from <b>' + esc(Day.label(a.from)) + '</b>, your fresh start. Every day before it is still saved.'));
+    c.appendChild(el('div', 'note', countSay(a.from)));
   }
   if (!a.loggedDays) {
     c.appendChild(el('div', 'note', a.span
@@ -6940,16 +6982,19 @@ function drawTrends(m) {
   /* Only what you asked to see. A field turned out of the visualiser is still
      logged and still on Today — it has simply stopped being one more row on a
      card that only works while you can take it in at a glance. */
-  const c3 = card('Last 28 days');
+  /* Counted from the cut; the days before it stay drawn, faded. */
+  const d28 = Day.last(28), cut28 = countFrom();
+  const counted28 = d28.filter(d => !cut28 || d >= cut28);
+  const c3 = card('Last 28 days', cut28 && cut28 > d28[0] ? 'since ' + Day.short(cut28) : '');
   const shown = liveFields().filter(f => f.viz !== 0);
   if (!shown.length) c3.appendChild(el('div', 'empty', 'Nothing is set to show here'));
   shown.forEach(f => {
     const days = Day.last(28);
     const r = el('div');
     r.style.marginBottom = 'var(--s-3)';
-    const hit = days.filter(d => { const v = value(d, f.id); if (v == null) return false; return f.target ? (f.dir === 'lte' ? v <= f.target : v >= f.target) : true; }).length;
+    const hit = counted28.filter(d => { const v = value(d, f.id); if (v == null) return false; return f.target ? (f.dir === 'lte' ? v <= f.target : v >= f.target) : true; }).length;
     r.innerHTML = '<div style="display:flex;font-size:var(--f-1)"><b style="font-weight:600;color:var(--text-2)">' +
-      esc(f.label) + '</b><span class="mono muted" style="margin-left:auto">' + hit + '/28</span></div>';
+      esc(f.label) + '</b><span class="mono muted" style="margin-left:auto">' + hit + '/' + counted28.length + '</span></div>';
     const g = el('div', 'grid28');
     /* Its own colour, so twelve stacked grids are twelve things rather than
        one accent-coloured smear. Set on the row and inherited by the cells,
@@ -6958,7 +7003,7 @@ function drawTrends(m) {
     days.forEach(d => {
       const v = value(d, f.id);
       const on = v != null && (!f.target || (f.dir === 'lte' ? v <= f.target : v >= f.target));
-      g.appendChild(el('i', on ? 'on' : (v != null ? 'part' : '')));
+      g.appendChild(el('i', (on ? 'on' : (v != null ? 'part' : '')) + (cut28 && d < cut28 ? ' pre' : '')));
     });
     r.appendChild(g);
     c3.appendChild(r);
@@ -8249,11 +8294,14 @@ function drawQuestsTab(pane) {
   /* ── fresh start ── the same as the offer after a lapse, any time */
   pane.appendChild(el('label', 'fl', 'Fresh start'));
   const from = freshFrom();
-  pane.appendChild(el('div', 'note', from
+  /* A chapter later than the fresh start is what the rank counts from; said
+     instead, so COUNT EVERY DAY AGAIN does not look broken. */
+  const cut = countFrom();
+  pane.appendChild(el('div', 'note', cut && cut !== from ? countSay(cut) : from
     ? 'Your rank counts from <b>' + esc(Day.label(from)) + '</b>. Every day before it is still saved.'
     : 'Start your rank over from today. Every past day stays saved.'));
   const fb = el('div', 'btns');
-  if (from !== Day.today()) {
+  if (from !== Day.today() && cut !== Day.today()) {
     const go = el('button', 'btn mb-press mb-tap', 'START FRESH TODAY');
     go.onclick = () => { startFresh(); drawSettingsPane('quests'); };
     fb.appendChild(go);
