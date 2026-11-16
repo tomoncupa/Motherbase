@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.100, 2026-11-16">
+<meta name="mb-version" content="1.0.101, 2026-11-16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -10030,6 +10030,164 @@ function moodToDay(date, key, v, at, wrote) { Journal.moodToDay(date, key, v, at
    he has written any. */
 function topFeels() { return Journal.topFeels(); }
 
+/* ══════════════ THE S-RANK OVERLAY ══════════════
+   Tom, 2026-11-16: "I don't want to see my score under the bullet widget. I
+   want it separate in a different space", "always on top, by default on the
+   upper right side", "more like just an overlay that doesn't get interacted
+   with", and "configurable fully in the settings in STATUS".
+
+   The page draws what is left for an S (the lines the widget used to show,
+   `Grade.toS`) as a picture, in the theme's own fonts and colours, and hands
+   it to STATUS.exe, which lays it over the screen where every click passes
+   through to what is under it. How it is drawn lives here, so changing the
+   look never needs the program rebuilt; the program only places it.
+
+   Messages: `ov|show|pos|top` (pos tl tr bl br; top always, full or never)
+   and `ovimg|w|h|<png as base64>`, `ovimg|0|0|` for nothing to show. */
+const OV_DEF = { show: 1, pos: 'tr', size: 'm', text: 90, back: 60, top: 'always' };
+const OV_SIZES = {
+  s: { L: 16, lab: 12, t: 12, pad: 8, gap: 8, w: 200 },
+  m: { L: 20, lab: 12, t: 14, pad: 12, gap: 8, w: 260 },
+  l: { L: 28, lab: 16, t: 18, pad: 16, gap: 12, w: 340 }
+};
+let ovTry = {};          /* a slider being dragged, shown before it is saved */
+function ovCfg() {
+  const g = k => ovTry[k] != null ? ovTry[k] : S.get('desk.ov.' + k, OV_DEF[k]);
+  const pick = (k, ok) => ok.indexOf(g(k)) > -1 ? g(k) : OV_DEF[k];
+  const pct = (k, lo) => { const v = Math.round(+g(k)); return isFinite(v) ? Math.max(lo, Math.min(100, v)) : OV_DEF[k]; };
+  return { show: g('show') ? 1 : 0, pos: pick('pos', ['tl', 'tr', 'bl', 'br']), size: pick('size', ['s', 'm', 'l']),
+           text: pct('text', 20), back: Math.min(90, pct('back', 0)), top: pick('top', ['always', 'full', 'never']) };
+}
+let ovSaidCfg = '', ovSaidImg = '', ovBusy = false, ovAgain = false, ovT = 0;
+function ovPost(m) { try { window.chrome.webview.postMessage(m); } catch (e) {} }
+function ovSoon() { clearTimeout(ovT); ovT = setTimeout(ovSend, 400); }
+async function ovSend() {
+  if (!HOSTED) return;
+  const c = ovCfg();
+  const cfg = 'ov|' + c.show + '|' + c.pos + '|' + c.top;
+  if (cfg !== ovSaidCfg) { ovSaidCfg = cfg; ovPost(cfg); }
+  if (!c.show) return;
+  if (ovBusy) { ovAgain = true; return; }
+  ovBusy = true;
+  try {
+    const img = await ovDraw(c);
+    if (img !== ovSaidImg) { ovSaidImg = img; ovPost(img); }
+  } catch (e) { window.__deskErr = 'overlay: ' + (e && e.message); }
+  ovBusy = false;
+  if (ovAgain) { ovAgain = false; ovSend(); }
+}
+/* Greedy word wrap to a width; a word wider than the line is cut by letter. */
+function ovWrap(ctx, text, w) {
+  const out = []; let line = '';
+  String(text || '').split(/\s+/).filter(Boolean).forEach(word => {
+    const t = line ? line + ' ' + word : word;
+    if (ctx.measureText(t).width <= w) { line = t; return; }
+    if (line) out.push(line);
+    line = word;
+    while (ctx.measureText(line).width > w && line.length > 1) {
+      let n = line.length - 1;
+      while (n > 1 && ctx.measureText(line.slice(0, n)).width > w) n--;
+      out.push(line.slice(0, n)); line = line.slice(n);
+    }
+  });
+  if (line) out.push(line);
+  return out.length ? out : [''];
+}
+async function ovDraw(c) {
+  const rows = Grade.toS(Day.today(), clockLabel);
+  if (!rows.length) return 'ovimg|0|0|';
+  const z = OV_SIZES[c.size] || OV_SIZES.m;
+  const cs = getComputedStyle(document.documentElement);
+  const tok = (n, fb) => cs.getPropertyValue(n).trim() || fb;
+  const disp = tok('--font-display', 'sans-serif'), body = tok('--font-body', 'sans-serif');
+  const fLet = '600 ' + z.L + 'px ' + disp, fLab = '500 ' + z.lab + 'px ' + body, fTxt = '400 ' + z.t + 'px ' + body;
+  try { await Promise.all([fLet, fLab, fTxt].map(f => document.fonts.load(f))); } catch (e) {}
+  const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
+  const sp = Math.round(z.lab * 0.1) + 'px';
+  /* the columns: letter, label, words */
+  ctx.font = fLet; const letW = Math.ceil(ctx.measureText('W').width);
+  ctx.font = fLab; ctx.letterSpacing = sp;
+  const labW = Math.ceil(Math.max.apply(null, rows.map(r => ctx.measureText(String(r.label || '').toUpperCase()).width)));
+  ctx.letterSpacing = '0px'; ctx.font = fTxt;
+  const lineH = Math.round(z.t * 1.35), asc = Math.round(Math.max(z.L * 0.8, z.t * 1.0));
+  const laid = rows.map(r => {
+    const lines = ovWrap(ctx, r.text, z.w);
+    return { r, lines, h: Math.max(Math.round(z.L * 1.15), asc + (lines.length - 1) * lineH + Math.round(z.t * 0.35)) };
+  });
+  const txtW = Math.ceil(Math.max.apply(null, laid.map(l => Math.max.apply(null, l.lines.map(s => ctx.measureText(s).width)))));
+  const W = z.pad * 2 + letW + z.gap + labW + z.gap + txtW;
+  const H = z.pad * 2 + laid.reduce((s, l) => s + l.h, 0) + Math.round(z.gap / 2) * (laid.length - 1);
+  cv.width = W; cv.height = H;
+  if (c.back > 0) {
+    ctx.globalAlpha = c.back / 100;
+    ctx.fillStyle = tok('--surface-1', 'black');
+    ctx.beginPath(); ctx.roundRect(0.5, 0.5, W - 1, H - 1, 6); ctx.fill();
+    ctx.strokeStyle = tok('--border', 'gray'); ctx.lineWidth = 1; ctx.stroke();
+  }
+  ctx.globalAlpha = c.text / 100;
+  /* With little or no backing, a soft shadow keeps the words readable over a
+     white window. */
+  const shade = c.back < 60;
+  const ink = tok('--text-1', 'white'), mut = tok('--text-muted', 'gray');
+  const shadow = on => { ctx.shadowColor = on && shade ? 'rgba(0,0,0,.85)' : 'transparent'; ctx.shadowBlur = on && shade ? 4 : 0; };
+  let y = z.pad;
+  laid.forEach(l => {
+    const r = l.r, base = y + asc, dim = r.letter === 'S' || r.fixed;
+    /* the letter in the text colour, its rank colour a bar under it: a rank
+       colour is a line colour, not a word colour (1.0.80) */
+    shadow(true);
+    ctx.font = fLet; ctx.fillStyle = ink; ctx.textAlign = 'center';
+    ctx.fillText(r.letter, z.pad + letW / 2, base);
+    const lw = ctx.measureText(r.letter).width, bar = Math.max(2, Math.round(z.L * 0.12));
+    shadow(false);
+    ctx.fillStyle = tok('--rank-' + r.letter, ink);
+    ctx.fillRect(Math.round(z.pad + (letW - lw) / 2), base + bar, Math.round(lw), bar);
+    shadow(true);
+    ctx.textAlign = 'left';
+    ctx.font = fLab; ctx.letterSpacing = sp; ctx.fillStyle = mut;
+    ctx.fillText(String(r.label || '').toUpperCase(), z.pad + letW + z.gap, base);
+    ctx.letterSpacing = '0px'; ctx.font = fTxt; ctx.fillStyle = dim ? mut : ink;
+    l.lines.forEach((s, i) => ctx.fillText(s, z.pad + letW + z.gap + labW + z.gap, base + i * lineH));
+    y += l.h + Math.round(z.gap / 2);
+  });
+  const url = cv.toDataURL('image/png');
+  return 'ovimg|' + W + '|' + H + '|' + url.slice(url.indexOf(',') + 1);
+}
+/* Settings, DESKTOP: every choice, live. Only inside STATUS.exe. */
+function drawOverlaySettings(pane) {
+  const o = ovCfg();
+  pane.appendChild(el('div', 'mb-group', 'S-RANK OVERLAY'));
+  pane.appendChild(toggleRow('Show it', 'What is left for an S today, over your other windows. Clicks go through it', !!o.show, v => {
+    S.set('desk.ov.show', v ? 1 : 0); ovSend(); drawSettingsPane('desk');
+  }));
+  if (!o.show) return;
+  const seg = (label, help, key, opts, after) => pane.appendChild(UI.row(label, help, UI.segmented(opts, o[key], v => {
+    S.set('desk.ov.' + key, v); ovSend(); if (after) after();
+  })));
+  seg('Position', 'Which corner of the main screen. It moves aside for the STATUS widget', 'pos',
+    [{ id: 'tl', name: 'Top left' }, { id: 'tr', name: 'Top right' }, { id: 'bl', name: 'Bottom left' }, { id: 'br', name: 'Bottom right' }]);
+  seg('Size', 'How big the letters and words are', 'size',
+    [{ id: 's', name: 'Small' }, { id: 'm', name: 'Medium' }, { id: 'l', name: 'Large' }]);
+  const slide = (label, help, key, lo, hi) => {
+    const r = document.createElement('input');
+    r.type = 'range'; r.className = 'mb-range'; r.min = lo; r.max = hi; r.step = 5; r.value = o[key];
+    r.style.maxWidth = '220px';
+    r.setAttribute('aria-label', label);
+    r.oninput = () => { ovTry[key] = +r.value; ovSend(); };
+    r.onchange = () => { S.set('desk.ov.' + key, +r.value); delete ovTry[key]; ovSend(); };
+    pane.appendChild(UI.row(label, help, r));
+  };
+  slide('Words', 'How solid the words are, faint to full', 'text', 20, 100);
+  slide('Backing', 'Behind the words, from nothing to a dark panel', 'back', 0, 90);
+  seg('On top', 'Not over full screen hides it while a game or video fills the screen', 'top',
+    [{ id: 'always', name: 'Always' }, { id: 'full', name: 'Not over full screen' }, { id: 'never', name: 'Never' }],
+    () => drawSettingsPane('desk'));
+  pane.appendChild(el('div', 'note', o.top === 'never'
+    ? 'It sits with your other windows, so any window you open covers it.'
+    : o.top === 'full' ? 'It stays above your windows and steps aside while one fills the screen.'
+    : 'It stays above every window.'));
+}
+
 function drawDeskTab(pane) {
   settingsPane = pane; pane.classList.add('setpane');
   const c = deskCfg();
@@ -10127,6 +10285,8 @@ function drawDeskTab(pane) {
   pane.appendChild(el('div', 'note',
     'Enter saves it as that kind of bullet, at that minute. The status check asks the same question.'));
 
+  if (HOSTED) drawOverlaySettings(pane);
+
   pane.appendChild(el('div', 'note',
     'Mini mode is the chevron in the top bar. Ctrl+B writes a bullet from ' +
     'anywhere, even when STATUS is behind another window.'));
@@ -10184,6 +10344,13 @@ if (DESK) {
   /* what is left for an S moves with the clock too: a walk passes, passive
      steps still to come run down */
   setInterval(() => { if (deskSmall && !deskPanel && !checkOn) deskBar(); }, 5 * 60 * 1000);
+  /* the overlay redraws on the same beats, in the widget or the whole app */
+  if (HOSTED) {
+    Rec.on(ovSoon); Day.on(ovSoon);
+    setInterval(ovSend, 5 * 60 * 1000);
+    Rec.ready(ovSend);
+    ovSend();
+  }
   /* It opens as the widget, because that is the thing he asked for. The
      whole app is one click away, and the choice is remembered. */
   /* Decide before saying anything. Telling the host what to be while the

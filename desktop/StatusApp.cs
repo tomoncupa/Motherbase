@@ -186,6 +186,12 @@ class App : Form
         senseT.Tick += (s, e) => Sense();
         senseT.Start();
 
+        ov = new Overlay();
+        ovT = new Timer();
+        ovT.Interval = 1000;
+        ovT.Tick += (s, e) => OvTick();
+        ovT.Start();
+
         web = new WebView2();
         web.Dock = DockStyle.Fill;
         web.DefaultBackgroundColor = BackColor;
@@ -285,6 +291,8 @@ class App : Form
         try { raw = e.TryGetWebMessageAsString(); }
         catch { return; }
         if (string.IsNullOrEmpty(raw)) return;
+        /* the overlay's picture is a long line of base64, never logged */
+        if (raw.StartsWith("ovimg|")) { OvImage(raw); return; }
         Log("page asked for: " + raw);
 
         string[] bits = raw.Split('|');
@@ -337,6 +345,16 @@ class App : Form
             return;
         }
         if (verb == "boot") { SetBoot(bits.Length > 1 && bits[1] == "1"); return; }
+        /* `ov|show|pos|top`: the S-rank overlay's choices, from Settings, DESKTOP */
+        if (verb == "ov")
+        {
+            ovShow = bits.Length > 1 && bits[1] == "1";
+            if (bits.Length > 2) ovPos = bits[2];
+            if (bits.Length > 3) ovTop = bits[3];
+            ovCovered = false;
+            OvPlace(true);
+            return;
+        }
 
         int w = 0, h = 0;
         if (bits.Length >= 3)
@@ -423,10 +441,115 @@ class App : Form
                 Centre();
                 Round();
                 Front();
+                OvPlace(true);
                 return;
             }
             try { System.Media.SystemSounds.Exclamation.Play(); } catch { }
         }
+        OvPlace(true);   /* out of the way of a check, back after it, aside for the app */
+    }
+
+    /* ── the S-rank overlay ──
+       Tom, 2026-11-16: "always on top, by default on the upper right side,
+       and it doesn't really get in the way too much. Not really a window,
+       more like just an overlay that doesn't get interacted with." The page
+       draws the picture (STATUS 1.0.101, `ovDraw`); this only places it: a
+       corner of the main screen's work area, moved aside when the STATUS
+       window sits in that corner, hidden while a status check has the
+       screen. Clicks pass through it and it never takes the focus. */
+    Overlay ov;
+    bool ovShow = true, ovCovered;
+    string ovPos = "tr", ovTop = "always";
+    Timer ovT;
+
+    void OvImage(string raw)
+    {
+        if (ov == null) return;
+        string[] p = raw.Split(new char[] { '|' }, 4);
+        int w = 0, h = 0;
+        if (p.Length == 4) { int.TryParse(p[1], out w); int.TryParse(p[2], out h); }
+        if (w < 1 || h < 1 || p[3].Length == 0) { ov.SetImage(null); OvPlace(true); return; }
+        try
+        {
+            byte[] png = Convert.FromBase64String(p[3]);
+            using (var ms = new MemoryStream(png))
+            using (var b0 = new Bitmap(ms))
+                ov.SetImage(new Bitmap(b0));
+        }
+        catch (Exception ex) { Log("overlay picture did not read: " + ex.Message); return; }
+        OvPlace(true);
+    }
+
+    /* `raise` puts it back on top; moving with the widget only moves it. */
+    void OvPlace(bool raise)
+    {
+        if (ov == null) return;
+        bool want = ovShow && ov.HasImage && mode != "checkin" && !ovCovered;
+        if (!want) { ov.Appear(false); return; }
+        Size s = ov.ImageSize;
+        var wa = Screen.PrimaryScreen.WorkingArea;
+        const int M = 16, GAP = 12;
+        bool right = ovPos == "tr" || ovPos == "br", bottom = ovPos == "bl" || ovPos == "br";
+        int x = right ? wa.Right - s.Width - M : wa.Left + M;
+        int y = bottom ? wa.Bottom - s.Height - M : wa.Top + M;
+        /* never over the STATUS window: beside it first, so the corner's edge
+           stays the edge; above or below it when there is no room beside */
+        if (Visible && WindowState != FormWindowState.Minimized)
+        {
+            var me = Rectangle.Inflate(Bounds, GAP, GAP);
+            if (me.IntersectsWith(new Rectangle(x, y, s.Width, s.Height)))
+            {
+                int nx = right ? Left - GAP - s.Width : Right + GAP;
+                /* beside it, level with its top or bottom edge */
+                if (nx >= wa.Left && nx + s.Width <= wa.Right)
+                {
+                    x = nx;
+                    y = bottom ? Math.Min(Bottom, wa.Bottom) - s.Height : Math.Max(Top, wa.Top);
+                }
+                else y = bottom ? Top - GAP - s.Height : Bottom + GAP;
+            }
+        }
+        ov.Draw(x, y);
+        if (raise) { ov.Appear(true); ov.Z(ovTop != "never"); }
+    }
+
+    /* Once a second: Always keeps it on top of windows that put themselves
+       on top later; Not over full screen hides it while the window in front
+       fills the screen it is on (a game, a video) or Windows says a full
+       screen program or a presentation is running. */
+    void OvTick()
+    {
+        if (ov == null || !ovShow || !ov.HasImage) return;
+        if (ovTop == "full")
+        {
+            bool cov = FullScreenInFront();
+            if (cov != ovCovered) { ovCovered = cov; OvPlace(true); }
+            else if (!cov && ov.Up) ov.Z(true);
+        }
+        else if (ovTop == "always" && ov.Up) ov.Z(true);
+    }
+
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+    [DllImport("shell32.dll")] static extern int SHQueryUserNotificationState(out int state);
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
+
+    bool FullScreenInFront()
+    {
+        int st;
+        try { if (SHQueryUserNotificationState(out st) == 0 && (st == 3 || st == 4)) return true; } catch { }
+        IntPtr fg = GetForegroundWindow();
+        if (fg == IntPtr.Zero || fg == Handle || fg == ov.Handle) return false;
+        var cls = new StringBuilder(64);
+        GetClassName(fg, cls, cls.Capacity);
+        string c = cls.ToString();
+        if (c == "Progman" || c == "WorkerW" || c == "Shell_TrayWnd" || c == "Shell_SecondaryTrayWnd") return false;
+        RECT r;
+        if (!GetWindowRect(fg, out r)) return false;
+        var scr = Screen.FromHandle(fg);
+        if (!scr.Primary) return false;   /* the overlay is on the main screen */
+        var b = scr.Bounds;
+        return r.L <= b.Left && r.T <= b.Top && r.R >= b.Right && r.B >= b.Bottom;
     }
 
     /* Asking on demand. Also how the interruption gets tested without waiting
@@ -650,6 +773,13 @@ class App : Form
     {
         base.OnMove(e);
         if (mode == "widget" && ready) { posX = Left; posY = Top; }
+        OvPlace(false);
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        OvPlace(false);
     }
 
     /* â”€â”€ settings, one line each, beside the program â”€â”€ */
@@ -895,5 +1025,105 @@ class App : Form
         try { UnregisterHotKey(Handle, HOTKEY_ID); } catch { }
         if (tray != null) { tray.Visible = false; tray.Dispose(); }
         Application.Exit();
+    }
+}
+
+/* ── the overlay's window ──
+   A picture on the screen and nothing else: layered (its own pixels carry
+   their see-through), transparent to the mouse, a tool window so it has no
+   taskbar button and no Alt+Tab entry, and never activated, so it cannot
+   take the focus from what he is typing in. */
+class Overlay : Form
+{
+    [DllImport("user32.dll")] static extern bool UpdateLayeredWindow(IntPtr h, IntPtr dst, ref PT at, ref SZ size, IntPtr src, ref PT from, int key, ref BLEND blend, int flags);
+    [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr h);
+    [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
+    [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr dc);
+    [DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr dc);
+    [DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr dc, IntPtr o);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr o);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+    [StructLayout(LayoutKind.Sequential)] struct PT { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] struct SZ { public int W, H; }
+    [StructLayout(LayoutKind.Sequential, Pack = 1)] struct BLEND { public byte Op, Flags, Alpha, Format; }
+
+    const int WS_EX_LAYERED = 0x80000, WS_EX_TRANSPARENT = 0x20, WS_EX_TOOLWINDOW = 0x80, WS_EX_NOACTIVATE = 0x8000000;
+    const int WM_MOUSEACTIVATE = 0x21, MA_NOACTIVATE = 3, WM_NCHITTEST = 0x84, HTTRANSPARENT = -1;
+    const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOACTIVATE = 0x10;
+    static readonly IntPtr TOPMOST = new IntPtr(-1), NOTOPMOST = new IntPtr(-2);
+
+    Bitmap img;
+    bool up;
+    public bool Up { get { return up; } }
+    public bool HasImage { get { return img != null; } }
+    public Size ImageSize { get { return img == null ? Size.Empty : img.Size; } }
+
+    public Overlay()
+    {
+        FormBorderStyle = FormBorderStyle.None;
+        ShowInTaskbar = false;
+        StartPosition = FormStartPosition.Manual;
+        Text = "STATUS overlay";
+        IntPtr unused = Handle;   /* made now, shown only once there is a picture */
+    }
+
+    protected override bool ShowWithoutActivation { get { return true; } }
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.ExStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+            return cp;
+        }
+    }
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_MOUSEACTIVATE) { m.Result = new IntPtr(MA_NOACTIVATE); return; }
+        if (m.Msg == WM_NCHITTEST) { m.Result = new IntPtr(HTTRANSPARENT); return; }
+        base.WndProc(ref m);
+    }
+
+    public void SetImage(Bitmap b)
+    {
+        if (img != null) img.Dispose();
+        img = b;
+    }
+
+    /* the picture, with its own alpha, at x,y */
+    public void Draw(int x, int y)
+    {
+        if (img == null) return;
+        IntPtr scr = GetDC(IntPtr.Zero), mem = CreateCompatibleDC(scr), hb = IntPtr.Zero, old = IntPtr.Zero;
+        try
+        {
+            hb = img.GetHbitmap(Color.FromArgb(0));   /* premultiplied, as layering wants */
+            old = SelectObject(mem, hb);
+            var size = new SZ { W = img.Width, H = img.Height };
+            var from = new PT();
+            var at = new PT { X = x, Y = y };
+            var blend = new BLEND { Op = 0, Flags = 0, Alpha = 255, Format = 1 };
+            UpdateLayeredWindow(Handle, scr, ref at, ref size, mem, ref from, 0, ref blend, 2);
+        }
+        finally
+        {
+            ReleaseDC(IntPtr.Zero, scr);
+            if (hb != IntPtr.Zero) { SelectObject(mem, old); DeleteObject(hb); }
+            DeleteDC(mem);
+        }
+    }
+
+    public void Appear(bool on)
+    {
+        if (on == up) return;
+        up = on;
+        ShowWindow(Handle, on ? 4 : 0);   /* SW_SHOWNOACTIVATE, SW_HIDE */
+    }
+
+    /* on top of every window, or in among them */
+    public void Z(bool top)
+    {
+        SetWindowPos(Handle, top ? TOPMOST : NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 }
