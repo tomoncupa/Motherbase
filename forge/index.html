@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.5, 2026-11-16">
+<meta name="mb-version" content="1.0.6, 2026-11-16">
 <title>FORGE</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -18,6 +18,7 @@
 <script src="../shared/io.js"></script>
 <script src="../shared/health.js"></script>
 <script src="../shared/icons.js"></script>
+<script src="../shared/muscles.js"></script>
 <style>
 /* FORGE, built 2026-09-24. Tom: "A program builder - that functions like
    block - that outputs programs I can send to clients. Have it mesh with
@@ -504,12 +505,30 @@ function patOf(name) {
 }
 /* the muscles a plate works: a muscle slot's own, a tag's, else TRAIN's
    muscle group for it. A pattern slot has none until it is filled. */
+/* Since 2026-11-16 the shares come from the suite's one rule
+   (`shared/muscles.js`, Muscles.forLift), asked with the same rows TRAIN
+   asks with: TRAIN's exercise row's own `mus`, this app's tag, the master
+   list, then the group. So FORGE and TRAIN cannot disagree. */
+let EXN = null, EXN_AT = 0;
+function trainRow(name) {
+  if (!EXN || Date.now() - EXN_AT > 2000) {
+    EXN = {}; EXN_AT = Date.now();
+    const m = Rec.map('exercise');
+    Object.keys(m).forEach(k => { if (m[k] && m[k].name) EXN[String(m[k].name).trim().toLowerCase()] = m[k]; });
+  }
+  return EXN[String(name || '').trim().toLowerCase()] || null;
+}
+function musShare(x) {
+  if (x.slot === 'mus') { const o = {}; if (x.mus) o[x.mus] = 1; return o; }
+  if (x.slot === 'pat') return {};
+  const t = tagOf(x.name), row = trainRow(x.name);
+  const g = x.cat && x.cat !== 'Other' ? x.cat : null;
+  if (!window.Muscles) { if (Array.isArray(t.mus) && t.mus.length) { const o = {}; t.mus.forEach((m, i) => { o[m] = i ? 0.5 : 1; }); return o; } const o = {}; if (g) o[g] = 1; return o; }
+  return Muscles.forLift(x.name, row && row.mus, Array.isArray(t.mus) ? t.mus : null, g).share;
+}
 function musOf(x) {
-  if (x.slot === 'mus') return x.mus ? [x.mus] : [];
-  if (x.slot === 'pat') return [];
-  const t = tagOf(x.name);
-  if (Array.isArray(t.mus) && t.mus.length) return t.mus;
-  return x.cat && x.cat !== 'Other' ? [x.cat] : [];
+  const sh = musShare(x);
+  return Object.keys(sh).sort((a, b) => sh[b] - sh[a]);
 }
 function patOfPlate(x) { return x.slot === 'pat' ? { id: x.pat, guess: false } : x.slot === 'mus' ? { id: '', guess: false } : patOf(x.name); }
 /* every muscle group there is to pick: TRAIN's, or its starter list when
@@ -517,6 +536,7 @@ function patOfPlate(x) { return x.slot === 'pat' ? { id: x.pat, guess: false } :
 function musList() {
   const out = {}, cats = Rec.map('excat');
   Object.keys(cats).forEach(k => { if (cats[k].name) out[cats[k].name] = cats[k].ord == null ? 99 : cats[k].ord; });
+  if (window.Muscles) Muscles.LIST.forEach((n, i) => { if (out[n] == null) out[n] = 50 + i; });
   if (!Object.keys(out).length) ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core'].forEach((n, i) => { out[n] = i; });
   Rec.all('ftag').forEach(r => ((r.payload || {}).mus || []).forEach(m => { if (out[m] == null) out[m] = 100; }));
   return Object.keys(out).sort((a, b) => out[a] - out[b] || a.localeCompare(b));
@@ -1458,11 +1478,14 @@ function drawSum(board, EX) {
     tot += n;
     const p = patOfPlate(e.v).id || '';
     byP[p] = (byP[p] || 0) + n;
-    musOf(e.v).forEach(m => { byM[m] = (byM[m] || 0) + n; });
+    /* direct sets, as TRAIN's first view counts them: each set once,
+       toward the lift's main muscle (Tom, 2026-11-16) */
+    const mm = musOf(e.v)[0];
+    if (mm) byM[mm] = (byM[mm] || 0) + n;
   }));
   /* the week's sets per movement pattern and per muscle group, the two
-     things Tom programs in. A muscle is counted in full for every exercise
-     that works it, the way TRAIN's week counts a shared exercise. */
+     things Tom programs in. A muscle counts a set when it is the lift's
+     main muscle, the way TRAIN's DIRECT SETS view does. */
   const chip = (label, n, col) => '<span class="it" style="--c:' + col + '"><span class="dot"></span>' + esc(label.toUpperCase()) + '&nbsp;<b>' + n + '</b></span>';
   const order = patterns().map(p => p.id).concat(['']);
   s.innerHTML = '<div class="row"><span class="h">WEEK ' + wk + '</span><span class="it"><b>' + tot + '</b>&nbsp;SETS</span><span class="it"><b>' + nex + '</b>&nbsp;SLOTS</span></div>' +
