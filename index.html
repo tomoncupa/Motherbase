@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.122, 2026-11-16">
+<meta name="mb-version" content="1.0.123, 2026-11-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -723,8 +723,12 @@ body.dragging #cardframes{z-index:0}
    stretch before. Tiles meet on a hairline, the grid's own gap. */
 .lc{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:var(--border-width,1px);
   background:var(--line);height:100%;border-radius:var(--radius-sm,6px);overflow:hidden}
-.lc-t{background:var(--surface-2,var(--panel));padding:var(--s-3);display:flex;flex-direction:column;justify-content:center;gap:var(--s-1);min-width:0;
-  container-type:size}
+/* `safe center` and `overflow:hidden`: a tile whose lines outgrow it starts
+   at its top and keeps them inside, so cutCards can measure the spill and
+   shed lines whole, and nothing is drawn over the tile below */
+.lc-t{background:var(--surface-2,var(--panel));padding:var(--s-3);display:flex;flex-direction:column;justify-content:safe center;gap:var(--s-1);min-width:0;
+  container-type:size;overflow:hidden}
+.lc-t.lc-tight{padding-top:var(--s-1);padding-bottom:var(--s-1);gap:0}
 .lc-t:only-child,.lc-t:nth-child(3):last-child{grid-column:1 / -1}
 .lc-l{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;color:var(--dim)}
 /* the number grows with its tile, from the scale's 20 to its 48 */
@@ -733,8 +737,10 @@ body.dragging #cardframes{z-index:0}
 .lc-v.nil{color:var(--dim2)}
 /* the unit stays beside the number while it fits and drops under it when
    it does not, rather than the number being cut */
-.lc-u{font-family:var(--f2);font-size:var(--f-2);color:var(--dim);letter-spacing:0;white-space:nowrap;display:inline-block}
-.lc-d{display:flex;align-items:center;gap:var(--s-1);font-family:var(--f1);font-size:var(--f-2);color:var(--dim2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.lc-u{font-family:var(--f2);font-size:var(--f-2);color:var(--dim);letter-spacing:0;display:inline-block}
+/* wraps rather than running off the tile: "100% tracked, same as before"
+   was cut at "befor" (2026-11-16) */
+.lc-d{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-1);font-family:var(--f1);font-size:var(--f-2);color:var(--dim2);font-variant-numeric:tabular-nums}
 .lc-d.up{color:var(--success)}
 .lc-d.dn{color:var(--danger)}
 .lc-d.flat{color:var(--txt)}
@@ -7907,11 +7913,33 @@ function cutCards(nodes) {
         if (r.bottom <= bottom && !(box === body && spills)) return;
         /* the first thing in a card is its answer: kept, and looked into */
         if (box === body && r.top < bottom && e.children.length > 1) { walk(e); return; }
+        /* a table's rows are what go, never its whole body: WORK DONE
+           zoomed to 150% kept its column heads and nothing else (2026-11-16) */
+        if (/^(TBODY|THEAD|TFOOT)$/.test(e.tagName) && r.top < bottom) { walk(e); return; }
         if (k === 0 && (box === body || box === body.firstElementChild)) return;
         e.classList.add('sz-cut');
       });
     };
     walk(body);
+    /* a group heading with none of its rows left under it goes too */
+    body.querySelectorAll('tr.grp').forEach(g => {
+      let x = g.nextElementSibling;
+      while (x && x.classList.contains('sz-cut')) x = x.nextElementSibling;
+      if (!x || x.classList.contains('grp')) g.classList.add('sz-cut');
+    });
+    /* A tile with a fixed height (CONSISTENCY's four) sheds its own lines
+       when they outgrow it, the change first, then the label, never the
+       number: zoomed in, they spilled over the tile below (2026-11-16). */
+    body.querySelectorAll('.lc-t').forEach(t => {
+      /* the padding gives way before any line does */
+      t.classList.remove('lc-tight');
+      if (t.scrollHeight > t.clientHeight + 1) t.classList.add('lc-tight');
+      const lines = [].slice.call(t.children).filter(e => !e.classList.contains('lc-v')).reverse();
+      for (const e of lines) {
+        if (t.scrollHeight <= t.clientHeight + 1) break;
+        e.classList.add('sz-cut');
+      }
+    });
   });
 }
 /* A fit card measured in the fallback font came out a row short and was
