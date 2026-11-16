@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.21, 2026-11-16">
+<meta name="mb-version" content="1.0.22, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1071,6 +1071,11 @@ const FS = Object.assign({}, FT, { id: 'free', skill: 'free', kind: 'free', name
   win: null, goals: () => [],
   why: 'Thinking out loud on camera is the raw material for content, and every word is kept and filed in your banks.',
   how: 'Talk about whatever is on your mind, or start from a jumping off point. Press STOP when you are done.' });
+/* SAY IT TIGHTER (SPEAK 1.0.22): the best point of a free speak again in
+   sixty seconds, its numbers set beside the first take's */
+const TIGHT = Object.assign({}, FS, { id: 'tight', name: 'Say it tighter', open: false, dur: 60,
+  why: 'Saying a point again in a minute is how a ramble becomes a Reel, and the second take shows what changed in your delivery.',
+  how: 'Make the one point again, tight, in sixty seconds.' });
 const skillOf = d => SKILLS.filter(s => s.id === d.skill)[0] || (d.skill === 'fitness' ? FIT_SKILL : d.skill === 'other' ? OTHER_SKILL : d.skill === 'ask' ? ASK_SKILL : d.skill === 'free' ? FREE_SKILL : TOPIC_SKILL);
 /* ══════════════ the coach ══════════════
    Tom, 2026-11-16: "I need Speak to actually give me feedback and drills for
@@ -1140,7 +1145,7 @@ const FIXES = [
 ];
 FIXES.forEach(f => { f.fix = true; f.step = 0; });
 const isFix = id => /^fix-/.test(id || '');
-const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : id === 'free' ? FS : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
+const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : id === 'free' ? FS : id === 'tight' ? TIGHT : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
 const LIVE = { held: 'ums', crutch: 'crutch', longPauses: 'silences', pauses: 'pauses', restarts: 'restarts' };
 /* each fault the coach can name, in a few words, for FOCUS */
 const FAULT = { 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
@@ -2147,30 +2152,86 @@ function drawContent(m) {
 /* FREE SPEAK's sheet: his jumping off points, newest first, or straight into
    a ramble. With none yet it goes straight in. */
 const jumps = () => myTopics().filter(t => t.kind === 'jump' && !t.used).sort((a, b) => (b.at || 0) - (a.at || 0));
+const JUMP_LABEL = { push: 'Push back', link: 'Connection', ask: 'Clarify', thread: 'Open thread' };
+/* one point as a row: what it says, what kind it is, and what it came from */
+function jumpRow(j, pick) {
+  const ttl = k => { const x = answers().filter(y => y.key === k)[0]; return x ? x.q : ''; };
+  const from = ttl(j.from);
+  const sub = (JUMP_LABEL[j.how] || 'Open thread') + (j.how === 'link'
+    ? ': ' + [from].concat((j.with || []).map(ttl)).filter(Boolean).map(s => '"' + s + '"').join(' and ')
+    : from ? ': from "' + from + '"' : '');
+  const r = el('button', 'row mb-plate mb-press mb-tap');
+  r.innerHTML = '<span class="tx"><span class="nm">' + esc(j.text) + '</span><span class="sub">' + esc(sub) + '</span></span>';
+  r.onclick = () => pick(j);
+  return r;
+}
+/* a point taken: the next take starts from it, linked to the take it came from */
+const fromJump = j => ({ kind: 'free', text: j.text, label: JUMP_LABEL[j.how] || 'Jumping off point', jump: j.key, how: j.how || '', parent: j.from || '' });
+/* FREE SPEAK's sheet: every point not taken yet, newest first, the ones
+   taken folded under TAKEN so an old path can be walked again, and JUST
+   RAMBLE. With nothing in it, it goes straight into a ramble. */
 function openFree() {
-  const js = jumps().slice(0, 6);
-  if (!js.length) { startTake(FS, null, { kind: 'free', text: '' }); return; }
+  const js = jumps(), done = myTopics().filter(t => t.kind === 'jump' && t.used && !t.skip).sort((a, b) => (b.used || 0) - (a.used || 0)).slice(0, 20);
+  if (!js.length && !done.length) { startTake(FS, null, { kind: 'free', text: '' }); return; }
   UI.dialog({
-    title: 'FREE SPEAK', width: 560,
+    title: 'FREE SPEAK', width: 600,
     body: (b, h) => {
-      b.appendChild(el('p', 'muted', 'Start from one of these, made from what you talked about, or just ramble.'));
+      b.appendChild(el('p', 'muted', js.length ? 'Pick a path, made from what you have said, or just ramble.' : 'No new paths. Walk an old one, or just ramble.'));
       const list = el('div', 'list');
       js.forEach(j => {
-        const r = el('button', 'row mb-plate mb-press mb-tap');
-        const ttl = k => { const x = answers().filter(y => y.key === k)[0]; return x ? x.q : ''; };
-        const sub = j.how === 'link' ? 'Connects ' + [ttl(j.from)].concat((j.with || []).map(ttl)).filter(Boolean).map(s => '"' + s + '"').join(' and ')
-          : j.how === 'ask' ? 'Clarify: from "' + ttl(j.from) + '"' : 'Open thread' + (ttl(j.from) ? ': from "' + ttl(j.from) + '"' : '');
-        r.innerHTML = '<span class="tx"><span class="nm">' + esc(j.text) + '</span><span class="sub">' + esc(sub) + '</span></span>';
-        r.onclick = () => { h.close(); startTake(FS, null, { kind: 'free', text: j.text, label: 'Jumping off point', jump: j.key }); };
+        const r = jumpRow(j, x => { h.close(); startTake(FS, null, fromJump(x)); });
         Mobile.hold(r, e => UI.menu(e && e.clientX || 0, e && e.clientY || 0, [
           { label: 'Not this one', kind: 'bad', fn: () => { Rec.patch('topic', null, j.key, { used: Date.now(), skip: 1 }); h.close(); openFree(); } },
-        ], { title: 'JUMPING OFF POINT' }), { dots: true, dotsLabel: 'More for this point' });
+        ], { title: 'PATH' }), { dots: true, dotsLabel: 'More for this path' });
         list.appendChild(r);
       });
       b.appendChild(list);
+      if (done.length) {
+        const dt = el('details', 'cmp mb-plate');
+        dt.innerHTML = '<summary class="mb-tap">TAKEN (' + done.length + ')</summary>';
+        const dl = el('div', 'list');
+        done.forEach(j => dl.appendChild(jumpRow(j, x => { h.close(); startTake(FS, null, fromJump(x)); })));
+        dt.appendChild(dl);
+        b.appendChild(dt);
+      }
     },
     actions: [{ label: 'CLOSE' }, { label: 'JUST RAMBLE', kind: 'go', fn: () => { startTake(FS, null, { kind: 'free', text: '' }); } }],
   });
+}
+/* WHAT NEXT, at the foot of a free speak's sheet (SPEAK 1.0.22). Tom: "it
+   can even prompt me like choose my own path type of thing ... while still
+   letting me revisit old options". The points Claude makes from this take
+   appear here as soon as they land (SPEAK.exe), with SAY IT TIGHTER and
+   JUST RAMBLE always there. */
+function nextBox(t, h) {
+  const box = el('div', 'cnt mb-plate');
+  box.appendChild(el('h3', null, 'WHAT NEXT'));
+  const list = el('div', 'list');
+  box.appendChild(list);
+  const go = (p, d) => { if (h) h.close(); startTake(d || FS, null, p); };
+  let tries = 0, timer = null;
+  const fill = () => {
+    list.innerHTML = '';
+    const mine = myTopics().filter(j => j.kind === 'jump' && j.from === t.key && !j.skip).sort((a, b) => String(a.key).localeCompare(String(b.key)));
+    mine.forEach(j => list.appendChild(jumpRow(j, x => go(fromJump(x)))));
+    const a = answers().filter(x => x.key === t.key)[0];
+    if (!mine.length) list.appendChild(el('p', 'muted', !REF.on ? 'Your next paths are made in SPEAK on the PC.'
+      : a && wordsOf(a.text || '').length < 30 ? 'Too short to make paths from.' : tries > 200 ? 'No paths came back for this one.' : 'Reading what you said...'));
+    return mine.length;
+  };
+  const n = fill();
+  if (!n && REF.on) timer = setInterval(() => { tries++; if (!box.isConnected || fill() || tries > 200) { clearInterval(timer); if (box.isConnected) fill(); } }, 1500);
+  const acts = el('div', 'acts');
+  if (t.drill !== 'tight') {
+    const tg = el('button', 'mb-btn mb-press mb-tap', '<span>SAY IT TIGHTER</span>');
+    tg.onclick = () => { const a = answers().filter(x => x.key === t.key)[0]; go({ kind: 'free', text: (a && a.q && a.q !== 'Free speak' ? a.q : t.prompt) || 'Your main point', label: 'Say it again, tighter, in 60 seconds', parent: t.key, how: 'tight' }, TIGHT); };
+    acts.appendChild(tg);
+  }
+  const rb = el('button', 'mb-btn mb-press mb-tap', '<span>JUST RAMBLE</span>');
+  rb.onclick = () => go({ kind: 'free', text: '' });
+  acts.appendChild(rb);
+  box.appendChild(acts);
+  return box;
 }
 /* Claude, in SPEAK.exe, files each free speak: a subject (which knowledge
    bank in ARC), a title for the bank, and up to three jumping off points.
@@ -2193,8 +2254,8 @@ async function sortFree() {
   const r = await askRefine('Tom rambled out loud in a free speak. File it, and find what it connects to in what he has said before. Reply with one JSON object and nothing else: ' +
     '{"subj": one of ' + JSON.stringify(SUBJ.concat([''])) + ' (empty when none fits), ' +
     '"title": the question or idea it answers, in his words, under 12 words, ' +
-    '"jumps": up to 3 prompts for his next ramble, one line each under 20 words, as {"text": the prompt, "kind": "link", "ask" or "thread", "with": [ids of earlier answers it draws on]}. ' +
-    'Give one of each kind where you can: "link" names a connection between this ramble and an earlier answer about a separate but related thing and asks him to talk it through; ' +
+    '"jumps": up to 4 prompts for his next ramble, one line each under 25 words, as {"text": the prompt, "kind": "push", "link", "ask" or "thread", "with": [ids of earlier answers it draws on]}. ' +
+    'Give one of each kind where you can. "push" only when he made a real claim: argue the strongest opposite view of it, the best version an expert who disagrees would give, and end by asking him to answer it; "link" names a connection between this ramble and an earlier answer about a separate but related thing and asks him to talk it through; ' +
     '"ask" is a clarifying question about something he said but left vague or unproven; "thread" is an idea he opened and did not finish.}' +
     '\n\nTHE RAMBLE:\n' + a.text +
     (others.length ? '\n\nWHAT HE SAID BEFORE (id: title: words):\n' + others.map(x => x.key + ': ' + x.q + ': ' + String(x.text).slice(0, 400)).join('\n') : ''));
@@ -2205,10 +2266,10 @@ async function sortFree() {
   const subj = SUBJ.indexOf(String(o.subj || '').toLowerCase()) >= 0 ? String(o.subj).toLowerCase() : '';
   Rec.patch('answer', a.date, a.key, { subj: subj, q: String(o.title || '').trim().slice(0, 140) || a.q, sorted: 1 });
   const known = {}; answers().forEach(x => { known[x.key] = 1; });
-  (Array.isArray(o.jumps) ? o.jumps : []).slice(0, 3).forEach((j, i) => {
+  (Array.isArray(o.jumps) ? o.jumps : []).slice(0, 4).forEach((j, i) => {
     const jo = j && typeof j === 'object' ? j : { text: j };
     const text = String(jo.text || '').trim().slice(0, 240), key = 'jump-' + a.key + '-' + i;
-    const how = ['link', 'ask', 'thread'].indexOf(jo.kind) >= 0 ? jo.kind : 'thread';
+    const how = ['push', 'link', 'ask', 'thread'].indexOf(jo.kind) >= 0 ? jo.kind : 'thread';
     const withs = (Array.isArray(jo.with) ? jo.with : []).map(String).filter(k => known[k] && k !== a.key).slice(0, 3);
     if (text && !Rec.has('topic', null, key)) Rec.set('topic', null, key, { text: text, kind: 'jump', how: how, with: withs, from: a.key, at: Date.now() });
   });
@@ -2945,11 +3006,13 @@ function finishTake(m, secs) {
     else if (q) Rec.set('ask', null, q.key, Object.assign({}, Rec.get('ask', null, q.key) || {}, { q: q.q, said: words, take: take.key }));
   }
   if (d.bank && T.prompt && (T.prompt.text || d === FS)) {
+    const fr = d === FS || d === TIGHT;
     const words = asrOn ? T.listener.out.chunks.join(' ').slice(0, 20000) : '';
-    Rec.set('answer', take.date, take.key, { q: T.prompt.text || 'Free speak', src: d === FS ? 'free' : T.prompt.src || '', term: T.prompt.term || '', bracket: T.prompt.bracket || '', subj: T.prompt.subj || (d === FT ? 'fitness' : ''),
-      text: words, words: asrOn ? T.listener.out.words : 0, dur: Math.round(secs), at: take.at });
-    if (d === FS && T.prompt.jump) Rec.patch('topic', null, T.prompt.jump, { used: Date.now() });
-    if (d === FS) setTimeout(sortFree, 500);
+    Rec.set('answer', take.date, take.key, { q: T.prompt.text || 'Free speak', src: fr ? 'free' : T.prompt.src || '', term: T.prompt.term || '', bracket: T.prompt.bracket || '', subj: T.prompt.subj || (d === FT ? 'fitness' : ''),
+      text: words, words: asrOn ? T.listener.out.words : 0, dur: Math.round(secs), at: take.at,
+      parent: T.prompt.parent || '', how: T.prompt.how || (d === TIGHT ? 'tight' : '') });
+    if (fr && T.prompt.jump) Rec.patch('topic', null, T.prompt.jump, { used: Date.now() });
+    if (fr) setTimeout(sortFree, 500);
   }
   if (T.clipP) { take.clipP = T.clipP; T.clipP.then(b => saveClip(take, b)); }
   Mobile.feedback(pass ? 'complete' : 'done');
@@ -3021,7 +3084,8 @@ function openWarm() {
 function numsOf(d, t) {
   const gs = t.goals || [], m = t.m || {};
   if (gs.length) return gs.map(g => METRICS[g.m].name.toLowerCase() + ' ' + (g.got == null ? 'not measured' : METRICS[g.m].fmt(g.got) + METRICS[g.m].unit)).join(', ');
-  return [m.wpm != null ? Math.round(m.wpm) + ' wpm' : '', m.fpm != null ? 'fillers ' + r1(m.fpm) + '/min' : ''].filter(Boolean).join(', ');
+  const mt = k => m[k] != null && METRICS[k] ? METRICS[k].name.toLowerCase() + ' ' + METRICS[k].fmt(m[k]) + METRICS[k].unit : '';
+  return [m.wpm != null ? Math.round(m.wpm) + ' wpm' : '', m.fpm != null ? 'fillers ' + r1(m.fpm) + '/min' : '', mt('eye'), mt('mouthEven')].filter(Boolean).join(', ');
 }
 /* a fix drill's sheet: again, or back to the take it came from on the same prompt */
 function fixActions(t, d) {
@@ -3038,7 +3102,7 @@ function showTake(t, html) {
   const m = t.m || {};
   UI.dialog({
     title: (d ? d.name : 'Warm-up').toUpperCase() + ' · ' +
-      (d && d.open ? 'DONE' : t.pass ? 'MET' : !(t.goals && t.goals.length) ? 'DONE'
+      (d && (d.open || d === TIGHT) ? 'DONE' : t.pass ? 'MET' : !(t.goals && t.goals.length) ? 'DONE'
         : t.goals.some(g => g.got == null) ? 'NOT MEASURED' : 'NOT MET'), width: 560,
     onClose: () => { if (cb) cb._stop(); },
     body: (b, h) => {
@@ -3091,6 +3155,11 @@ function showTake(t, html) {
         b.appendChild(el('p', 'muted', 'Marked: fillers and crutch phrases. The browser\'s transcript, so um and uh are mostly missing from it; held sounds stand in.'));
       } else if (d && d.asr) b.appendChild(el('p', 'muted', 'No transcript. Fillers are the held sounds only.'));
       if (d && !d.fix && t.tx && t.key) b.appendChild(contentBox(t, h));
+      if ((d === FS || d === TIGHT) && t.key) {
+        const par = t.p && t.p.parent && takes().filter(x => x.key === t.p.parent)[0];
+        if (par) b.insertBefore(el('p', 'muted', 'First take: ' + esc(numsOf(drillById(par.drill) || FS, par)) + '. This one: ' + esc(numsOf(d, t)) + '.'), b.firstChild.nextSibling);
+        b.appendChild(nextBox(t, h));
+      }
     },
     actions: d && d.fix ? fixActions(t, d) : d ? [{ label: 'CLOSE' }, { label: 'NEW PROMPT', fn: () => { if ((d === FT || d === OT) && t.prompt) fitSkip[String(t.prompt).toLowerCase()] = 1; startTake(d); } },
       { label: 'SAME PROMPT', kind: 'go', fn: () => { startTake(d, null, promptOf(t, d)); } }] : [{ label: 'CLOSE' }],
