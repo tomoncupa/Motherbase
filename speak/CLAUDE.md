@@ -594,6 +594,10 @@ Tom approved both through the SPEAK/knowledge master chat ("Yes, all three"). FR
 - **YOUR VOICE** gains a Posted column, every post's words read as one speaker.
 - **draftmade** (undated, keyed by the take; `tools/backup.html` takes it): the draft shows "Posted <day> as a <kind>, graded N" with the link, leaves POSSIBLE CONTENT, and SPEAK sets its own `draft.state` to `done`, `doneBy: 'post'`, `doneAt` from the row, only if the draft was open (`syncMade`). When the row goes (Tom marked the match wrong), a draft with `doneBy: 'post'` goes back to open; one he pressed MADE IT on stays made.
 
+## SPEAK.exe tray and desktop icon, 2026-11-16
+
+Tom: "give Speak a desktop icon and a tray icon". SPEAK.exe has a tray icon (`Tray` in `desktop/SpeakApp.cs`): a click brings it forward, its menu has Open SPEAK, Free speak, Drill menu and Quit SPEAK. The window's close button tucks it into the tray; Quit or Windows shutting down really closes it. A `SPEAK.lnk` on his desktop opens `desktop/SPEAK.exe` (made once by hand from a session, not by the program).
+
 ## DRILL MENU, added 2026-11-16 (SPEAK 1.0.26)
 
 Tom: *"populate the drills menu ... and then I also want you to recommend the best drill for what I'm currently working on. And I also like the idea of not stopping."*

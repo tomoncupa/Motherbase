@@ -115,6 +115,36 @@ class Speak : Form
         /* Start with Windows is on from the first open, because an overlay
            that has to be remembered each morning is not always on. */
         if (!bootSet) { SetBoot(true); bootSet = true; SaveCfg(); }
+        Tray();
+    }
+
+    /* ── the tray icon, 2026-11-16 (Tom: "give Speak a desktop icon and a
+       tray icon") ── A click brings SPEAK forward; its menu starts a free
+       speak or opens the drill menu straight away. The window's close button
+       tucks it into the tray; Quit in the tray's menu ends it. */
+    NotifyIcon tray;
+    bool quitting;
+    void Tray()
+    {
+        tray = new NotifyIcon { Icon = Icon, Text = TITLE, Visible = true };
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("Open SPEAK", null, (s, e) => Bring());
+        menu.Items.Add("Free speak", null, (s, e) => { Bring(); Run("openFree()"); });
+        menu.Items.Add("Drill menu", null, (s, e) => { Bring(); Run("openMenu()"); });
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Quit SPEAK", null, (s, e) => { quitting = true; Close(); });
+        tray.ContextMenuStrip = menu;
+        tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) Bring(); };
+    }
+    void Bring()
+    {
+        if (!Visible) Show();
+        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+        Activate();
+    }
+    void Run(string js)
+    {
+        try { if (web != null && web.CoreWebView2 != null) web.CoreWebView2.ExecuteScriptAsync(js); } catch { }
     }
 
     void Started(object sender, CoreWebView2InitializationCompletedEventArgs e)
@@ -259,8 +289,18 @@ class Speak : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
+        /* the close button tucks SPEAK into the tray; Windows shutting down,
+           or Quit in the tray's menu, really closes it */
+        if (!quitting && e.CloseReason == CloseReason.UserClosing && tray != null)
+        {
+            e.Cancel = true;
+            SaveCfg();
+            Hide();
+            return;
+        }
         base.OnFormClosing(e);
         SaveCfg();
+        if (tray != null) { tray.Visible = false; tray.Dispose(); }
     }
 
     /* ── start with Windows, in the title bar's own menu ── */
