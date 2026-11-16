@@ -728,3 +728,7 @@ Tom's screenshot: the dashed + box sat over WEIGHT and DESK TIME on his wide boa
 
 Tom: "Having a big dash box does not look refined at all. Just have it match ... the smallest widget size that actually has a function." Measured on the demo, every widget at each small size: 1 by 1 unit (67 by 30 px) shows something in 9 of 63, 2 by 1 in 16, 2 by 2 (146 by 72, one old cell) in 52, 4 by 3 in 59. The hint is now 2 by 2 units (`BW = BH = U`), replacing the 4 by 3 block of 2026-11-09, and a space smaller than that shows no hint, since no working card fits it. A widget added there still comes in at its own size, cut to the room.
 [TESTED] headless Chromium at 1918 and 1300: every hint 146 by 72, none over a card in 631 and 551 spots. Seen in passing, not from this change: on a reload mid-boot the demo logged "Sfx is not defined" and "Cannot access 'homeHeld' before initialization" (redrawHome reached before `let homeHeld`); not chased.
+
+## Needs from BLOCK, 2026-11-16: count from the new chapter
+
+BLOCK 1.0.26 counts its streaks from `Chapter.from('block')`. Three home cards should follow: STREAKS and EVERY & HABITS (`rhAnyState`, a copy of BLOCK's habit maths; BLOCK's `rhStreak` and `everyState` gained a `floor`) count from `Chapter.from('block')`, and CONSISTENCY, whose rows are TRAIN and STATUS facts, not ticks, from `Chapter.from('train')` and `Chapter.from('status')`.
