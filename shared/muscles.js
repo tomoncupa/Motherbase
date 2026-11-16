@@ -26,18 +26,33 @@
   'use strict';
   if (g.Muscles) return;
 
-  /* The groups, in the order a list shows them, each under its region. */
+  /* The muscles, in the order a list shows them, each under a heading. A
+     heading is only a heading, never a TRAIN group: Tom, 2026-11-16, no Core
+     and no Legs groups ("we have glutes, hamstrings, and quads"). */
   var GROUPS = [
     ['Chest', ['Upper Chest', 'Lower Chest']],
     ['Back', ['Lats', 'Upper Back', 'Upper Traps', 'Lower Traps', 'Lower Back']],
     ['Shoulders', ['Front Delts', 'Side Delts', 'Rear Delts', 'Rotator Cuff']],
     ['Arms', ['Biceps', 'Triceps', 'Forearm Flexors', 'Forearm Extensors']],
-    ['Core', ['Abs', 'Obliques', 'Serratus']],
-    ['Legs', ['Quads', 'Hamstrings', 'Glutes', 'Adductors', 'Calves', 'Tibialis']],
+    ['Trunk', ['Abs', 'Obliques', 'Serratus']],
+    ['Lower body', ['Quads', 'Hamstrings', 'Glutes', 'Adductors', 'Calves', 'Tibialis']],
     ['Other', ['Neck', 'Cardio']]
   ];
   var LIST = [], REGION = {};
   GROUPS.forEach(function (r) { r[1].forEach(function (m) { LIST.push(m); REGION[m] = r[0]; }); });
+
+  /* Prehab is a reason for a lift, not a muscle (Tom: "We do want to add
+     prehab"). A lift of one of these rules is FILED in TRAIN's Prehab group,
+     and its sets still count toward the muscles below. */
+  var PREHAB = ['External rotation', 'Y raise', 'Wall slide', 'Push up plus', 'Tibialis raise',
+    'Neck work', 'Knee-over-toe squat', 'Reverse nordic', 'Bird dog', 'Dead bug', 'Hip airplane',
+    'Forearm rotation', 'Finger extension', 'Scaption', 'Pull apart'];
+
+  /* Machine and gym brands say nothing about the movement, so they come off
+     before matching (Tom: "LGNDRY, that's just the brand of a machine"). A
+     name that is only a brand matches nothing and counts toward its TRAIN
+     group. Whole words only. */
+  var BRANDS = /\b(lgndry|legendary|ksyn|hammer strength|life ?fitness|precor|techno ?gym|nautilus|xpload|cybex|matrix|hoist|panatta|gym ?80|arsenal|atlantis|rogue|eleiko|iron ?tech|mtg|body ?strong|century|free ?motion|star ?trac|body ?solid|rep fitness|titan|watson|booty ?builder|nebula|newtech|gymleco|dhz|keiser|pure strength|insignia|icarian|tuff ?stuff|bodytone|primal|exigo|bh fitness|sportsart|nordictrack|bowflex|marcy|york|ivanko|kabuki|sorinex|elitefts|prime fitness|glute pro|cable motion|padel club|drogon|roger|otb)\b/g;
 
   /* Gym shorthand, spelled out. Whole words only. */
   var SHORT = [
@@ -64,6 +79,7 @@
   function norm(name) {
     var s = ' ' + String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
     SHORT.forEach(function (p) { s = s.replace(p[0], p[1]); });
+    s = s.replace(BRANDS, ' ');
     return s.replace(/\s+/g, ' ').trim();
   }
 
@@ -86,6 +102,13 @@
     ['Finger extension', 'iso', /finger extension|band extension|hand extensor/, { 'Forearm Extensors': 1 }],
     ['Neck work', 'iso', /neck (curl|extension|flexion|bridge|harness|raise)|neck harness|4 way neck|four way neck/, { Neck: 1 }],
     ['Dead bug', 'core', /dead ?bug|mcgill|curl up/, { Abs: 1 }],
+
+    /* ── conditioning and whole-body ── */
+    ['Thruster', 'squat', /thruster|squat (and|to) press|wall ball/, { Quads: 1, 'Front Delts': 0.75, Glutes: 0.5, Triceps: 0.5 }],
+    ['Sled', 'carry', /sled|prowler/, { Quads: 1, Glutes: 0.75, Calves: 0.5 }],
+    ['Battle ropes', 'carry', /battle rope|rope wave|rope slam/, { 'Front Delts': 1, 'Side Delts': 0.5, 'Forearm Flexors': 0.5, Abs: 0.25 }],
+    ['Turkish get up', 'carry', /turkish|get up/, { Obliques: 1, 'Front Delts': 0.5, Glutes: 0.5 }],
+    ['Burpee', 'cardio', /burpee|mountain climber|jumping jack|jump rope|skipping/, { Cardio: 1 }],
     ['Deadlift row', 'pull-h', /deadlift row/, { 'Upper Back': 1, Lats: 0.75, 'Lower Back': 0.5, Biceps: 0.5, Hamstrings: 0.25 }],
     ['Upright row to press', 'press-v', /upright row to press/, { 'Side Delts': 1, 'Front Delts': 0.75, 'Upper Traps': 0.5, Triceps: 0.25 }],
     ['Upright row', 'pull-v', /upright row|high pull/, { 'Side Delts': 1, 'Upper Traps': 0.75, Biceps: 0.25 }],
@@ -187,8 +210,8 @@
 
     /* ── arms ── */
     ['Reverse wrist curl', 'iso', /reverse wrist|wrist extension/, { 'Forearm Extensors': 1 }],
-    ['Reverse curl', 'iso', /reverse (grip |cable )?curl|zottman/, { 'Forearm Extensors': 1, Biceps: 0.5 }],
-    ['Wrist curl', 'iso', /wrist|forearm|gripper|hand grip|grip trainer|finger curl|dead hang|^hang$|bar hang/, { 'Forearm Flexors': 1 }],
+    ['Reverse curl', 'iso', /reverse (grip |cable )?curl|reverse grip.*curl|zottman/, { 'Forearm Extensors': 1, Biceps: 0.5 }],
+    ['Wrist curl', 'iso', /wrist|forearm|gripper|hand grip|grip trainer|finger curl|dead hang|^hang$|bar hang|pinch/, { 'Forearm Flexors': 1 }],
     ['Hammer curl', 'iso', /hammer (curl|bicep)|bicep hammer|arm blaster hammer|cross body|neutral curl|rope curl/, { Biceps: 1, 'Forearm Extensors': 0.5 }],
     ['Bicep curl', 'iso', /curl|\bbicep/, { Biceps: 1, 'Forearm Flexors': 0.25 }],
     ['Tricep extension', 'iso', /tricep|pushdown|pressdown|kickback|tate|extension/, { Triceps: 1 }],
@@ -206,11 +229,12 @@
       if (RULES[i].re.test(s)) {
         var sh = RULES[i].share, main = null;
         Object.keys(sh).forEach(function (m) { if (main == null || sh[m] > sh[main]) main = m; });
-        return { rule: RULES[i].name, pat: RULES[i].pat, share: sh, main: main };
+        return { rule: RULES[i].name, pat: RULES[i].pat, share: sh, main: main,
+          group: PREHAB.indexOf(RULES[i].name) >= 0 ? 'Prehab' : main };
       }
     }
     return null;
   }
 
-  g.Muscles = { version: '0.1.0', LIST: LIST, REGION: REGION, GROUPS: GROUPS, RULES: RULES, norm: norm, of: of };
+  g.Muscles = { version: '0.1.2', LIST: LIST, REGION: REGION, GROUPS: GROUPS, RULES: RULES, PREHAB: PREHAB, norm: norm, of: of };
 })(typeof window !== 'undefined' ? window : this);

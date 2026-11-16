@@ -14,6 +14,7 @@
 <script src="grade.js"></script>
 <script src="chapter.js"></script>
 <script src="goals.js"></script>
+<script src="muscles.js"></script>
 <script src="mobile.js"></script>
 <script src="sound.js"></script>
 <script src="ui.js"></script>
@@ -1111,6 +1112,25 @@ async function run() {
       map: ty => { const m = {}; (rows[ty] || []).forEach(r => { m[r.key] = r.payload; }); return m; }, on: () => {}, ready: () => Promise.resolve() };
     try { return fn({ name: 'Smoke', field: 'sm', match: 'Smk, pill=50, !bought', tick: 'Smoke=10', per: 1 }, D, at); } finally { window.Rec = real; }
   };
+  /* muscles.js: the master list. One level under the symptom: a specific
+     name must land on its own rule before a general one swallows it, so
+     these are the pairs that went wrong once (2026-11-16). */
+  const musRule = n => { const m = window.Muscles && Muscles.of(n); return m ? m.rule : null; };
+  ok('muscles: loaded, every share names a muscle on the list, every share 0 to 1', !!window.Muscles && Muscles.RULES.every(r =>
+    Object.keys(r.share).every(k => Muscles.LIST.indexOf(k) >= 0 && r.share[k] > 0 && r.share[k] <= 1)));
+  ok('muscles: a specific name beats the general rule it contains', [
+    ['Hanging Leg Raise', 'Ab work'], ['Leg Press Calf Raise', 'Calf raise'], ['Bb Row Machine SLDL', 'Stiff-leg deadlift'],
+    ['Straight-Arm Cable Pushdown', 'Straight-arm pulldown'], ['Cable Overhead Triceps Extension', 'Overhead tricep extension'],
+    ['Woodchop', 'Oblique work'], ['Trap Bar Shrug', 'Shrug'], ['Vertical Bench Curl', 'Bicep curl'], ['Dumbbell Kickback', 'Tricep extension'],
+    ['Bent Row (Open trap bar)', 'Bent-over row'], ['Rowing Machine', 'Rowing machine'], ['Jump Rope', 'Burpee']
+  ].every(p => musRule(p[0]) === p[1]));
+  ok('muscles: shorthand and brands come off (SLDL, RDL, OHP, LGNDRY alone matches nothing)',
+    musRule('SLDL') === 'Stiff-leg deadlift' && musRule('SL RDL') === 'Single-leg RDL' && musRule('BB OHP') === 'Overhead press' &&
+    musRule('LGNDRY Chest Press') === 'Bench press' && musRule('LGNDRY') === null);
+  ok('muscles: Tom\'s calls hold (chin up Biceps 1 Lats 0.8, a dip is triceps unless a chest dip, prehab files under Prehab)', (() => {
+    const c = Muscles.of('Chin Up'), d = Muscles.of('Dips'), cd = Muscles.of('Chest Dips'), er = Muscles.of('Cable External Rotation');
+    return c.share.Biceps === 1 && c.share.Lats === 0.8 && d.main === 'Triceps' && cd.main === 'Lower Chest' && er.group === 'Prehab';
+  })());
   ok('dose: loaded', !!window.Dose && typeof Dose.all === 'function' && typeof Dose.day === 'function');
   ok('dose: a number before or after the word, word=amount once a day, !words skipped, open todos and ideas left out', doseRun((x, D) => {
     const a = Dose.all(x).filter(d => d.src === 'journal').map(d => d.date.slice(8) + ':' + d.v).join();
