@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.111, 2026-11-16">
+<meta name="mb-version" content="1.0.112, 2026-11-16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2234,7 +2234,9 @@ const TD = {
     return days.map((d, i) => ({
       d: d, i: i, age: last - i,
       rw: Math.exp(-Math.LN2 * (last - i) / P.halfLife),
-      w: value(d, 'weight'),
+      /* the weigh-in less the water WM can account for (zero until it has
+         learned enough, and zero for a day it cannot read) */
+      w: WM.clean(d),
       /* A day he marked as not fully tracked has no usable intake, so it is
          null here and every reader already knows what null means: the day is
          skipped for intake and its weigh-in still counts toward the trend.
@@ -2576,6 +2578,218 @@ const TD = {
 TD._dirty = true;
 Rec.on(() => { TD._dirty = true; });
 Day.on(() => { TD._dirty = true; });
+
+/* ══════════════ WATER AND GUESSES ══════════════
+   Tom, 2026-11-16: "take into account time we eat, because if I have dinner
+   at night, then I'm gonna just weigh 2 or 5 pounds heavier", and the water
+   and sodium question. Two things learned from his own weigh-ins:
+
+   WATER. A morning weight is fat plus water plus food still in the gut. Three
+   things he already logs move the water: calories eaten in the 14 hours
+   before the weigh-in (food in the gut), the last 3 days of carbs against his
+   own 28-day normal (glycogen holds about 3 g of water a gram), and the last
+   2 days of sodium against his normal (body water holds about 3.2 g of sodium
+   a litre, and the kidneys pass most of a rise within days). Each day's
+   weight less its local trend is regressed on those three, pulled toward the
+   physiology figures in PRIOR by 14 days' worth of evidence, so it starts
+   near the textbook and becomes his. TD.frame reads weight through clean(),
+   so the whole TDEE runs on the cleaner line, and only once the fit has 21
+   days and explains a real share of the swing. Water drunk is left out on
+   purpose: it is gone within hours and says nothing about the morning.
+
+   GUESSES. Claude's food guesses may run low or high for him. Weekly, eaten
+   minus what the scale says is burn; across weeks with more and less guessed
+   food, the slope of that against the guessed calories is the factor. It is
+   pulled toward 1 (no correction) until the weeks argue otherwise, kept
+   between 0.6 and 1.8, and written onto every guessed meal by STATUS.exe only
+   (one writer, so two devices cannot argue): `g0` keeps Claude's own figures,
+   `gf` the factor applied. Every reader (totals, grade, TDEE, export) then
+   sees the corrected number with nothing else changed.                  */
+const WM = {
+  /* kilos per unit, converted to the weight unit in prior() */
+  PRIOR: { late: 0.0005, carb: 0.004, na: 0.15 },
+  MIN_DAYS: 21, PRIOR_DAYS: 14,
+  _m: null, _day: {},
+  /* each day's carbs, sodium and whether food was logged, read once per fit */
+  day(d) {
+    let o = WM._day[d];
+    if (!o) o = WM._day[d] = { fed: !dayUntracked(d) && meals(d).some(m => num(m.kcal) != null), carb: null, na: null };
+    if (o.fed && o.carb == null) { o.carb = WM.carb0(d); o.na = WM.na0(d); }
+    return o;
+  },
+
+  ev(d) { const r = Rec.get('ev', d, 'weight'); const e = r && r.e; return e && e.length ? e[e.length - 1] : null; },
+  /* sodium in grams: what food carried, plus what ELEMENT had him weigh out */
+  na0(d) {
+    let mg = meals(d).reduce((a, m) => a + (num(m.na, 0) || 0), 0);
+    Rec.all('dose', { date: d }).forEach(r => { const p = r.payload || {}; if (p.nut === 'na') mg += num(p.mg, 0) || 0; });
+    return mg / 1000;
+  },
+  na(d) { return WM.day(d).na; },
+  carb(d) { return WM.day(d).carb; },
+  carb0(d) { return meals(d).reduce((a, m) => a + (num(m.c, 0) || 0), 0); },
+  fed(d) { return WM.day(d).fed; },
+  /* calories eaten in the 14 hours before this morning's weigh-in */
+  late(d, e) {
+    const at = e && e.t ? e.t : new Date(d + 'T08:00:00').getTime();
+    let k = 0;
+    [Day.shift(d, -1), d].forEach(x => meals(x).forEach(m => {
+      const t = num(m.t); if (t != null && t <= at && t > at - 14 * 3600e3) k += num(m.kcal, 0) || 0;
+    }));
+    return k;
+  },
+  mean(days, f) { const v = days.filter(x => WM.fed(x)).map(f); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; },
+  /* kilos to the logged unit: lbPer() is pounds per logged unit */
+  prior() { const u = 2.20462 / TD.lbPer(); return { late: WM.PRIOR.late * u, carb: WM.PRIOR.carb * u, na: WM.PRIOR.na * u }; },
+
+  /* the three numbers for one day, each against his own normal */
+  x(d, e) {
+    if (!WM.fed(Day.shift(d, -1)) && !WM.fed(d)) return null;
+    const back = n => Day.last(n, Day.shift(d, -1));
+    const c3 = WM.mean(back(3), WM.carb), c28 = WM.mean(back(28), WM.carb);
+    const n2 = WM.mean(back(2), WM.na), n28 = WM.mean(back(28), WM.na);
+    return {
+      late: WM.late(d, e),
+      carb: c3 != null && c28 != null ? c3 - c28 : 0,
+      na: n2 != null && n28 != null ? n2 - n28 : 0,
+    };
+  },
+
+  model() {
+    if (WM._m) return WM._m;
+    return (WM._m = WM.fit(Day.last(120, Day.today())));
+  },
+
+  fit(days) {
+    const ws = days.map(d => { const e = WM.ev(d); return e ? { d: d, e: e, w: num(e.v) } : null; }).filter(o => o && o.w != null);
+    const P = WM.prior();
+    const out = { k: P, n: 0, use: false, sdRaw: null, sdClean: null, share: 0, lateMean: 0, need: WM.MIN_DAYS };
+    /* the local trend: a straight line through the weigh-ins a week either side */
+    const pts = [];
+    ws.forEach(o => {
+      const near = ws.filter(q => Math.abs(Day.diff(q.d, o.d)) <= 7);
+      if (near.length < 5) return;
+      const f = TD.wls(near.map(q => ({ i: Day.diff(q.d, o.d), y: q.w })), null);
+      const x = WM.x(o.d, o.e);
+      if (x) pts.push({ d: o.d, r: o.w - f.b, x: x });
+    });
+    out.n = pts.length;
+    if (pts.length < 8) return out;
+    /* late food is centred on his own average meal timing */
+    const lm = pts.reduce((a, p) => a + p.x.late, 0) / pts.length;
+    out.lateMean = lm;
+    const keys = ['late', 'carb', 'na'];
+    const X = pts.map(p => [p.x.late - lm, p.x.carb, p.x.na]);
+    const y = pts.map(p => p.r);
+    /* ridge toward the prior: A k = b, with A = X'X + L, b = X'y + L k0 */
+    const A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], b = [0, 0, 0];
+    X.forEach((row, n) => { for (let i = 0; i < 3; i++) { b[i] += row[i] * y[n]; for (let j = 0; j < 3; j++) A[i][j] += row[i] * row[j]; } });
+    keys.forEach((k, i) => {
+      const v = X.reduce((a, r) => a + r[i] * r[i], 0) / X.length;
+      const L = WM.PRIOR_DAYS * (v || 1);
+      A[i][i] += L; b[i] += L * P[k];
+    });
+    const k = WM.solve(A, b);
+    if (!k) return out;
+    /* a sign the body cannot have is not learned: fall back to the prior */
+    out.k = { late: k[0] > 0 ? k[0] : P.late, carb: k[1] > 0 ? k[1] : P.carb, na: k[2] > 0 ? k[2] : P.na };
+    const sd = a => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / a.length);
+    const fitted = X.map(r => out.k.late * r[0] + out.k.carb * r[1] + out.k.na * r[2]);
+    out.sdRaw = sd(y);
+    out.sdClean = sd(y.map((v, i) => v - fitted[i]));
+    out.share = out.sdRaw > 0 ? Math.max(0, 1 - Math.pow(out.sdClean / out.sdRaw, 2)) : 0;
+    out.use = pts.length >= WM.MIN_DAYS && out.share >= 0.05;
+    return out;
+  },
+
+  solve(A, b) {
+    const n = b.length, M = A.map((r, i) => r.concat([b[i]]));
+    for (let c = 0; c < n; c++) {
+      let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+      if (Math.abs(M[p][c]) < 1e-12) return null;
+      [M[c], M[p]] = [M[p], M[c]];
+      for (let r = 0; r < n; r++) if (r !== c) { const f = M[r][c] / M[c][c]; for (let j = c; j <= n; j++) M[r][j] -= f * M[c][j]; }
+    }
+    return M.map((r, i) => r[n] / r[i]);
+  },
+
+  /* the water on one morning, in the weight unit, or 0 */
+  water(d) {
+    const m = WM.model();
+    if (!m.use) return 0;
+    const x = WM.x(d, WM.ev(d));
+    if (!x) return 0;
+    return m.k.late * (x.late - m.lateMean) + m.k.carb * x.carb + m.k.na * x.na;
+  },
+  clean(d) {
+    const w = value(d, 'weight');
+    if (w == null || WM._busy) return w;
+    WM._busy = true;            /* fit() reads raw weights; never recurse */
+    try { return w - WM.water(d); } finally { WM._busy = false; }
+  },
+
+  /* ── the guess factor ── */
+  guessed(m) { return m.gs === 'claude'; },
+  orig(m) { return m.g0 && num(m.g0.k) != null ? num(m.g0.k) : num(m.kcal, 0) || 0; },
+  factor() {
+    const P = TD.P();
+    const rows = TD.frame(P, Day.today(), 126);
+    const weeks = [];
+    for (let s = 0; s + 7 <= rows.length; s += 7) {
+      const seg = rows.slice(s, s + 7);
+      let known = 0, guess = 0, days = 0;
+      seg.forEach(r => {
+        if (dayUntracked(r.d)) return;
+        const ms = meals(r.d);
+        if (!ms.length || ms.some(m => m.gs === 'wait')) return;
+        days++;
+        ms.forEach(m => { if (WM.guessed(m)) guess += WM.orig(m); else known += num(m.kcal, 0) || 0; });
+      });
+      const pts = seg.filter(r => r.w != null).map(r => ({ i: r.i, y: r.w }));
+      if (days < 4 || pts.length < 4) continue;
+      const f = TD.wls(pts, null);
+      weeks.push({ i: guess / days, y: known / days - f.m * P.ed * TD.lbPer() });
+    }
+    const withG = weeks.filter(w => w.i >= 100).length;
+    const out = { v: 1, raw: null, se: null, weeks: weeks.length, withG: withG };
+    if (weeks.length < 6 || withG < 3) return out;
+    const f = TD.wls(weeks, null);
+    if (!f.se) return out;
+    /* y = burn - g × guessed, so the slope is -g; pulled toward 1 with a
+       prior of give or take 0.25 */
+    const g = -f.m, se = f.se, ps = 0.25;
+    out.raw = g; out.se = se;
+    const post = (g / (se * se) + 1 / (ps * ps)) / (1 / (se * se) + 1 / (ps * ps));
+    out.v = Math.round(Math.max(0.6, Math.min(1.8, post)) * 100) / 100;
+    return out;
+  },
+
+  /* STATUS.exe only, once a day: learn the factor and put it on the meals */
+  apply() {
+    if (!guessHere()) return;
+    const st = S.get('guessFactor', null);
+    if (st && st.at === Day.today()) return WM.stamp(st.v);
+    const f = WM.factor();
+    S.set('guessFactor', { v: f.v, raw: f.raw, se: f.se, weeks: f.weeks, withG: f.withG, at: Day.today() });
+    WM.stamp(f.v);
+  },
+  stamp(g) {
+    let n = 0;
+    Rec.all('meal').forEach(r => {
+      const m = r.payload || {};
+      if (!WM.guessed(m)) return;
+      if (num(m.gf, 1) === g && (m.g0 || g === 1)) return;
+      const o = m.g0 || { k: m.kcal, lo: m.lo, hi: m.hi, p: m.p, c: m.c, f: m.f };
+      const sc = v => v == null ? v : Math.round(v * g);
+      Rec.patch('meal', r.date, r.key, { g0: o, gf: g, kcal: sc(o.k), lo: sc(o.lo), hi: sc(o.hi), p: sc(o.p), c: sc(o.c), f: sc(o.f) });
+      n++;
+    });
+    if (n) TD._dirty = true;
+    return n;
+  },
+};
+Rec.on(() => { WM._m = null; WM._day = {}; });
+Day.on(() => { WM._m = null; WM._day = {}; });
 
 /* ══════════════ THE ENTRY SHEET ══════════════
    Everything you log slides up from the bottom, within thumb reach, and
@@ -5656,7 +5870,7 @@ function foodRowLocked(d, x) {
    name asks again. */
 const GUESS = { flying: null, at: 0, t: null };
 const guessHere = () => DESK && !!(window.chrome && window.chrome.webview);
-function guessDrop(m) { ['gs', 'lo', 'hi', 'gserve', 'gwhy', 'err'].forEach(k => { delete m[k]; }); return m; }
+function guessDrop(m) { ['gs', 'lo', 'hi', 'gserve', 'gwhy', 'err', 'g0', 'gf'].forEach(k => { delete m[k]; }); return m; }
 function guessSoon() { if (!guessHere()) return; clearTimeout(GUESS.t); GUESS.t = setTimeout(guessRun, 2500); }
 function guessWaiting() {
   return Rec.all('meal').filter(r => r.payload && r.payload.gs === 'wait' && r.payload.name && r.date)
@@ -5725,10 +5939,11 @@ window.foodGuessBack = function (d) {
     Rec.patch('meal', date, key, ch);
     n++;
   });
-  if (n) { draw(); setTimeout(guessRun, 1000); }
+  if (n) { WM.apply(); draw(); setTimeout(guessRun, 1000); }
 };
 Rec.on(() => { if (guessHere() && !GUESS.flying) guessSoon(); });
-setInterval(() => { if (guessHere()) guessRun(); }, 2 * 60 * 1000);
+setInterval(() => { if (guessHere()) { guessRun(); WM.apply(); } }, 2 * 60 * 1000);
+setTimeout(() => { WM.apply(); }, 8000);
 
 /* Leaving a typed row: log it, change it, empty it, or hold it as a draft. */
 function foodCommit(d, r, x, did, nm, box) {
@@ -7031,6 +7246,25 @@ function drawTrends(m) {
     const cf = el('div');
     cf.innerHTML = '<div class="note">Confidence ' + e.conf + '%</div><div class="conf"><i style="width:' + e.conf + '%"></i></div>';
     c.appendChild(cf);
+  }
+  /* WATER AND GUESSES: what the scale line has had taken out, and how far
+     Claude's guesses are being moved */
+  if (e.tdee != null) {
+    const wm = WM.model(), u = esc(TD.unit());
+    if (wm.use) {
+      const last = Day.last(14, Day.today()).filter(d => WM.ev(d)).pop();
+      const wv = last ? WM.water(last) : 0;
+      c.appendChild(el('div', 'note', 'Water: ' + (Math.abs(wv) < .05 ? 'none' : (wv > 0 ? '+' : '') + r1(wv) + ' ' + u) +
+        ' on the last weigh-in from late food, carbs and sodium, taken out of the trend.'));
+    } else if (wm.n) {
+      c.appendChild(el('div', 'note', 'Water: learning from late food, carbs and sodium, ' + Math.min(wm.n, WM.MIN_DAYS) + ' of ' + WM.MIN_DAYS + ' days.'));
+    }
+    const gf = S.get('guessFactor', null);
+    if (gf && Rec.all('meal').some(r => r.payload && r.payload.gs === 'claude')) {
+      c.appendChild(el('div', 'note', gf.v !== 1
+        ? 'Guessed food: Claude\'s figures times ' + gf.v.toFixed(2) + ', learned from ' + gf.weeks + ' weeks.'
+        : 'Guessed food: no correction yet, ' + Math.min(gf.withG || 0, 3) + ' of 3 weeks with guesses.'));
+    }
   }
   m.appendChild(c);
 
