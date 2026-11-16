@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.126, 2026-11-16">
+<meta name="mb-version" content="1.0.127, 2026-11-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -3010,7 +3010,7 @@ const WIDGETS = {
         fig.style.cssText = 'flex:1 1 auto;min-height:0';
         fig.innerHTML = bodySvg(heat.v, {}, cfg && cfg.pose);
         col.appendChild(fig);
-        col.appendChild(el('div', 'empty', 'No working sets in the last ' + days + ' days'));
+        col.appendChild(el('div', 'empty', 'Every muscle is ready to train'));
         body.appendChild(col);
         return;
       }
@@ -3027,7 +3027,7 @@ const WIDGETS = {
         const row = el('div', 'row bh-row');
         row.innerHTML = '<span class="bh-dot" style="background:' + bodyColour(rec[k]) + ';opacity:' + bodyBright(heat.v[k], most) + '"></span>' +
           '<span class="nm">' + BODY_NAMES[k] + '</span><span class="rt">' + fmt(heat.v[k]) + '</span>' +
-          (rec[k] && partOn(cfg, 'rec') ? '<span class="bh-rec" title="' + Math.ceil(rec[k].left) + ' of its ' + rec[k].win + ' hours to recover">' +
+          (rec[k] && partOn(cfg, 'rec') ? '<span class="bh-rec" title="' + Math.ceil(rec[k].left) + ' of its ' + rec[k].win + ' hours to recover: ' + esc(rec[k].why) + '">' +
             ((typeof Icons !== 'undefined' && Icons.svg('rest', { size: 12 })) || '') + bodyHours(rec[k].left) + '</span>' : '<span class="bh-rec"></span>');
         list.appendChild(row);
       });
@@ -6740,12 +6740,88 @@ function setTime(r, sess) {
   const s = sess[r.date], at = s ? Date.parse(s.end || s.start || '') : NaN;
   return isNaN(at) ? Date.parse(r.date + 'T18:00:00') : at;
 }
-/* how long a muscle takes to come back, Tom's numbers: a big one 72 hours,
-   a small one 24 to 48. Where in that a small one lands is Claude's call:
-   the sets it got on its last day, 2 or fewer a day, 6 or more two. */
+/* How long a muscle takes to come back (Tom, 2026-11-16: "not just hyper
+   individualized to me ... the number of sets done, or how well performance
+   increases per session, calculated against time between sessions").
+   Two parts, for anyone's log:
+   1. The sets it got on its last day set the starting window: the window for
+      a full day of work (6 sets) is 72 hours for a big muscle and 48 for a
+      small one, the usual figures for hard training; 1 set is half that,
+      9 or more a quarter more (`bodyDose`). Half a set from an exercise that
+      also works it counts as half. [ASSUMED: the textbook figures, not
+      measured on him.]
+   2. His own log corrects it (`bodyLearn`): every pair of back-to-back days
+      within 4 days that trained the muscle, the hours between them, and how
+      the estimated 1RM on the same lifts moved, the middle pair of each gap.
+      The shortest gap after which he held it is when that muscle is back,
+      scaled to the sets of the day in question. A gap counts only with 8
+      pairs or more, and as not held only past a 2% drop, and the log counts for pairs / (pairs + 20). Tom's own
+      log, 16 Nov: most muscles have under 6 such pairs, so sets decide. Lifts with no plain weight (assisted, below
+      zero, time or distance) are left out of the comparison. */
 const BODY_BIG = { chest: 1, lats: 1, quads: 1, hams: 1, glutes: 1, lowback: 1 };
+const bodyDose = n => Math.max(0.5, Math.min(1.25, 0.4 + 0.1 * n));
+/* gaps that can say anything about recovery: past 4 days every muscle is
+   back, and a pair that far apart measures the block, not the rest */
+const BODY_GAPS = [[0, 36, 24], [36, 60, 48], [60, 96, 72]];
+let bodyLearnMemo = null;
+function bodyLearn() {
+  const all = Rec.all('set'), today = LifeOS.day(), key = today + '|' + all.length;
+  if (bodyLearnMemo && bodyLearnMemo.key === key) return bodyLearnMemo.out;
+  const exs = Rec.map('exercise'), cats = Rec.map('excat'), from = LifeOS.shift(today, -180);
+  const sess = {};
+  Rec.all('session').forEach(r => { if (r.date >= from) sess[r.date] = r.payload || {}; });
+  const M = {};   /* muscle -> date -> {t0, t1, n, best: {ex: e1rm}} */
+  all.forEach(r => {
+    if (!r.date || r.date < from || r.date > today) return;
+    const p = r.payload || {};
+    if (setIsWarm(p) || !setCounts(p, r.date, today)) return;
+    const ex = exs[p.ex];
+    if (!ex || !ex.cat) return;
+    const t = setTime(r, sess), kg = +p.kg || 0, reps = +p.r || 0;
+    const plain = kg > 0 && reps >= 1 && reps <= 20 && !(ex.assist === 1 || (ex.assist !== 0 && /assist/i.test(ex.name || '')));
+    const hit = (cat, share, own) => (bodyParts(cats[cat] && cats[cat].name) || []).forEach(k => {
+      const d = (M[k] = M[k] || {})[r.date] || (M[k][r.date] = { t0: t, t1: t, n: 0, best: {} });
+      d.t0 = Math.min(d.t0, t); d.t1 = Math.max(d.t1, t); d.n += share;
+      if (own && plain) { const e = kg * (1 + reps / 30); if (!(d.best[p.ex] >= e)) d.best[p.ex] = e; }
+    });
+    hit(ex.cat, 1, true);
+    if (ex.also) Object.keys(ex.also).forEach(c => { if (c !== ex.cat && cats[c]) hit(c, +ex.also[c] || 0, false); });
+  });
+  const out = {};
+  Object.keys(M).forEach(k => {
+    const ds = Object.keys(M[k]).sort(), pairs = [];
+    for (let i = 1; i < ds.length; i++) {
+      const a = M[k][ds[i - 1]], b = M[k][ds[i]];
+      const both = Object.keys(b.best).filter(e => a.best[e]);
+      if (!both.length) continue;
+      const ch = both.reduce((s, e) => s + b.best[e] / a.best[e] - 1, 0) / both.length;
+      pairs.push({ gap: (b.t0 - a.t1) / 36e5, ch: ch, n: a.n });
+    }
+    if (!pairs.length) return;
+    /* the middle pair of each gap, not the average: in Tom's log one pair
+       read +50% after a day and another -17% after four, which is the lift
+       and the rep range moving, not recovery (2026-11-16) */
+    const mid = a => { const z = a.slice().sort((x, y) => x - y), h = z.length >> 1; return z.length % 2 ? z[h] : (z[h - 1] + z[h]) / 2; };
+    const B = BODY_GAPS.map(g => { const ps = pairs.filter(p => p.gap >= g[0] && p.gap < g[1]);
+      return { mid: g[2], n: ps.length, ch: ps.length ? mid(ps.map(p => p.ch)) : 0 }; });
+    const ok = B.filter(b => b.n >= 8);
+    if (!ok.length) return;
+    /* within 2% is the same day twice: the noise of a rep or two */
+    const fine = b => b.ch >= -0.02;
+    /* the first gap with enough pairs already held: back by then, maybe
+       sooner (an upper bound). Not held: back by the first longer gap that
+       did (a lower bound), else by the longest seen. */
+    let ready, bound;
+    if (fine(ok[0])) { ready = ok[0].mid; bound = 'up'; }
+    else { const f = ok.find(fine); ready = f ? f.mid : 96; bound = 'down'; }
+    const ns = pairs.map(p => p.n).sort((x, z) => x - z), typ = ns[Math.floor(ns.length / 2)];
+    out[k] = { ready: ready, bound: bound, typ: typ, pairs: ok.reduce((s, b) => s + b.n, 0) };
+  });
+  bodyLearnMemo = { key: key, out: out };
+  return out;
+}
 function bodyRecovery(now) {
-  const exs = Rec.map('exercise'), cats = Rec.map('excat'), today = LifeOS.day(), from = LifeOS.shift(today, -3);
+  const exs = Rec.map('exercise'), cats = Rec.map('excat'), today = LifeOS.day(), from = LifeOS.shift(today, -6);
   const sess = {}, last = {}, day = {};
   Rec.all('session').forEach(r => { if (r.date >= from) sess[r.date] = r.payload || {}; });
   Rec.all('set').forEach(r => {
@@ -6763,12 +6839,24 @@ function bodyRecovery(now) {
     hit(ex.cat, 1);
     if (ex.also) Object.keys(ex.also).forEach(c => { if (c !== ex.cat && cats[c]) hit(c, +ex.also[c] || 0); });
   });
-  const out = {};
+  const L = bodyLearn(), out = {};
   Object.keys(last).forEach(k => {
-    const n = day[k][last[k].date];
-    const win = BODY_BIG[k] ? 72 : Math.round(24 + 24 * Math.max(0, Math.min(1, (n - 2) / 4)));
+    const n = day[k][last[k].date], base = BODY_BIG[k] ? 72 : 48;
+    const dose = base * bodyDose(n);
+    let win = dose, why = (Math.round(n * 2) / 2) + ' sets last time';
+    const me = L[k];
+    if (me) {
+      /* his gap, at his usual sets, scaled to this day's sets; an upper
+         bound only ever shortens the window, a lower bound only lengthens it */
+      const mine = me.ready * bodyDose(n) / bodyDose(me.typ);
+      const usable = me.bound === 'up' ? Math.min(mine, dose) : Math.max(mine, dose);
+      const w = me.pairs / (me.pairs + 20);
+      win = w * usable + (1 - w) * dose;
+      if (Math.abs(usable - dose) >= 1) why += '; your log, ' + me.pairs + ' pairs of sessions within 4 days: back to your best ' + (me.bound === 'up' ? 'within' : 'only after') + ' about ' + me.ready + ' hours';
+    }
+    win = Math.round(Math.max(12, Math.min(120, win)));
     const left = win - (now - last[k].t) / 36e5;
-    if (left > 0) out[k] = { left: left, win: win };
+    if (left > 0) out[k] = { left: left, win: win, why: why };
   });
   return out;
 }
@@ -7031,7 +7119,10 @@ function bodyColour(r) {
     ? 'color-mix(in oklab, var(--warn) ' + Math.round(g * 200) + '%, var(--danger))'
     : 'color-mix(in oklab, var(--success) ' + Math.round((g - 0.5) * 200) + '%, var(--warn))';
 }
-const bodyBright = (n, max) => (0.25 + 0.75 * (max ? n / max : 0)).toFixed(2);
+/* an untrained muscle is ready, so it is green at the floor, never grey:
+   the body after days off reads all go, not empty (Tom, 2026-11-16: "this
+   is meant to motivate me to train more often, not guilt me") */
+const bodyBright = (n, max) => (0.4 + 0.6 * (max ? n / max : 0)).toFixed(2);
 /* Wider collarbones, Tom, 2026-10-18: "widen the clavicles". Every point
    outside the neck moves out BODY_CLAV units (about 3.3 cm a side, so the
    shoulders go from about 35 to 41 cm across), the whole move at the
@@ -7128,10 +7219,8 @@ function bodySvg(v, rec, pose) {
   const mir = s => s + '<g transform="matrix(-1,0,0,1,200,0)">' + s + '</g>';
   const muscles = l => l.map(m => {
     const n = v[m[0]] || 0, r = rec && rec[m[0]];
-    const st = n > 0
-      ? 'fill:' + bodyColour(r) + ';fill-opacity:' + bodyBright(n, max) + ';stroke:var(--surface-1);stroke-opacity:.85;stroke-width:.5'
-      : 'fill:var(--surface-3);' + ink;
-    const tip = BODY_NAMES[m[0]] + ' · ' + (Math.round(n * 2) / 2) + ' sets' + (r ? ' · ' + Math.ceil(r.left) + 'h to recover' : n ? ' · ready' : '');
+    const st = 'fill:' + bodyColour(r) + ';fill-opacity:' + bodyBright(n, max) + ';stroke:var(--surface-1);stroke-opacity:.85;stroke-width:.5';
+    const tip = BODY_NAMES[m[0]] + ' · ' + (Math.round(n * 2) / 2) + ' sets' + (r ? ' · ' + Math.ceil(r.left) + 'h to recover' : ' · ready');
     return '<path d="' + m[1] + '" style="' + st + '"><title>' + tip + '</title></path>';
   }).join('');
   const skin = bodyWide(BODY_SKIN);
