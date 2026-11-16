@@ -939,14 +939,18 @@ class App : Form
             wideBack = Bounds; wideMode = mode; mode = "wide";
             Unzoom();
             var wa = Screen.FromRectangle(Bounds).WorkingArea;
-            Square();
             /* Always on top is for the widget and the status check, never
                Settings (Tom, 2026-11-16): it sits with his other windows. */
             Pin(false);
-            Bounds = wa;
+            /* A big window in the middle of the screen, the desktop showing
+               round it. The whole screen was "a bit inconvenient" (Tom,
+               2026-11-16, asking for a middle ground). */
+            int ww = Math.Min((int)(wa.Width * 0.8), 1760), wh = Math.Min((int)(wa.Height * 0.9), 960);
+            Bounds = new Rectangle(wa.Left + (wa.Width - ww) / 2, wa.Top + (wa.Height - wh) / 2, ww, wh);
+            Round();
             Front();
             OvPlace(true);
-            Log("settings took the screen at " + wa.Left + "," + wa.Top + " " + wa.Width + "x" + wa.Height);
+            Log("settings opened at " + Left + "," + Top + " " + Width + "x" + Height);
         }
         else
         {
