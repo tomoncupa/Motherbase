@@ -115,3 +115,5 @@ Settings size, STATUS.exe only, 2026-11-16: the whole screen was "a bit inconven
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
 
 1.0.107, 2026-11-16: a status check opened by hand (the widget's face button with no dot up) restarts the timer from now (`deskManual`). Tom: "if I start a manual checkup, then it should reset the timer that I set before". Clicked in headless Chromium on the demo: 5 s from due, pressed, next timed check 77 min out (setting 60 to 90).
+
+1.0.108, 2026-11-16: the morning check comes the moment he sits down (`DESK_SAT` 0, was 3), and a question answered elsewhere while a check is up (his phone's weight by live sync) leaves it unless typed into here (`checkShown`, a `Rec.on`). Tom: "the first thing that happens when it detects that I've sat down" and "I'd like for the weight on PC to not come up anymore if I've inputted it there already". Weight was already skipped when logged before the check opened. Driven in headless Chromium on the demo: weight landed untyped, gone; landed after typing 180, kept.

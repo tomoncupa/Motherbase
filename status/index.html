@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.107, 2026-11-16">
+<meta name="mb-version" content="1.0.108, 2026-11-16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -350,6 +350,10 @@ button.islehero{background:none;border:0;padding:0;margin:0;color:inherit;
    appears on the one being typed in; a blank row is faint underlines that
    run to the right edge like every other row. */
 .logrow.meal input[type=text]:not(:focus){border-color:transparent;background:transparent}
+/* a figure Claude guessed from the name alone, his pick: pink (Tom, 2026-11-16) */
+#app{--guess:color-mix(in srgb, var(--data-4) 70%, var(--text-1))}
+.logrow.guess .fnum,.logrow.guess .fnum::placeholder{color:var(--guess)}
+.logrow.guess .fnm small .gs{color:var(--guess)}
 /* the time line hangs under its own name, not halfway to the next meal */
 .logrow.meal .fnm small{position:relative;margin-top:calc(var(--s-3) * -1)}
 .logrow.fblank input[type=text]:not(:focus){border-color:transparent;border-bottom-color:var(--border);
@@ -5408,7 +5412,9 @@ function mealMarks(x) {
         ? r1(mult) + ' × ' + said.replace(/^1\s+/, '') : said;
     bits.push(esc(serveText), x.amt != null ? r1(x.amt) + ' ' + esc(x.unit || '') : '');
   }
-  if (errTag(x.err)) bits.push(errTag(x.err));
+  if (x.gs === 'wait') bits.push('<span class="gs">guessing</span>');
+  else if (x.gs === 'claude') bits.push('<span class="gs">guess ' + Math.round(num(x.lo, 0)) + ' to ' + Math.round(num(x.hi, 0)) + ' kcal' + (x.gserve ? ', ' + esc(x.gserve) : '') + '</span>');
+  else if (errTag(x.err)) bits.push(errTag(x.err));
   if (x.acct) bits.push(esc(x.acct));
   return bits.filter(Boolean).join(' · ');
 }
@@ -5463,7 +5469,7 @@ function foodDraftDrop(d, id) {
 /* A row he types into: a one-off meal already logged, a half-typed draft, or
    a blank. All five boxes are his. */
 function foodRowTyped(d, x, draft) {
-  const r = el('div', 'logrow' + (x ? ' meal' : draft ? ' unsaved' : ' fblank'));
+  const r = el('div', 'logrow' + (x ? ' meal' + (x.gs ? ' guess' : '') : draft ? ' unsaved' : ' fblank'));
   const did = draft ? draft.id : 'fd' + (++foodDraftN);
   const src = x || draft || {};
   const cell = el('div', 'fnm');
@@ -5485,6 +5491,7 @@ function foodRowTyped(d, x, draft) {
     const v = num(src[k[0]]);
     /* worked-out calories stay out of the box and show as its dim hint */
     if (v != null && !(k[0] === 'kcal' && src.kx)) i.value = foodFig(k[0], v);
+    if (x && x.gs === 'wait') i.placeholder = '…';
     box[k[0]] = i; r.appendChild(i);
   });
   const hint = () => {
@@ -5643,6 +5650,24 @@ function foodCommit(d, r, x, did, nm, box) {
   if (x) {
     const was = Rec.get('meal', d, x.key);
     if (!was) return;
+    /* A guessed meal: a new name asks again, a typed number makes the figures
+       his own, and boxes left as they were keep the guess. */
+    if (was.gs) {
+      const same = FOODCOLS.every(k => (v[k[0]] == null ? '' : foodFig(k[0], v[k[0]])) ===
+        (num(was[k[0]]) == null || (k[0] === 'kcal' && was.kx) ? '' : foodFig(k[0], num(was[k[0]]))));
+      const renamed = name && name !== was.name;
+      if (same && !renamed) return;
+      if (same || (was.gs === 'wait' && !any)) {
+        if (!renamed) return;
+        const next = guessDrop(Object.assign({}, was));
+        next.name = name; next.gs = 'wait';
+        FOODCOLS.forEach(k => { delete next[k[0]]; }); delete next.kx;
+        Rec.set('meal', d, x.key, next);
+        setTimeout(guessSoon, 0);
+        if (!foodBusy()) draw(); else foodPending = true;
+        return;
+      }
+    }
     if (!any) {
       /* every number taken out: the meal goes, with an undo */
       Rec.del('meal', d, x.key); mealSpend(d, x.key, null); Mobile.feedback('untick');
@@ -5651,7 +5676,7 @@ function foodCommit(d, r, x, did, nm, box) {
     } else {
       /* merged into what is there: price, account, sodium and the rest of
          a one-off stay as they were */
-      const next = put(Object.assign({}, was));
+      const next = put(was.gs ? guessDrop(Object.assign({}, was)) : Object.assign({}, was));
       if (name) next.name = name; else nm.value = was.name || '';
       if (JSON.stringify(next) === JSON.stringify(was)) return;
       Rec.set('meal', d, x.key, next); mealSpend(d, x.key, next);
@@ -5659,8 +5684,19 @@ function foodCommit(d, r, x, did, nm, box) {
     }
   } else {
     if (!name && !any) { foodDraftDrop(d, did); r.classList.remove('unsaved'); return; }
-    if (!name || !any) {
-      /* half a row: kept on screen until it has a name and a number */
+    if (name && !any) {
+      /* a name and no numbers: Claude guesses them on the PC (guessRun) */
+      const key = uid();
+      r._skip = true;
+      Rec.set('meal', d, key, { fid: null, food: '', name: name, amt: 1, unit: 'serving', serve: 'one off', t: Date.now(), gs: 'wait' });
+      foodDraftDrop(d, did);
+      Mobile.feedback('tick');
+      setTimeout(guessSoon, 0);
+      if (!foodBusy()) draw(); else foodPending = true;
+      return;
+    }
+    if (!name) {
+      /* half a row: kept on screen until it has a name */
       foodDraftSet(d, did, { name: name, p: v.p, c: v.c, f: v.f, kcal: v.kcal });
       r.classList.add('unsaved');
       r.title = name ? 'Add a number to log it' : 'Add a name to log it';
@@ -9246,7 +9282,9 @@ addEventListener('pagehide', () => { if (DESK && HOSTED) screenFlush(); });
    answered, the timer holds, so a timer that came due overnight does not
    jump in the moment he touches the mouse. With no launcher there is no
    stretch to count from, and the timer carries it as before. */
-const DESK_SAT = 3;   /* minutes at the PC before the first check of the day */
+/* Tom, 2026-11-16: "change morning check to be the first thing that happens
+   when it detects that I've sat down". Was 3 minutes. */
+const DESK_SAT = 0;   /* minutes at the PC before the first check of the day */
 let deskFirst = false; /* the check on the screen is the day's first */
 function deskFirstDue() {
   if (!HOSTED || !scrSpan) return null;
@@ -9735,6 +9773,17 @@ function deskMorning() {
   return out;
 }
 let checkDoing = '';     /* "what are you doing now", as typed */
+/* Tom, 2026-11-16: "sometimes I'm gonna input my weight on my phone before I
+   even sit down, and I'd like for the weight on PC to not come up anymore".
+   A question answered somewhere else while the check is up (his weight from
+   the phone, arriving by live sync) leaves it, unless he has typed into it
+   here. Typed boxes keep what is in them (`checkVals`). */
+let checkShown = [];
+Rec.on(() => {
+  if (!checkOn) return;
+  const now = checkFields().map(f => f.id);
+  if (checkShown.some(id => now.indexOf(id) < 0 && checkVals[id] == null)) checkDraw();
+});
 
 /* ── the only way out is through ──
    Tom: "it should never go away until answered." So there is no close button,
@@ -9753,6 +9802,7 @@ function checkDraw() {
   win.appendChild(el('div', 'nwask', checkOnly || checkMorn.length ? 'New day.' : 'How are you?'));
 
   const fs = checkFields();
+  checkShown = fs.map(f => f.id);
   fs.forEach(f => {
     win.appendChild(el('div', 'nwlabel', esc(String(f.label || f.id).toUpperCase())));
     /* A number is typed, and optional: it is a reading you may not have.
@@ -10338,7 +10388,7 @@ function drawDeskTab(pane) {
   });
   if (c.on && DESK) {
     const mins = deskNext ? Math.round((deskNext - Date.now()) / 60000) : null;
-    pane.appendChild(el('div', 'note', deskFirstDue() != null ? 'The first one today comes ' + DESK_SAT + ' minutes after you sit down.'
+    pane.appendChild(el('div', 'note', deskFirstDue() != null ? (DESK_SAT ? 'The first one today comes ' + DESK_SAT + ' minutes after you sit down.' : 'The first one today comes when you sit down.')
       : mins == null ? 'Working out when the next one is.'
       : mins <= 0 ? 'The next one is due now.'
       : 'The next one is about <b>' + mins + '</b> minute' + (mins === 1 ? '' : 's') + ' away.'));
