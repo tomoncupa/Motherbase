@@ -1072,6 +1072,25 @@ async function run() {
     return a !== b && A && A.t > 0 && A.made === t && A.dur === 45 && A.text === 'Walk' && A.at === null &&
       B && /^\d\d:\d\d$/.test(B.at) && C && C.text === 'at 8 is words here' && C.pri === 2 && C.kind === 'todo';
   })());
+  /* 2026-11-16, from the state-machine sweep: a todo could be done and
+     cancelled at once. Cancelling a done one undoes its tick; ticking a
+     cancelled one uncancels it. */
+  ok('journal: cancelling a done todo clears its done day; ticking a cancelled one uncancels it', (() => {
+    const t = Day.today(), real = window.Rec, rows = {};
+    const keep = (k, p) => { rows[k] = JSON.parse(JSON.stringify(p)); };
+    window.Rec = { appId: 'smoke', all: () => [], has: () => false, setting: () => null, del: () => {},
+      get: (ty, dd, k) => (ty === 'note' && rows[k]) ? JSON.parse(JSON.stringify(rows[k])) : null,
+      set: (ty, dd, k, p) => { if (ty === 'note') keep(k, p); },
+      patch: (ty, dd, k, ch) => { if (ty === 'note') keep(k, Object.assign({}, rows[k], ch)); } };
+    let a, b, A, B;
+    try {
+      rows.a = { kind: 'todo', text: 'smoke a', done: 0, t: 1 };
+      rows.b = { kind: 'todo', text: 'smoke b', done: 0, t: 1, cancelled: 1 };
+      J.tick(t, 'a', { publish: false }); J.cancel(t, 'a', true); A = rows.a;
+      J.tick(t, 'b', { publish: false }); B = rows.b;
+    } finally { window.Rec = real; }
+    return A.cancelled === 1 && !A.done && !A.doneOn && !A.doneAt && B.done === 1 && !B.cancelled && B.doneOn === t;
+  })());
   /* ---- doses ----
      shared/dose.js is the one answer to "how much was taken, and when", read
      by HOME's HALF-LIFE card and STATUS's tiles. Through a stand-in store, so

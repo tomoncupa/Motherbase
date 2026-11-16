@@ -907,3 +907,11 @@ lane, a ghost on the page, and the board refusing to redraw.
   Escape went back; FORGE took a row landing mid-drag after the drop. Review
   212/212 WebKit at 390, 197/197 Chromium at 1280, smoke 483/483. **Not
   watched:** a touch screen's own pointercancel, on a real device.
+
+## A todo is never done and cancelled at once (2026-11-16, `journal.js`)
+
+From the state-machine sweep. `cancel(on)` on a done todo now undoes the
+tick the way unticking does (`doneOn`, `doneAt` go, `by` goes back); it
+left them, so a cancelled todo still showed as done on that day. `tick` on
+a cancelled todo sets `cancelled: 0`, and a repeat's done copy is never
+cancelled. One `journal:` smoke check through a stand-in store.

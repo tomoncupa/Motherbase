@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.23, 2026-11-16">
+<meta name="mb-version" content="1.0.24, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -2750,7 +2750,14 @@ function lastLine(d, t) {
    early with the button. Then the numbers, the goals, met or not, saved. */
 const T = { live: false };
 async function startTake(d, warmStep, prompt) {
-  if (T.live) return;
+  /* one take at a time (2026-11-16): `live` is set only once the microphone
+     answers, so a double tap started two takes; and the last take's numbers
+     are still being finished for 600ms after STOP */
+  if (T.live || T.starting || T.finishing) return;
+  T.starting = true;
+  try { return await startTakeNow(d, warmStep, prompt); } finally { T.starting = false; }
+}
+async function startTakeNow(d, warmStep, prompt) {
   const wantCam = !!(d && camOn() && (d.cam || optOn('camAll', 1)));
   const wantAsr = !!(d && (asrOn() || (d.forceAsr && ASR)));
   let stream;
@@ -2764,6 +2771,9 @@ async function startTake(d, warmStep, prompt) {
     else { UI.toast('No microphone.', { bad: true }); return; }
   }
   T.live = true; T.d = d; T.warm = warmStep || null; T.stream = stream;
+  /* nothing carries over from the last take: a STOP during this take's
+     count read the last one's start and saved a junk take */
+  T.calibrated = false; T.t0 = 0; T.from = 0;
   T.origin = d && d.fix ? fixFrom : null;
   T.goals = d ? d.goals(targets()) : [];
   T.liveLast = 0;
@@ -2966,9 +2976,11 @@ function stopTake(cancel) {
   const m = T.ear.summary({ from: T.from });
   if (!m) { UI.toast('Nothing heard.', { bad: true }); return; }
   /* the ASR's last chunk can land a moment after stop */
+  T.finishing = true;
   setTimeout(() => finishTake(m, secs), 600);
 }
 function finishTake(m, secs) {
+  T.finishing = false;
   if (T.warm) return finishWarm(m, secs);
   const d = T.d;
   const tx = T.listener ? scan(T.listener.out.chunks) : null;

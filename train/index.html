@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.88, 2026-11-16">
+<meta name="mb-version" content="1.0.89, 2026-11-16">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -5485,6 +5485,10 @@ function holdToMove(list, opts) {
     d.live = true;
     d.lx = d.x; d.ly = d.y;
     d.row.classList.add('lifted');
+    /* a row landing from sync while a row is up used to redraw this list
+       out from under the finger and lose the move (2026-11-16): the redraw
+       waits until the row is put down */
+    TRAIN.holding = true;
     Mobile.haptic('heavy');
     try { list.setPointerCapture(d.id); } catch (x) {}
     requestAnimationFrame(edge);
@@ -5527,6 +5531,8 @@ function holdToMove(list, opts) {
     d = null;
     clearTimeout(was.t);
     if (!was.live) return;
+    TRAIN.holding = false;
+    if (TRAIN.holdOwed) { TRAIN.holdOwed = false; setTimeout(function () { TRAIN.reindex(); draw(); }, 0); }
     eatUntil = Date.now() + 500;
     try { list.releasePointerCapture(was.id); } catch (x) {}
     was.row.classList.remove('lifted');
@@ -12938,6 +12944,7 @@ Rec.ready(function () { trainBooted = true; boot(); });
 var redrawSoon = null;
 Rec.on(function () {
   if (TRAIN.importing || redrawSoon) return;      /* the importer redraws once, at the end */
+  if (TRAIN.holding) { TRAIN.holdOwed = true; return; }   /* a row is up: holdToMove redraws on the drop */
   redrawSoon = setTimeout(function () { redrawSoon = null; TRAIN.reindex(); draw(); }, 0);
 });
 Day.on(draw);
@@ -12952,7 +12959,10 @@ document.getElementById('restchip').onclick = function () {
   menuAt({ clientX: innerWidth - 12, clientY: 96 }, [
     { label: 'Open Timer', fn: function () { TRAIN.restSheet(); } },
     { label: 'Add 30 seconds', fn: function () {
-      TRAIN.rest.until += 30000; TRAIN.rest.fired = false; drawRestBar();
+      /* saved, or coming back to the app put the old end time back */
+      TRAIN.rest.until += 30000; TRAIN.rest.fired = false;
+      Rec.setting(APP.id, 'rest', { until: TRAIN.rest.until, len: TRAIN.rest.len });
+      drawRestBar();
     } },
     { label: 'Stop timer', fn: function () { TRAIN.restStop(); } },
   ], 'REST TIMER');

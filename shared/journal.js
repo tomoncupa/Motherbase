@@ -594,7 +594,7 @@ function tick(date, key, opts) {
     R.set('note', d, copyKey, Object.assign({}, cur, {
       t: Date.now(), made: d, ord: R.all('note', { date: d }).length,
       done: 1, doneAt: stamp, doneOn: d, by: stamp, byAuto: 1, byWas: null,
-      due: due, rep: null, of: key,
+      due: due, rep: null, of: key, cancelled: 0,
     }));
     if (next) R.set('note', date, key, Object.assign({}, cur, { due: next }));
     pub([d, date]);
@@ -603,14 +603,18 @@ function tick(date, key, opts) {
   }
 
   const was = !!cur.done;
-  R.set('note', date, key, Object.assign({}, cur, {
+  const next = Object.assign({}, cur, {
     done: was ? 0 : 1,
     by: was ? (cur.byWas || null) : stamp,
     byWas: was ? null : (cur.byAuto ? (cur.byWas || null) : (cur.by || null)),
     byAuto: was ? 0 : 1,
     doneAt: was ? null : stamp,
     doneOn: was ? null : d,
-  }));
+  });
+  /* ticking a cancelled todo means it got done after all: it stops being
+     cancelled, so a line is never done and cancelled at once (2026-11-16) */
+  if (!was && cur.cancelled) next.cancelled = 0;
+  R.set('note', date, key, next);
   pub([date]);
   return { round: false, done: !was, next: null, text: cur.text, at: cur.at || null,
     undo() { R.set('note', date, key, cur); pub([date]); } };
@@ -781,7 +785,14 @@ function moveToTomorrow(date, key, src, from) {
 /* Cancelled is not deleted. A task you decided not to do is a real outcome,
    and deleting it pretends it was never planned. */
 function cancel(date, key, on, src) {
-  return patchNote(date, key, on ? { cancelled: 1, done: 0 } : { cancelled: 0 }, src);
+  if (!on) return patchNote(date, key, { cancelled: 0 }, src);
+  /* Cancelling a done todo undoes the tick the way unticking does: its done
+     day and time go, so it no longer shows as done on that day anywhere
+     (2026-11-16; it kept doneOn, doneAt and by). */
+  const cur = Rec().get('note', date, key) || {};
+  const ch = { cancelled: 1, done: 0 };
+  if (cur.done || cur.doneOn) Object.assign(ch, { doneAt: null, doneOn: null, by: cur.done ? (cur.byWas || null) : (cur.by || null), byWas: null, byAuto: 0 });
+  return patchNote(date, key, ch, src);
 }
 
 /* ── which day ──
