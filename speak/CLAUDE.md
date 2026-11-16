@@ -577,6 +577,7 @@ can just skip directly into a free flowing ramble."*
   'jump'`, keyed `jump-<take key>-<n>` so two devices write the same rows;
   starting from one marks it `used`. A ramble made on the phone is filed the
   next time SPEAK.exe opens.
+- **Points build off each other** (SPEAK 1.0.21). Tom: *"my talking points get synthesized off of each other ... if I talk about separate but related things, you can prompt me on the connection and clarifying questions. So the goal here is to also build upon my knowledge banks and get my thoughts out into an external medium while also improving how I speak."* Claude reads the ramble beside his twenty newest other answers (any kind) and makes up to three points, one of each where it can: `how: 'link'` (a connection between this ramble and earlier answers, ids in `with`), `ask` (a clarifying question about something left vague), `thread` (an idea not finished). The sheet says which, and names the answers a link joins.
 - **Only free speaks make jumping off points** for now. The wallpaper
   showing them is OUTER HEAVEN's work, reading `topic` rows with `kind:
   'jump'` and no `used` from the nightly backup.

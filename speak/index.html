@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.20, 2026-11-16">
+<meta name="mb-version" content="1.0.21, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -2157,7 +2157,10 @@ function openFree() {
       const list = el('div', 'list');
       js.forEach(j => {
         const r = el('button', 'row mb-plate mb-press mb-tap');
-        r.innerHTML = '<span class="tx"><span class="nm">' + esc(j.text) + '</span></span>';
+        const ttl = k => { const x = answers().filter(y => y.key === k)[0]; return x ? x.q : ''; };
+        const sub = j.how === 'link' ? 'Connects ' + [ttl(j.from)].concat((j.with || []).map(ttl)).filter(Boolean).map(s => '"' + s + '"').join(' and ')
+          : j.how === 'ask' ? 'Clarify: from "' + ttl(j.from) + '"' : 'Open thread' + (ttl(j.from) ? ': from "' + ttl(j.from) + '"' : '');
+        r.innerHTML = '<span class="tx"><span class="nm">' + esc(j.text) + '</span><span class="sub">' + esc(sub) + '</span></span>';
         r.onclick = () => { h.close(); startTake(FS, null, { kind: 'free', text: j.text, label: 'Jumping off point', jump: j.key }); };
         Mobile.hold(r, e => UI.menu(e && e.clientX || 0, e && e.clientY || 0, [
           { label: 'Not this one', kind: 'bad', fn: () => { Rec.patch('topic', null, j.key, { used: Date.now(), skip: 1 }); h.close(); openFree(); } },
@@ -2181,20 +2184,33 @@ async function sortFree() {
   const a = answers().filter(x => x.src === 'free' && !x.sorted && !SORT.tried[x.key] && wordsOf(x.text || '').length >= 30).pop();
   if (!a) return;
   SORT.busy = true; SORT.tried[a.key] = 1;
-  const r = await askRefine('Tom rambled out loud in a free speak. File it. Reply with one JSON object and nothing else: ' +
+  /* Tom, 2026-11-16: "my talking points get synthesized off of each other
+     ... if I talk about separate but related things, you can prompt me on
+     the connection and clarifying questions." So Claude reads this ramble
+     beside his twenty newest other answers, any kind, and the points are a
+     connection between two of them, a clarifying question, an open thread. */
+  const others = answers().filter(x => x.key !== a.key && x.text).slice(0, 20);
+  const r = await askRefine('Tom rambled out loud in a free speak. File it, and find what it connects to in what he has said before. Reply with one JSON object and nothing else: ' +
     '{"subj": one of ' + JSON.stringify(SUBJ.concat([''])) + ' (empty when none fits), ' +
     '"title": the question or idea it answers, in his words, under 12 words, ' +
-    '"jumps": up to 3 prompts he could ramble on next, each one line under 15 words, pulled from threads he opened and did not finish}.' +
-    '\n\nTHE RAMBLE:\n' + a.text);
+    '"jumps": up to 3 prompts for his next ramble, one line each under 20 words, as {"text": the prompt, "kind": "link", "ask" or "thread", "with": [ids of earlier answers it draws on]}. ' +
+    'Give one of each kind where you can: "link" names a connection between this ramble and an earlier answer about a separate but related thing and asks him to talk it through; ' +
+    '"ask" is a clarifying question about something he said but left vague or unproven; "thread" is an idea he opened and did not finish.}' +
+    '\n\nTHE RAMBLE:\n' + a.text +
+    (others.length ? '\n\nWHAT HE SAID BEFORE (id: title: words):\n' + others.map(x => x.key + ': ' + x.q + ': ' + String(x.text).slice(0, 400)).join('\n') : ''));
   SORT.busy = false;
   let o = null;
   try { const mm = String(r && r.text || '').match(/\{[\s\S]*\}/); o = mm ? JSON.parse(mm[0]) : null; } catch (e) { o = null; }
   if (!o) return;
   const subj = SUBJ.indexOf(String(o.subj || '').toLowerCase()) >= 0 ? String(o.subj).toLowerCase() : '';
   Rec.patch('answer', a.date, a.key, { subj: subj, q: String(o.title || '').trim().slice(0, 140) || a.q, sorted: 1 });
+  const known = {}; answers().forEach(x => { known[x.key] = 1; });
   (Array.isArray(o.jumps) ? o.jumps : []).slice(0, 3).forEach((j, i) => {
-    const text = String(j || '').trim().slice(0, 200), key = 'jump-' + a.key + '-' + i;
-    if (text && !Rec.has('topic', null, key)) Rec.set('topic', null, key, { text: text, kind: 'jump', from: a.key, at: Date.now() });
+    const jo = j && typeof j === 'object' ? j : { text: j };
+    const text = String(jo.text || '').trim().slice(0, 240), key = 'jump-' + a.key + '-' + i;
+    const how = ['link', 'ask', 'thread'].indexOf(jo.kind) >= 0 ? jo.kind : 'thread';
+    const withs = (Array.isArray(jo.with) ? jo.with : []).map(String).filter(k => known[k] && k !== a.key).slice(0, 3);
+    if (text && !Rec.has('topic', null, key)) Rec.set('topic', null, key, { text: text, kind: 'jump', how: how, with: withs, from: a.key, at: Date.now() });
   });
   setTimeout(sortFree, 1500);
 }
