@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.37, 2026-11-17">
+<meta name="mb-version" content="1.0.38, 2026-11-17">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -214,6 +214,19 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .prompt .frame span{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);text-transform:uppercase;
   color:var(--text-2);padding:var(--s-1) var(--s-2);border-radius:var(--radius-sm);background:var(--surface-1)}
 .prompt .cue{display:block}
+.prompter .cue{padding:var(--s-1) var(--s-2);border-radius:var(--radius-sm);cursor:pointer}
+.prompter .cue.now{background:var(--surface-1)}
+.prompter .cue.done{opacity:.5}
+.prompt .hit{font-weight:700;text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:var(--s-1)}
+.prompt .slow{text-decoration:underline dotted;text-underline-offset:var(--s-1)}
+.prompt .pz{display:inline-block;height:1em;vertical-align:middle;border-left:var(--border-width) solid var(--text-muted);margin:0 var(--s-1)}
+.prompt .pz.long{border-right:var(--border-width) solid var(--text-muted);padding-left:var(--s-1)}
+.endw{display:flex;flex-wrap:wrap;gap:var(--s-2) var(--s-4)}
+.endw span{min-width:0}
+.prompt .e{font-weight:700;text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:var(--s-1)}
+.endl{margin:var(--s-2) 0}
+.endsbox{margin-bottom:var(--s-3)}
+.endsbox p{margin:var(--s-1) 0}
 textarea.scx{width:100%;min-height:calc(var(--s-10) * 2);margin-top:var(--s-3);line-height:var(--lh-body)}
 /* ── the widget: SPEAK.exe, small and on top, one button ── */
 #wid{display:none}
@@ -734,6 +747,8 @@ const METRICS = {
   contrast:{ name: 'Contrasts', unit: '', fmt: v => Math.round(v), note: 'not ... but, instead of, rather than, from the transcript' },
   repeatOpen:{ name: 'Repeated openings', unit: '', fmt: v => Math.round(v), note: 'the most lines that started the same way, or a three-word run said again' },
   cover:   { name: 'Script said', unit: '%', fmt: v => Math.round(v), note: 'the script\u2019s words heard in order in the transcript' },
+  ends:    { name: 'Endings landed', unit: '%', fmt: v => Math.round(v), note: 'the last sound of each word, heard in the transcript' },
+  marks:   { name: 'Marks held', unit: '%', fmt: v => Math.round(v), note: 'pause and slow marks in the script, checked against the ear' },
   penGain: { name: 'Pen out', unit: '%', fmt: v => Math.round(v), note: 'crispness after the pen came out, against with it in' },
 };
 const OPS = { in: (v, t) => v >= t[0] && v <= t[1], le: (v, t) => v <= t, ge: (v, t) => v >= t };
@@ -1165,6 +1180,19 @@ const LIB = [
     goals: t => [{ m: 'pitch', op: 'ge', v: t.pitch }],
     why: 'The actor\'s operative word: one word in each line carries the meaning. Stress it, and keep the rest level, and the listener hears the point. Stress everything and nothing stands out.',
     how: 'Read each line. Hit the word in capitals louder and higher; say every other word plainly.' },
+  { id: 'lib-ends', skill: 'clear', name: 'Ending sounds: words', style: 'read', kind: 'ends', dur: 40, asr: true, needsAsr: true, endings: true,
+    goals: t => [{ m: 'ends', op: 'ge', v: 90 }],
+    why: 'A dropped last sound is the commonest reason clear speech still sounds mumbled. Every word here turns into another word when its ending goes (card becomes car), so the transcript catches each drop. Words you drop come back until you land them twice running.',
+    how: 'Read each word with a short pause after it. Land the underlined ending, and add no vowel after it.' },
+  { id: 'lib-endlines', skill: 'clear', name: 'Ending sounds: in lines', style: 'read', kind: 'endlines', dur: 45, asr: true, needsAsr: true, endings: true,
+    goals: t => [{ m: 'ends', op: 'ge', v: 85 }],
+    why: 'An ending that only holds in a list is not learned yet. In a sentence the next word swallows it, which is where drops really happen.',
+    how: 'Read each line at your normal pace. Land every underlined ending.' },
+  { id: 'lib-prompter', skill: 'clear', name: 'Teleprompter, marked', style: 'long', kind: 'prompter', asr: true, prompter: true,
+    get dur() { return Math.round(scriptSecs(curScript() || { text: PROMPT_SAMPLE }) * 1.4) + 15; },
+    goals: t => [{ m: 'marks', op: 'ge', v: 70 }],
+    why: 'Radio and voiceover readers mark their scripts: the word to hit, where to pause, where to slow down. Reading the marks out loud is how a delivery gets rehearsed, not just the words.',
+    how: 'Read your script as it scrolls with you. Hit the underlined words, stop at each bar, slow down on the dotted parts. Tap a line if the scroll falls behind.' },
 ];
 const FIXES = [
   { id: 'fix-pause-word', skill: 'clean', name: 'Pause, then the word', style: 'long', kind: 'topic', dur: 45, asr: true, live: 'held',
@@ -1370,6 +1398,221 @@ function showPost(r) {
    that fits what he is working on now at the top. The pick: FOCUS's fix
    drill; else crutch phrases in his posts or takes this fortnight, Land it,
    no tag; else Don't stop. */
+/* ══════════════ ENDINGS and the MARKED PROMPTER (SPEAK 1.0.38) ══════════════
+   Tom, 2026-11-17: "a list of words that make me practice pronouncing the
+   last syllable or consonant rather than having a speech", and the creator
+   teleprompter "that shows the script as you speak it, and then it shows how
+   to intone and tempo".
+   ENDINGS: each word is half of a pair where dropping the ending makes the
+   other word (card, car). Whisper and the browser's recogniser both guess the
+   likely word, so a plain "firs" still comes back "first"; a pair forces a
+   choice, and the drop shows. Missed words come back (`endOwed`) until landed
+   twice running, worked out from the takes' `endW` and never stored.
+   PROMPTER: script marks, *hit*, / pause, // long pause, _slow_. It follows
+   him by the ear's syllable count against the script's, so it needs no
+   transcript and runs inside SPEAK.exe. After the take each pause and slow
+   mark is checked against the ear's pauses and syllable rate. Emphasis is
+   shown, not measured. */
+const END_PAIRS = [['card', 'car'], ['build', 'bill'], ['find', 'fine'], ['mind', 'mine'], ['field', 'feel'], ['cold', 'coal'], ['hold', 'hole'], ['told', 'toll'],
+  ['gold', 'goal'], ['sold', 'soul'], ['bolt', 'bowl'], ['fault', 'fall'], ['belt', 'bell'], ['felt', 'fell'], ['past', 'pass'], ['last', 'lass'], ['mist', 'miss'],
+  ['meant', 'men'], ['went', 'when'], ['tent', 'ten'], ['paint', 'pain'], ['joint', 'join'], ['band', 'ban'], ['wild', 'while'], ['heard', 'her'], ['bored', 'bore'],
+  ['played', 'play'], ['stayed', 'stay'], ['tried', 'try'], ['moved', 'move'], ['lived', 'live'], ['called', 'call'], ['filled', 'fill'], ['helped', 'help'],
+  ['worked', 'work'], ['walked', 'walk'], ['stopped', 'stop'], ['asked', 'ask'], ['failed', 'fail'], ['sets', 'set'], ['reps', 'rep'], ['lifts', 'lift'],
+  ['gains', 'gain'], ['weights', 'weight'], ['meals', 'meal'], ['trained', 'train'], ['lifted', 'lift'], ['rested', 'rest'], ['gained', 'gain'], ['burned', 'burn'],
+  ['results', 'result']];
+const END_LINES = ['I {lifted} the {weights} and {rested} two minutes.', 'She {trained} hard and {built} real {results}.', 'Four {sets}, eight {reps}, then the {last} one.',
+  'He {asked} what {worked} and what {failed}.', 'We {walked} the {field} in the {cold}.', 'You {told} me what {worked} in the {past}.',
+  'They {moved} the {band} and {played} till late.', 'Your {meals} {filled} the gap and the {gains} {stayed}.', 'I {tried}, I {stopped}, I {lived}.',
+  'The {paint} on the {tent} {felt} wet.', 'He {called}, I {heard}, and we {went}.', 'Your {lifts} {helped} more than your {meals}.',
+  'I {meant} to {hold} the {belt} tight.', 'We {gained} more than we {burned} that week.'];
+const endDrop = w => { const p = END_PAIRS.filter(x => x[0] === w)[0]; return p ? p[1] : null; };
+/* each target word's results, oldest first: 1 landed, 0 not */
+function endHist() {
+  const h = {};
+  takes().forEach(t => { if (t.endW) Object.keys(t.endW).forEach(w => { (h[w] = h[w] || []).push(t.endW[w] === 1 ? 1 : 0); }); });
+  return h;
+}
+/* owed: missed last time, or the time before. Two clean in a row clears it */
+const endOwed = h => Object.keys(h).filter(w => { const a = h[w], n = a.length; return a[n - 1] === 0 || (n >= 2 && a[n - 2] === 0); });
+function endPick(n) {
+  const h = endHist(), owed = endOwed(h);
+  const fresh = END_PAIRS.map(p => p[0]).filter(w => !h[w]), rest = END_PAIRS.map(p => p[0]).filter(w => h[w] && owed.indexOf(w) < 0);
+  const out = [];
+  pick(owed, n).concat(pick(fresh, n), pick(rest, n)).forEach(w => { if (out.length < n && out.indexOf(w) < 0) out.push(w); });
+  return pick(out, out.length);
+}
+const lineTargets = l => (l.match(/\{([^}]+)\}/g) || []).map(x => x.slice(1, -1).toLowerCase());
+function endLinesPick(n) {
+  const owed = endOwed(endHist());
+  const score = l => lineTargets(l).filter(w => owed.indexOf(w) >= 0).length + Math.random() * 0.5;
+  const lines = END_LINES.slice().sort((a, b) => score(b) - score(a)).slice(0, n);
+  return { lines: lines, items: [].concat.apply([], lines.map(lineTargets)) };
+}
+/* the word with its ending underlined: the last consonants, or -ed */
+function endWord(w) {
+  const m = w.match(/(ed|[^aeiouy]+)$/i), i = m ? w.length - m[1].length : w.length;
+  return esc(w.slice(0, i)) + '<b class="e">' + esc(w.slice(i)) + '</b>';
+}
+/* each target looked for in the next eight words heard: the word itself is
+   landed (1), its dropped twin is dropped (0), neither is not heard (-1) */
+function endScore(items, text) {
+  const said = wordsOf(text), all = {}, w = {};
+  let at = 0;
+  items.forEach(x => {
+    const drop = endDrop(x);
+    let got = -1;
+    for (let j = at; j < Math.min(said.length, at + 8); j++) {
+      if (said[j] === x) { got = 1; at = j + 1; break; }
+      if (drop && said[j] === drop) { got = 0; at = j + 1; break; }
+    }
+    (all[x] = all[x] || []).push(got);
+  });
+  /* a word said twice is landed only if no copy of it was dropped */
+  Object.keys(all).forEach(x => { const a = all[x]; w[x] = a.indexOf(0) >= 0 ? 0 : a.indexOf(1) >= 0 ? 1 : -1; });
+  const ks = Object.keys(w), hit = ks.filter(k => w[k] === 1).length;
+  return { w: w, hit: hit, n: ks.length, pct: ks.length ? Math.round(hit / ks.length * 100) : 0 };
+}
+/* the transcript arrived after the take (SPEAK.exe writes it on the PC) */
+function endsApply(t, text) {
+  const d = drillById(t.drill);
+  if (!d || !d.endings || !text || !t.p || !t.p.items) return;
+  const r = endScore(t.p.items, text), x = Rec.get('take', t.date, t.key) || t;
+  const goals = (x.goals || []).map(g => g.m === 'ends' ? Object.assign({}, g, { got: r.pct, ok: OPS[g.op](r.pct, g.v) }) : g);
+  Rec.patch('take', t.date, t.key, { m: Object.assign({}, x.m || {}, { ends: r.pct }), goals: goals, pass: goals.length && goals.every(g => g.ok) ? 1 : 0, endW: r.w });
+}
+function endsBox(t) {
+  const box = el('div', 'endsbox mb-plate');
+  let tries = 0;
+  const fill = () => {
+    if (!box.isConnected && tries) return;
+    const x = Rec.get('take', t.date, t.key) || t, w = x.endW;
+    box.innerHTML = '';
+    if (!w) {
+      box.appendChild(el('p', 'muted', window.MB_HEAR ?'Writing the transcript on this PC, then checking each ending…' : 'No transcript, so the endings could not be checked. Turn the transcript on in Settings.'));
+      if (window.MB_HEAR && tries++ < 120) setTimeout(fill, 1500);
+      return;
+    }
+    const ks = Object.keys(w), hit = ks.filter(k => w[k] === 1);
+    box.appendChild(el('p', null, '<b>Landed ' + hit.length + ' of ' + ks.length + '.</b>'));
+    const miss = ks.filter(k => w[k] !== 1);
+    if (miss.length) box.appendChild(el('p', null, miss.map(k => '<b>' + esc(k) + '</b> ' + (w[k] === 0 ? 'came out as ' + esc(endDrop(k) || '') : 'not heard')).join(' · ')));
+    const owed = endOwed(endHist());
+    box.appendChild(el('p', 'muted', owed.length ? 'Coming back next time: ' + esc(owed.slice(0, 12).join(', ')) + (owed.length > 12 ? ' and ' + (owed.length - 12) + ' more' : '') + '.' : 'Nothing owed. Every word you have tried is landing.'));
+  };
+  fill(); tries = 1;
+  return box;
+}
+const PROMPT_SAMPLE = 'Most people do not have a *motivation* problem. //\nThey have a _plan_ problem. /\nThey start with the *finished* version, / and quit in week *two*. //\nStart smaller than feels *worth* it. /\nLet it get _boring._ /\nBoring is what *works.*';
+const stripMarks = s => String(s || '').replace(/\/+/g, ' ').replace(/[*_]/g, '').replace(/ {2,}/g, ' ');
+function sylOf(w) {
+  w = String(w).toLowerCase().replace(/[^a-z]/g, '');
+  if (!w) return 0;
+  if (w.length <= 3) return 1;
+  w = w.replace(/(?:[^laeiouy]es|[^laeiouy]ed|[^laeiouy]e)$/, '').replace(/^y/, '');
+  const m = w.match(/[aeiouy]{1,2}/g);
+  return Math.max(1, m ? m.length : 1);
+}
+/* a marked script: each line's words drawn with their marks, where each line
+   starts and ends in syllables, and every mark at its syllable */
+function parseMarks(text) {
+  const lines = [], marks = [];
+  let syl = 0, hit = false, slow = false, hitA = 0, slowA = 0;
+  String(text || '').split(/\n+/).map(x => x.trim()).filter(Boolean).forEach((line, li) => {
+    const a = syl, html = [];
+    line.split(/\s+/).forEach(tok => {
+      if (/^\/{1,}[.,;:!?]*$/.test(tok)) { const lg = tok.indexOf('//') === 0; html.push('<span class="pz' + (lg ? ' long' : '') + '"></span>'); marks.push({ kind: lg ? 'long' : 'pause', at: syl, line: li }); return; }
+      let t = tok, after = '';
+      const tail = t.match(/(\/{1,})([.,;:!?]*)$/);
+      if (tail && tail[1].length < t.length) { after = tail[1]; t = t.slice(0, t.length - tail[0].length) + tail[2]; }
+      if (t.charAt(0) === '*') { hit = true; hitA = syl; t = t.slice(1); }
+      if (t.charAt(0) === '_') { slow = true; slowA = syl; t = t.slice(1); }
+      const endHit = /\*[.,;:!?]*$/.test(t), endSlow = /_[.,;:!?]*$/.test(t);
+      t = t.replace(/[*_]/g, '');
+      const n = sylOf(t);
+      html.push('<span class="' + (hit ? 'hit ' : '') + (slow ? 'slow' : '') + '">' + esc(t) + '</span>');
+      syl += n;
+      if (endHit && hit) { hit = false; marks.push({ kind: 'hit', at: hitA, to: syl, line: li }); }
+      if (endSlow && slow) { slow = false; marks.push({ kind: 'slow', at: slowA, to: syl, line: li }); }
+      if (after) { const lg = after.length >= 2; html.push('<span class="pz' + (lg ? ' long' : '') + '"></span>'); marks.push({ kind: lg ? 'long' : 'pause', at: syl, line: li }); }
+    });
+    lines.push({ html: html.join(' '), a: a, b: syl, words: stripMarks(line).split(/\s+/).slice(0, 4).join(' ') });
+  });
+  return { lines: lines, marks: marks, total: syl };
+}
+/* the line he is on, by syllables heard. A tap on a line moves him there */
+function prompterFollow(s) {
+  const P = T.pm; if (!P || !P.box) return;
+  const all = T.ear.summary({ from: T.from }), heard = all ? all.syll : 0;
+  P.log.push([s, heard]);
+  const pos = heard + P.off;
+  let li = P.pm.lines.findIndex(l => pos < l.b);
+  if (li < 0) li = P.pm.lines.length - 1;
+  if (li === P.cur) return;
+  P.cur = li;
+  P.els.forEach((e, i) => { e.classList.toggle('now', i === li); e.classList.toggle('done', i < li); });
+  const e = P.els[li]; if (e) P.box.scrollTop = Math.max(0, e.offsetTop - P.box.offsetTop - P.box.clientHeight / 3);
+}
+function prompterEl(p) {
+  const pm = parseMarks(p.text);
+  const box = el('div', 'prompt read mb-scroll prompter');
+  box.appendChild(el('div', 'muted', esc(p.title || 'Your script')));
+  const els = pm.lines.map((l, i) => {
+    const e = el('span', 'cue mb-press', l.html);
+    e.onclick = () => { if (T.pm && T.pm.box === box) { const last = T.pm.log[T.pm.log.length - 1]; T.pm.off = l.a - (last ? last[1] : 0); T.pm.cur = -1; T.pm.taps++; } };
+    box.appendChild(e); return e;
+  });
+  T.pm = { pm: pm, box: box, els: els, log: [[0, 0]], off: 0, cur: -1, taps: 0 };
+  return box;
+}
+/* after the take: when the ear passed each mark, and whether a pause sat
+   there or the syllables slowed. Times are about right: the log is once a
+   second, so a pause counts within a second and a half either side */
+function marksGrade(P, pz) {
+  if (!P || !P.pm.marks.length || P.log.length < 3) return null;
+  const log = P.log, heardEnd = log[log.length - 1][1];
+  if (heardEnd < P.pm.total * 0.4) return { short: true, n: 0, hit: 0, list: [] };
+  const cross = at => { const tgt = at - P.off; for (let i = 1; i < log.length; i++) if (log[i][1] >= tgt) { const a = log[i - 1], b = log[i], f = b[1] > a[1] ? (tgt - a[1]) / (b[1] - a[1]) : 0; return a[0] + (b[0] - a[0]) * f; } return null; };
+  const t0 = cross(0), t1 = log[log.length - 1][0], rate = heardEnd / Math.max(1, t1 - (t0 || 0));
+  const list = [];
+  P.pm.marks.forEach(mk => {
+    if (mk.kind === 'hit') { list.push({ kind: 'hit', line: mk.line, hit: null }); return; }
+    const t = cross(mk.at);
+    if (t == null) { list.push({ kind: mk.kind, line: mk.line, hit: 0, unread: 1 }); return; }
+    if (mk.kind === 'slow') { const tb = cross(mk.to); const r = tb && tb > t ? (mk.to - mk.at) / (tb - t) : null; list.push({ kind: 'slow', line: mk.line, hit: r != null && r <= rate * 0.9 ? 1 : 0 }); return; }
+    const need = mk.kind === 'long' ? 0.8 : 0.25;
+    list.push({ kind: mk.kind, line: mk.line, hit: pz.some(p => p[0] >= t - 1.5 && p[0] <= t + 1.5 && p[1] >= need) ? 1 : 0 });
+  });
+  const graded = list.filter(x => x.hit != null), hit = graded.filter(x => x.hit).length;
+  return { n: graded.length, hit: hit, pct: graded.length ? Math.round(hit / graded.length * 100) : null, list: list };
+}
+function marksBox(t) {
+  const g = t.mk, box = el('div', 'endsbox mb-plate');
+  if (!g) return box;
+  if (g.short) { box.appendChild(el('p', 'muted', 'Less than half the script was heard, so the marks were not checked.')); return box; }
+  const sc = (t.p && t.p.text) ? parseMarks(t.p.text) : null;
+  const k = kind => g.list.filter(x => x.kind === kind || (kind === 'pause' && x.kind === 'long'));
+  const pz = k('pause'), sl = k('slow'), hi = k('hit');
+  box.appendChild(el('p', null, '<b>Marks held: ' + g.hit + ' of ' + g.n + '.</b> ' + (pz.length ? 'Pauses ' + pz.filter(x => x.hit).length + ' of ' + pz.length + '. ' : '') + (sl.length ? 'Slow parts ' + sl.filter(x => x.hit).length + ' of ' + sl.length + '. ' : '') + (hi.length ? 'Emphasis on ' + hi.length + ' words is shown, not measured yet.' : '')));
+  const miss = g.list.filter(x => x.hit === 0);
+  if (miss.length && sc) box.appendChild(el('p', 'muted', 'Missed: ' + miss.slice(0, 6).map(x => (x.kind === 'slow' ? 'slow down in ' : 'pause in ') + '“' + esc((sc.lines[x.line] || {}).words || '') + '…”').join(' · ')));
+  if (t.mkTaps) box.appendChild(el('p', 'muted', 'You moved the scroll by hand ' + t.mkTaps + ' time' + (t.mkTaps === 1 ? '' : 's') + '.'));
+  return box;
+}
+/* MARK IT FOR ME, in SPEAK.exe: Claude adds the marks and changes no words */
+async function markScript(ta, btn) {
+  const was = ta.value;
+  if (!wordsOf(was).length) return;
+  btn.disabled = true; btn.querySelector('span').textContent = 'MARKING…';
+  const r = await askRefine('Add delivery marks to this script for a direct, authoritative creator talking to camera, somewhere between Alex Hormozi and Jocko Willink. ' +
+    'Use only these marks: *word* around the one word in a sentence that carries the meaning (one per sentence at most), / for a short pause, // before or after the line that matters most (two or three in the whole script), _words_ around a phrase to slow down on (one or two in the whole script). ' +
+    'Do not change, add or remove any word, and keep every line break. Reply with the marked script only, nothing before or after it.\n\nTHE SCRIPT:\n' + stripMarks(was));
+  btn.disabled = false; btn.querySelector('span').textContent = 'MARK IT FOR ME';
+  const out = String(r && r.text || '').trim();
+  if (!out) { UI.toast(esc((r && r.error) || 'Claude did not answer.'), { bad: true }); return; }
+  if (wordsOf(stripMarks(out)).join(' ') !== wordsOf(stripMarks(was)).join(' ')) { UI.toast('Claude changed some words, so the marks were not used.', { bad: true }); return; }
+  ta.value = out; ta.dispatchEvent(new Event('input'));
+  UI.toast('Marked. CANCEL keeps your script as it was.');
+}
 const MENU_GROUPS = [
   ['CRUTCH PHRASES AND FILLERS', d => d.skill === 'clean'],
   ['KEEP IT MOVING', d => d.skill === 'flow'],
@@ -1717,6 +1960,9 @@ function promptFor(kind, d) {
   if (kind === 'read') { const p = pick(PASSAGES, 1)[0]; return { kind: 'read', name: p.name, text: p.text }; }
   if (kind === 'twister') return { kind: 'twister', items: pick(TWISTERS, 3) };
   if (kind === 'stress') return { kind: 'bullets', items: pick(STRESS_LINES, 4) };
+  if (kind === 'ends') return { kind: 'ends', items: endPick(10) };
+  if (kind === 'endlines') { const x = endLinesPick(4); return { kind: 'endlines', lines: x.lines, items: x.items }; }
+  if (kind === 'prompter') { const sc = curScript(); return sc ? { kind: 'script', key: sc.key, title: sc.title, text: sc.text, cue: 'full' } : { kind: 'script', key: '', title: 'A sample, marked', text: PROMPT_SAMPLE, cue: 'full' }; }
   if (kind === 'prep') return { kind: 'frame', text: promptFor('topic').text, frame: ['Point', 'Reason', 'Example', 'Point again'] };
   if (kind === 'three') return { kind: 'frame', text: promptFor('topic').text, frame: ['First', 'Second', 'Third'] };
   if (kind === 'psr') return { kind: 'frame', text: promptFor('topic').text, frame: ['The problem', 'What was done', 'What changed'] };
@@ -1726,7 +1972,10 @@ function promptFor(kind, d) {
 }
 function promptEl(p) {
   const box = el('div', 'prompt' + (p.kind === 'read' || (p.kind === 'script' && p.cue !== 'none') ? ' read mb-scroll' : ''));
-  if (p.kind === 'bullets') box.innerHTML = '<ul>' + p.items.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>';
+  if (p.kind === 'script' && p.cue === 'full') return prompterEl(p);
+  if (p.kind === 'ends') box.innerHTML = '<div class="muted">Land the underlined ending</div><div class="endw">' + p.items.map(w => '<span>' + endWord(w) + '</span>').join('') + '</div>';
+  else if (p.kind === 'endlines') box.innerHTML = '<div class="muted">Land every underlined ending</div>' + p.lines.map(l => '<div class="endl">' + l.split(/(\{[^}]+\})/).map(x => /^\{/.test(x) ? endWord(x.slice(1, -1)) : esc(x)).join('') + '</div>').join('');
+  else if (p.kind === 'bullets') box.innerHTML = '<ul>' + p.items.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>';
   else if (p.kind === 'twister') box.innerHTML = p.items.map(i => '<div>' + esc(i) + '</div>').join('');
   else if (p.kind === 'read') box.innerHTML = '<div class="muted">' + esc(p.name) + '</div>' + esc(p.text);
   else if (p.kind === 'hook') box.innerHTML = '<div class="muted">Start on this line</div>' + esc(p.text);
@@ -1738,7 +1987,7 @@ function promptEl(p) {
   else if (p.kind === 'script') {
     const lines = (p.text || '').split(/\n+/).map(x => x.trim()).filter(Boolean);
     box.innerHTML = '<div class="muted">' + (p.cue === 'none' ? 'From memory' : esc(p.title || 'Your script')) + '</div>' +
-      (p.cue === 'none' ? esc(p.title || 'Your script') : lines.map(l => '<span class="cue">' + esc(p.cue === 'cue' ? l.split(/\s+/).slice(0, 3).join(' ') + ' \u2026' : l) + '</span>').join(''));
+      (p.cue === 'none' ? esc(p.title || 'Your script') : lines.map(l => stripMarks(l)).map(l => '<span class="cue">' + esc(p.cue === 'cue' ? l.split(/\s+/).slice(0, 3).join(' ') + ' \u2026' : l) + '</span>').join(''));
   }
   else box.textContent = p.text;
   return box;
@@ -1746,7 +1995,7 @@ function promptEl(p) {
 /* the prompt a take was given, so SAME PROMPT can give it again. Older takes
    kept only the words, so the shape is rebuilt from the drill's kind. */
 function promptOf(t, d) {
-  if (t.p) return t.p.kind === 'script' ? promptFor('script', d) : t.p;
+  if (t.p) return t.p.kind === 'script' ? promptFor(d && d.kind === 'prompter' ? 'prompter' : 'script', d) : t.p;
   if (!t.prompt || !d) return null;
   if (d.kind === 'bullets' || d.kind === 'twister') return { kind: d.kind, items: t.prompt.split(' | ') };
   if (d.kind === 'read') { const p = PASSAGES.filter(x => x.text === t.prompt)[0]; return p ? { kind: 'read', name: p.name, text: p.text } : null; }
@@ -2361,6 +2610,7 @@ function hearTake(t, blob) {
       const words = wordsOf(text).length, m = Object.assign({}, x.m || {}, { words: words, crutch: sc.crutch, repeats: Math.max((x.m || {}).repeats || 0, sc.repeats) });
       if (m.spoken) m.wpm = Math.round(words / (m.spoken / 60));
       Rec.patch('take', t.date, t.key, { tx: text.slice(0, 4000), asr: 1, asrBy: 'pc', hits: sc.hits, m: m });
+      endsApply(t, text);
       if (Rec.has('answer', t.date, t.key)) Rec.patch('answer', t.date, t.key, { text: text.slice(0, 20000), words: words });
       setTimeout(() => judgeTake(), 300); setTimeout(sortFree, 600);
     };
@@ -3040,6 +3290,8 @@ function scriptEditor(sc) {
       const count = () => { const w = wordsOf(tx.value).length; n.textContent = w ? w + ' words, about ' + mmss(Math.max(20, Math.round(w / 150 * 60))) + ' at 150 a minute' : 'TED talks run up to 18 minutes. Start with one or two.'; };
       tx.oninput = count; count();
       b.appendChild(ti); b.appendChild(tx); b.appendChild(n);
+      b.appendChild(el('p', 'muted', 'Marks for the teleprompter: *word* to hit it, / to pause, // for a long pause, _words_ to slow down.'));
+      if (REF.on) { const mb = el('button', 'mb-btn mb-press mb-tap', ICN('edit') + '<span>MARK IT FOR ME</span>'); mb.onclick = () => markScript(tx, mb); b.appendChild(mb); paintIcons(mb); }
     },
     actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: h => {
       const title = h.body.querySelector('.sct').value.trim(), text = h.body.querySelector('.scx').value.trim();
@@ -3499,7 +3751,7 @@ async function startTakeNow(d, warmStep, prompt) {
   T.listener = wantAsr ? Listener(opt('lang', 'en-US')) : null;
   T.eye = { looks: [], base: null, calib: [] };
   T.prompt = warmStep ? null : (prompt || promptFor(d.kind, d));
-  T.half = false; T.mid = null; T.penA = null; T.ph = null; T.phases = [];
+  T.half = false; T.mid = null; T.penA = null; T.ph = null; T.phases = []; T.pm = null;
   T.beat = !!(d && d.beat && optOn('beat', 1));
   const screen = $('#take');
   $('#tkName').textContent = warmStep ? 'WARM-UP · ' + warmStep.name.toUpperCase() : d.name.toUpperCase();
@@ -3559,7 +3811,7 @@ function runTake() {
     mid.appendChild(el('div', 'say', T.warm.name.toUpperCase()));
     if (T.warm.kind === 'twister') mid.appendChild(promptEl({ kind: 'twister', items: pick(TWISTERS, 3) }));
     else mid.appendChild(el('p', 'muted', T.warm.how));
-  } else mid.appendChild(promptEl(T.prompt));
+  } else { T.pm = null; mid.appendChild(promptEl(T.prompt)); }
   /* the eye reading taken during the count becomes the lens zone */
   if (T.cam && T.eye.calib.length) {
     const c = T.eye.calib, avg = k => c.reduce((s, x) => s + x[k], 0) / c.length;
@@ -3615,6 +3867,7 @@ function runTake() {
       }
     }
     if (s >= dur) { stopTake(false); return; }
+    if (T.pm && T.pm.box.isConnected && s - (T.pm.lastS || 0) >= 0.5) { T.pm.lastS = s; prompterFollow(s); }
     if (Math.round(s * 10) % 10 === 0) {
       const m = T.ear.summary({ from: Math.max(T.from, T.ear.seconds() - 10) });
       if (T.warm) {
@@ -3737,6 +3990,10 @@ function finishTake(m, secs) {
     const sc = T.prompt && T.prompt.kind === 'script' ? scripts().filter(x => x.key === T.prompt.key)[0] : null;
     out.cover = sc ? r1(coverage(sc.text, T.listener.text())) : null;
   } else { out.signs = out.contrast = out.repeatOpen = out.callback = out.cover = null; }
+  out.ends = null; out.marks = null;
+  let endR = null, mkR = null;
+  if (d.endings && asrOn && T.prompt && T.prompt.items) { endR = endScore(T.prompt.items, T.listener.text()); out.ends = endR.pct; }
+  if (T.pm) { mkR = marksGrade(T.pm, ev.pz); if (mkR && mkR.pct != null) out.marks = mkR.pct; }
   if (d.halves && T.mid != null) {
     const m2 = T.ear.summary({ from: T.mid });
     if (m2) { out.crisp = ref ? m2.crisp / ref * 100 : null; out.penGain = T.penA ? r1(m2.crisp / T.penA * 100) : null; }
@@ -3767,7 +4024,9 @@ function finishTake(m, secs) {
   if (d.check) { if (T.ph != null) checkSnap(); const res = checkResult(T.phases); take.m = { check: res }; take.goals = []; take.pass = res.all ? 1 : 0; }
   if (T.origin && T.origin.key) take.from = T.origin.key;
   if (T.vid && T.clipP) take.vid = 1;
-  if (T.prompt && T.prompt.kind === 'script') take.script = T.prompt.key;
+  if (T.prompt && T.prompt.kind === 'script' && T.prompt.key) take.script = T.prompt.key;
+  if (endR) take.endW = endR.w;
+  if (mkR) { take.mk = mkR; if (T.pm.taps) take.mkTaps = T.pm.taps; }
   take.key = saveTake(take); take.date = Day.today();
   if (!T.warm && !d.fix && !d.check) { try { Rec.setting(APP.id, 'remind', remindFrom(take)); } catch (e) {} }
   if (asrOn && !T.warm && !d.fix) setTimeout(() => judgeTake(take), 400);
@@ -3897,6 +4156,8 @@ function showTake(t, html) {
     body: (b, h) => {
       if (d && d.check) { b.appendChild(checkBox(t)); return; }
       if (d && !d.fix && t.drill !== 'warm') b.appendChild(doNext(t, d, h));
+      if (d && d.endings) b.appendChild(endsBox(t));
+      if (t.mk) b.appendChild(marksBox(t));
       if (d) b.appendChild(cb = coachBox(t, d, h));
       if (d) {
         const gs = el('div', 'stats');
