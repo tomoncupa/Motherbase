@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.41, 2026-11-17">
+<meta name="mb-version" content="1.0.42, 2026-11-17">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -168,7 +168,19 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .ref-ask input{flex:1;min-width:0}
 .chip{display:inline-flex;flex-direction:column;align-items:flex-start;gap:var(--s-1);text-align:left}
 .chip small{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap)}
-.ask-note{width:100%;min-height:calc(var(--s-10) * 1.2);margin-top:var(--s-3);font-size:var(--f-3);line-height:var(--lh-body)}
+.ask-note{width:100%;min-height:calc(var(--s-10) * 1.2);font-size:var(--f-3);line-height:var(--lh-body)}
+.ask-in{display:flex;gap:var(--s-2);align-items:flex-start;margin-top:var(--s-3)}
+.ask-in .ask-note{flex:1;min-width:0}
+.ask-mic{flex:none}
+.ask-mic.on{border-color:var(--bad);color:var(--bad)}
+.ask-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s-2);margin-top:var(--s-3)}
+@media (min-width:900px){.ask-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.ask-blk{padding:var(--s-3);border-radius:var(--radius-md);font-size:var(--f-2);line-height:var(--lh-body)}
+.ask-blk h4{margin:0 0 var(--s-1);font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);color:var(--accent)}
+.ask-blk p{margin:0 0 var(--s-2)}
+.ask-blk p:last-child{margin-bottom:0}
+.ask-blk ul{margin:0;padding-left:var(--s-4)}
+.ask-link{background:none;border:0;padding:0;color:var(--text-1);text-decoration:underline;font:inherit;cursor:pointer;min-height:0}
 .rank .row{gap:var(--s-2)}
 .voice{overflow-x:auto;margin-top:var(--s-2)}
 .voice table{border-collapse:collapse;width:100%;font-size:var(--f-2)}
@@ -1358,6 +1370,41 @@ function storyAdd(t, list) {
     Rec.set('story', null, key, { title: title, moment: String(s.moment || '').trim().slice(0, 300), line: String(s.line || '').trim().slice(0, 200), src: 'found', from: t.key, fromDate: t.date, at: Date.now() });
   });
 }
+/* the titles already kept, so Claude does not find the same story twice */
+const storyKnown = () => storiesAll().filter(s => s.title).slice(0, 60).map(s => s.title);
+/* STORIES IN THE BANKS (SPEAK 1.0.42). Tom, 2026-11-17: "I already have a
+   Rambles bank ... everything is one cohesive system?" So Claude in SPEAK.exe
+   also reads every RAMBLES piece and graded post (`kpiece`, the rows
+   `bankPool` already reads), newest first, one at a time, for stories of his.
+   A piece read once leaves a marker row `st-<piece key>-scan` (no title, so
+   never listed), keyed the same on every device. */
+const STSCAN = { busy: false, tried: {} };
+async function storyScan() {
+  if (!REF.on || STSCAN.busy) return;
+  const done = {}; storiesAll().forEach(s => { if (s.scan) done[s.from] = 1; });
+  const k = Rec.all('kpiece').filter(r => r.payload && (r.payload.src === 'ramble' || r.payload.src === 'post') && !done[r.key] && !STSCAN.tried[r.key] && wordsOf(r.payload.text || '').length >= 40)
+    .sort((a, b) => String(b.payload.born || b.date || '').localeCompare(String(a.payload.born || a.date || '')))[0];
+  if (!k) return;
+  STSCAN.busy = true; STSCAN.tried[k.key] = 1;
+  const kp = k.payload, known = storyKnown();
+  const r = await askRefine('Find stories from Tom\'s own life in one piece of his: ' + (kp.src === 'post' ? 'a post he published' : 'a ramble he wrote or said') + '. ' +
+    'Reply with one JSON object and nothing else: {"stories": up to 2, each {"title": under 8 words, "moment": the five-second moment where something changed in him, one sentence, "line": a first line he could open it with, inside the scene}}; {"stories": []} when there is none. ' +
+    'A story happened to him at a time and a place and changed how he thinks or feels; an opinion, advice or a habit is not one.' +
+    (known.length ? ' Leave out any story already in this list, even told differently: ' + known.join(' | ') + '.' : '') +
+    '\n\nTHE PIECE' + (kp.title ? ' (' + kp.title + ')' : '') + ':\n' + String(kp.text).slice(0, 6000));
+  STSCAN.busy = false;
+  let o = null;
+  try { const mm = String(r && r.text || '').match(/\{[\s\S]*\}/); o = mm ? JSON.parse(mm[0]) : null; } catch (e) { o = null; }
+  if (!o) return;
+  (Array.isArray(o.stories) ? o.stories : []).slice(0, 2).forEach((s, i) => {
+    const title = String(s && s.title || '').trim().slice(0, 80), key = 'st-' + k.key + '-' + i;
+    if (!title || Rec.has('story', null, key)) return;
+    Rec.set('story', null, key, { title: title, moment: String(s.moment || '').trim().slice(0, 300), line: String(s.line || '').trim().slice(0, 200), src: 'found', from: k.key, fromKind: kp.src, fromTitle: String(kp.title || '').slice(0, 120), fromDate: String(kp.born || k.date || '').slice(0, 10), at: Date.now() });
+  });
+  if (!Rec.has('story', null, 'st-' + k.key + '-scan')) Rec.set('story', null, 'st-' + k.key + '-scan', { scan: 1, from: k.key, at: Date.now() });
+  setTimeout(storyScan, 4000);
+}
+if (window.MB_REFINE) Rec.ready(() => setTimeout(storyScan, 20000));
 const ST_PARTS = [['moment', 'Moment of change'], ['stakes', 'Stakes early'], ['scene', 'Starts in the scene'], ['end', 'Ends on the change']];
 const stLine = st => st ? ST_PARTS.filter(p => st[p[0]]).map(p => p[1].split(' ')[0] + ' ' + st[p[0]]).join(' · ') : '';
 const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : id === 'free' ? FS : id === 'daily' ? DQ : id === 'tight' ? TIGHT : id === 'post-story' ? PS_STORY : id === 'post-reel' ? PS_REEL : DRILLS.concat(FIXES, LIB).filter(d => d.id === id)[0] || null;
@@ -2714,21 +2761,109 @@ function askAnswer(q, fields, h) {
   if (h) h.close();
   draw();
 }
+/* The detail of a question (SPEAK 1.0.43). Tom, 2026-11-17: "I have to know
+   why we're doing what we're doing, how we're doing it, what to avoid, why
+   it's important. I want to see which links are linear and dependent and
+   which ones run in parallel." So an `ask` block may carry `why`, `how`,
+   `avoid`, `waitsOn`, `holdsUp`, `alongside` and `start` {folder, prompt};
+   each shows as its own labelled block, and an old ask shows its context as
+   WHY. A link naming another open question opens it. */
+const ASK_LINKS = [['waitsOn', 'Waits on'], ['holdsUp', 'Holds up'], ['alongside', 'Runs alongside']];
+const askList = v => (Array.isArray(v) ? v : v ? [v] : []).map(x => String(x && (x.q || x.label) || x || '').trim()).filter(Boolean);
+function askDetail(q, h) {
+  const g = el('div', 'ask-grid');
+  const blk = (lab, html) => { const d = el('div', 'ask-blk mb-plate'); d.innerHTML = '<h4>' + lab + '</h4>' + html; g.appendChild(d); return d; };
+  const para = s => String(s).split(/\n+/).filter(Boolean).map(p => '<p>' + esc(p) + '</p>').join('');
+  const why = q.why || q.context;
+  if (why || q.onRecord) blk('WHY', (why ? para(why) : '') + (q.onRecord ? '<p class="muted">On record now: ' + esc(q.onRecord) + '</p>' : ''));
+  if (q.how || q.dest) blk('HOW', (q.how ? para(q.how) : '') + (q.dest ? '<p class="muted">Your answer goes to ' + esc(ASK_DEST[q.dest] || q.dest) + '.</p>' : ''));
+  if (q.avoid) blk('AVOID', Array.isArray(q.avoid) ? '<ul>' + q.avoid.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul>' : para(q.avoid));
+  const links = ASK_LINKS.filter(l => askList(q[l[0]]).length);
+  if (links.length) {
+    const open = askQueue(), d = blk('LINKS', '');
+    links.forEach(l => {
+      const p = el('p', null, '<b>' + l[1] + ':</b> ');
+      askList(q[l[0]]).forEach((x, i) => {
+        if (i) p.appendChild(document.createTextNode(', '));
+        const o = open.filter(a => a.key !== q.key && askKey(a.q) === askKey(x))[0];
+        if (o) { const a = el('button', 'ask-link mb-tap', esc(x)); a.onclick = () => { if (h) h.close(); setTimeout(() => openAsk(o), 50); }; p.appendChild(a); }
+        else p.appendChild(document.createTextNode(x));
+      });
+      d.appendChild(p);
+    });
+    if (!askList(q.waitsOn).length) d.appendChild(el('p', 'muted', 'Nothing has to be answered before this one.'));
+  }
+  return g;
+}
+/* TALK: speech to text into a box. Inside SPEAK.exe the PC transcribes it
+   (CLIP's faster-whisper, the `mbhear:` path takes use); in a browser, the
+   browser's own recogniser. Offered only where one of them exists. */
+function askMic(box) {
+  const pc = !!window.MB_HEAR && window.MediaRecorder && navigator.mediaDevices;
+  if (!pc && !ASR) return null;
+  const b = el('button', 'mb-btn mb-press mb-tap ask-mic', ICN('mic') + '<span>TALK</span>');
+  b.setAttribute('aria-label', 'Say your answer');
+  let rec = null, stream = null, chunks = [], sr = null;
+  const put = t => { t = String(t || '').trim(); if (!t) return; box.value = (box.value.trim() ? box.value.trim() + ' ' : '') + t; box.dispatchEvent(new Event('input')); };
+  const label = s => { b.querySelector('span').textContent = s; };
+  const done = () => { b.classList.remove('on'); label('TALK'); b.disabled = false; };
+  b.onclick = async () => {
+    if (pc) {
+      if (rec) { label('WRITING…'); b.disabled = true; rec.stop(); return; }
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { UI.toast('No microphone.', { bad: true }); return; }
+      chunks = [];
+      rec = new MediaRecorder(stream);
+      rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' }), id = 'ask-' + Date.now().toString(36);
+        rec = null;
+        const fr = new FileReader();
+        fr.onload = () => {
+          const d = String(fr.result || ''), i = d.indexOf(';base64,');
+          if (i < 0) { done(); return; }
+          HEAR.wait[id] = r => { done(); if (r && r.chunks && r.chunks.length) put(r.chunks.join(' ')); else UI.toast(r && r.error ? esc(r.error) : 'No words heard.', { bad: true }); };
+          try { window.chrome.webview.postMessage('mbhear:' + JSON.stringify({ id: id, ext: /mp4/.test(blob.type) ? 'mp4' : 'webm', b64: d.slice(i + 8) })); }
+          catch (e) { delete HEAR.wait[id]; done(); UI.toast('The PC transcriber is not reachable.', { bad: true }); }
+        };
+        fr.readAsDataURL(blob);
+      };
+      rec.start();
+      b.classList.add('on'); label('STOP AND WRITE');
+      return;
+    }
+    if (sr) { sr.stop(); return; }
+    sr = new ASR();
+    sr.lang = S.get('lang', '') || navigator.language || 'en-US';
+    sr.continuous = true; sr.interimResults = false;
+    sr.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) put(e.results[i][0].transcript); };
+    sr.onerror = e => { if (e.error !== 'no-speech' && e.error !== 'aborted') UI.toast('Speech to text stopped: ' + esc(e.error), { bad: true }); };
+    sr.onend = () => { sr = null; done(); };
+    try { sr.start(); b.classList.add('on'); label('STOP'); } catch (e) { sr = null; UI.toast('Speech to text did not start.', { bad: true }); }
+  };
+  return b;
+}
+/* START IN CLAUDE: the Claude app's own link for a new Code session in a
+   folder with the words typed in (claude://code/new?q=&folder=). He presses
+   send himself. */
+function askStart(q, said) {
+  const st = q.start || {};
+  const words = String(st.prompt || st.q || '') + (said ? '\n\nTom\'s answer: ' + said : '') + '\n\nThe question was: ' + q.q;
+  let url = 'claude://code/new?q=' + encodeURIComponent(words.slice(0, 6000));
+  if (st.folder) url += '&folder=' + encodeURIComponent(st.folder);
+  try { const w = window.open(url, '_blank'); if (!w && !window.chrome?.webview) location.href = url; } catch (e) { location.href = url; }
+  UI.toast('Opening Claude.');
+}
 function openAsk(q) {
   const wide = window.innerWidth >= 900;
   UI.dialog({
     title: 'QUESTION FOR YOU', width: 560,
     body: (b, h) => {
       b.appendChild(el('p', 'what', esc(q.q)));
-      if (q.context || q.onRecord) {
-        const cx = el('details', 'cmp mb-plate'); if (wide) cx.open = true;
-        cx.innerHTML = '<summary class="mb-tap">WHY IT IS ASKED</summary><div class="tx">' + (q.context ? esc(q.context) : '') +
-          (q.onRecord ? '<p><b>On record:</b> ' + esc(q.onRecord) + '</p>' : '') + (q.dest ? '<p class="muted">Goes to: ' + esc(ASK_DEST[q.dest] || q.dest) + '</p>' : '') + '</div>';
-        b.appendChild(cx);
-      }
+      b.appendChild(askDetail(q, h));
       const note = el('textarea', 'mb-input ask-note');
-      note.placeholder = q.notePrompt || 'A note, optional';
-      note.setAttribute('aria-label', q.notePrompt || 'A note');
+      note.placeholder = q.kind === 'free' ? 'Type your answer, or press TALK and say it' : (q.notePrompt || 'Anything to add, typed or said, optional');
+      note.setAttribute('aria-label', q.kind === 'free' ? 'Your answer' : (q.notePrompt || 'A note'));
       const box = el('div', 'ask-body');
       if (q.kind === 'choice') {
         const ch = el('div', 'moments');
@@ -2772,12 +2907,23 @@ function openAsk(q) {
         ready();
         const a = el('div', 'acts'); a.appendChild(save); box.appendChild(a);
       } else {
-        const sv = el('button', 'mb-btn mb-press mb-tap', 'SAVE THE NOTE AS MY ANSWER');
-        sv.onclick = () => { if (note.value.trim()) askAnswer(q, { answer: note.value.trim(), note: '' }, h); else UI.toast('Write the answer, or speak it.', { bad: true }); };
+        const sv = el('button', 'mb-btn go mb-press mb-tap', 'SAVE MY ANSWER');
+        sv.onclick = () => { if (note.value.trim()) askAnswer(q, { answer: note.value.trim(), note: '' }, h); else UI.toast('Type the answer, or press TALK and say it.', { bad: true }); };
         const a = el('div', 'acts'); a.appendChild(sv); box.appendChild(a);
       }
       b.appendChild(box);
-      b.appendChild(note);
+      const nr = el('div', 'ask-in');
+      nr.appendChild(note);
+      const mic = askMic(note);
+      if (mic) nr.appendChild(mic);
+      if (q.kind === 'free') b.insertBefore(nr, box); else b.appendChild(nr);
+      if (q.start && (q.start.prompt || q.start.q)) {
+        const sb = el('button', 'mb-btn mb-press mb-tap', ICN('play') + '<span>START IN CLAUDE</span>');
+        sb.title = 'Opens a new Claude Code session' + (q.start.folder ? ' in ' + q.start.folder : '') + ' with this task typed in';
+        sb.onclick = () => askStart(q, note.value.trim());
+        const sa = el('div', 'acts'); sa.appendChild(sb); b.appendChild(sa);
+        b.appendChild(el('p', 'muted', 'START IN CLAUDE opens a new Claude Code session' + (q.start.folder ? ' in ' + esc(q.start.folder.split(/[\\/]/).pop()) : '') + ' with the task and your answer typed in. You press send.'));
+      }
       const said = Rec.get('ask', null, q.key);
       if (said && said.said) b.appendChild(el('p', 'muted', 'You said: ' + esc(said.said.slice(0, 400))));
       paintIcons(b);
@@ -2867,6 +3013,7 @@ function openStory(s) {
       if (s.moment) b.appendChild(el('p', null, '<b>The moment:</b> ' + esc(s.moment)));
       if (s.line) b.appendChild(el('p', 'muted', 'A way in: “' + esc(s.line) + '”'));
       if (src) { const sb = el('button', 'mb-btn mb-press mb-tap', '<span>WHERE IT CAME FROM, ' + esc(Day.label(src.date).toUpperCase()) + '</span>'); sb.onclick = () => { h.close(); showTake(src); }; b.appendChild(sb); }
+      else if (s.fromKind) b.appendChild(el('p', 'muted', 'Found in ' + (s.fromKind === 'post' ? 'a post you published' : 'a ramble') + (s.fromTitle ? ', “' + esc(s.fromTitle) + '”' : '') + (s.fromDate ? ', ' + esc(Day.label(s.fromDate)) : '') + '.'));
       b.appendChild(el('h3', null, 'TELLINGS'));
       if (!ts.length) b.appendChild(el('p', 'muted', 'Not told yet. Each telling is read on four parts: the moment of change, stakes early, starting in the scene, ending on the change.'));
       const list = el('div', 'list');
@@ -3358,7 +3505,8 @@ async function judgeTake(t) {
     'Coherence: does it make one clear point a listener can follow, in an order that builds (5), or does it wander, restart and contradict itself (1)? ' +
     'Concision: does every sentence earn its place (5), or is the point buried in repeats, tags and detours (1)? Ignore transcription errors and missing punctuation. ' +
     'Name the specific thing in each why, quoting a few of his words. ' +
-    (x.p && x.p.story ? '' : '"stories": up to 2 stories from his own life that he told or touched on, each {"title": under 8 words, "moment": the five-second moment where something changed in him, one sentence, "line": a first line he could open it with, inside the scene}; [] when there is none. A story happened to him at a time and a place and changed how he thinks or feels; an opinion, advice or a habit is not one. ') +
+    (x.p && x.p.story ? '' : '"stories": up to 2 stories from his own life that he told or touched on, each {"title": under 8 words, "moment": the five-second moment where something changed in him, one sentence, "line": a first line he could open it with, inside the scene}; [] when there is none. A story happened to him at a time and a place and changed how he thinks or feels; an opinion, advice or a habit is not one. ' +
+      (storyKnown().length ? 'Leave out any story already in this list, even told differently: ' + storyKnown().join(' | ') + '. ' : '')) +
     (isStoryTake(x) ? '"st": this take was a story; grade it on Matthew Dicks\'s rules, each 1 to 5 with a one-line why quoting his words: {"moment": is there one clear moment where something changed in him, and does the story build to it, "momentWhy", "stakes": does he say early what he wanted or feared, "stakesWhy", "scene": does it open inside a place and a moment rather than with background or "so this one time", "sceneWhy", "end": does it end on the change rather than trail off or add a moral after it, "endWhy"}. ' : '') +
     (x.prompt ? '\n\nThe prompt: ' + x.prompt : '') + '\n\nTHE TRANSCRIPT:\n' + x.tx);
   JUDGE.busy = false;
