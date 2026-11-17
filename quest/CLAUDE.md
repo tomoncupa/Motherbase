@@ -477,3 +477,9 @@ under "Plan for it", saved by merge. The rule is `shared/goals.js`, WOOP.
   NOTICE notification pops up (`Notice.cue`, `cueCheck` every 30 s and on
   coming back) with NOT TODAY / KEPT IT; once per goal a day on that page,
   never closes itself.
+- **WOOP is desktop work** (Tom, 2026-11-17: "no phone layout, this is
+  strictly desktop work"). Design and test the WOOP screens (goal sheet's
+  Plan for it, Run through, the cue pop-up, the week draft's plans, HOME's
+  YOUR PLANS, ROOM) at desktop sizes (1920 x 1080, 3840 x 1080); no phone
+  layout work for them. Checked at 1920: cue pop-up, Run through, SAVE
+  PICTURE, RAN IT.
