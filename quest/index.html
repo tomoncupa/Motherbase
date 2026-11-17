@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.40, 2026-11-17">
+<meta name="mb-version" content="1.0.41, 2026-11-17">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -407,6 +407,19 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .dm-foot .bar .x{flex:0 0 var(--tap)}
 .dm-foot .mb-timefield{flex:1}
 .sheet-date .pop{position:static;width:100%;box-shadow:none;border:0;max-height:none}
+/* Today's filter: one line over the list, the picker beside its button */
+.fbar{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-2);margin-bottom:var(--s-3);column-span:all}
+.fbar:not(.on){justify-content:flex-end}
+.fbar.on{padding:var(--s-2) var(--s-3);border-radius:var(--radius-md);background:var(--surface-2);
+  border-left:3px solid var(--accent)}
+.fbar .fw{flex:1 1 calc(var(--s-10) * 2);color:var(--text-2)}
+.fbar .fw b{color:var(--text-1)}
+.fpick{display:flex;flex-direction:column;overflow:auto;min-width:calc(var(--s-10) * 2.3)}
+.fpick .fh{font-family:var(--font-display);font-size:var(--f-1);color:var(--text-muted);
+  letter-spacing:.06em;text-transform:uppercase;padding:var(--s-3) var(--s-3) var(--s-1)}
+.fpick .ffoot{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);margin-top:var(--s-2);
+  border-top:var(--border-width) solid var(--border);color:var(--text-muted);font-size:var(--f-2)}
+.fpick .ffoot span{flex:1}
 </style>
 </head>
 <body>
@@ -1640,8 +1653,11 @@ function viewInfo(v) {
     return { title: tg, at: true, groups: byDate(open.filter(x => (x.tags || []).indexOf(tg) > -1)),
       due: '', proj: '', tag: tg, showProj: true };
   }
-  const over = open.filter(x => dueOf(x) && dueOf(x) < t), now = open.filter(x => dueOf(x) === t);
-  const done = all.filter(x => x.done && x.doneOn === t);
+  /* the Today filter hides; it never changes a todo (Journal.filterShows) */
+  const F = Journal.todayFilter(), shows = x => Journal.filterShows(x, F);
+  const over0 = open.filter(x => dueOf(x) && dueOf(x) < t), now0 = open.filter(x => dueOf(x) === t);
+  const over = over0.filter(shows), now = now0.filter(shows);
+  const done = all.filter(x => x.done && x.doneOn === t && shows(x));
   const groups = [];
   if (over.length) groups.push({ id: 'over', title: 'Overdue', over: true, items: over });
   /* What BLOCK planned for today. Tom, 2026-09-14: "Daily tasks, and whats
@@ -1650,10 +1666,11 @@ function viewInfo(v) {
      in chronological order for the day", so the blocks sit among the todos. */
   const plan = Rec.get('plan', t, 'routine');
   const blks = S.get('showPlan', 1) !== 0 && plan ? (plan.blocks || []).map(b => ({ blk: b })) : [];
-  groups.push({ id: t, title: dayTitle(t), day: t, mixed: true, items: now.concat(blks, movedFrom(t)) });
+  groups.push({ id: t, title: dayTitle(t), day: t, mixed: true, items: now.concat(blks, movedFrom(t).filter(shows)) });
   if (done.length && S.get('showDone', 1) !== 0) groups.push({ id: 'done', title: 'Completed', items: done, quiet: true });
   return { title: 'Today', sub: asDate(t).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
-    groups: groups, due: t, proj: '', showProj: true };
+    groups: groups, due: t, proj: '', showProj: true,
+    hidden: over0.length + now0.length - over.length - now.length, pool: over0.concat(now0) };
 }
 function counts() {
   const t = T(), open = quests().filter(x => !x.done), c = { inbox: 0, today: 0, upcoming: 0 };
@@ -2563,6 +2580,7 @@ function draw() {
     list.appendChild(bk);
   }
   if (VIEW === 'today') {
+    drawFilter(list, info);
     quietOffer(list);
     drawBrief(list);
     /* the week draft comes to Today on Sunday and Monday, and lives on Upcoming */
@@ -2593,8 +2611,92 @@ function draw() {
     } else g.items.slice().sort(sortQ).forEach(x => box.appendChild(rowEl(x, info)));
     list.appendChild(box);
   });
-  if (!any) list.appendChild(el('div', 'empty', VIEW === 'today' ? 'Nothing due today' : 'No tasks'));
+  if (!any) list.appendChild(el('div', 'empty', VIEW === 'today' ? (info.hidden ? 'Every task today is hidden by the filter.' : 'Nothing due today') : 'No tasks'));
   fit(list);
+}
+/* ── Today's filter ──
+   Tom, 2026-11-17: "Add filter functionality in QUESTS, I may not want all
+   of today's tasks visible at a glance." Show only some projects,
+   priorities or labels; the rest are hidden, never changed. One setting,
+   `todayFilter` = {on, proj, pri, tags}, read through Journal.filterShows,
+   so the home screen's NEXT card hides the same todos. Projects and
+   priority are what his Today carries (29 todos on 2026-11-17: Skool 10,
+   Tom 8, Content 8; P1 to P3 on 16); labels show only while one is in use. */
+const tfGet = () => {
+  const f = Journal.todayFilter(), L = k => Array.isArray(f[k]) ? f[k].slice() : [];
+  return { on: f.on ? 1 : 0, proj: L('proj'), pri: L('pri'), tags: L('tags') };
+};
+const tfSet = f => { S.set('todayFilter', f); draw(); };
+function tfWords(f) {
+  const out = [];
+  f.proj.forEach(k => out.push(k ? '#' + projName(k) : 'No project'));
+  f.pri.slice().sort().forEach(n => out.push(n === 4 ? 'No priority' : 'P' + n));
+  f.tags.forEach(t2 => out.push('@' + t2));
+  return out.join(', ');
+}
+function drawFilter(list, info) {
+  const f = tfGet(), on = Journal.filterOn(f);
+  const bar = el('div', 'fbar' + (on ? ' on' : ''));
+  if (on) bar.appendChild(el('span', 'fw', '<b>Showing ' + esc(tfWords(f)) + '.</b> ' +
+    (info.hidden ? info.hidden + ' hidden.' : 'None hidden.')));
+  const pick = el('button', 'mb-btn mb-press mb-tap flat fbtn', ico('filter') + '<span>' + (on ? 'Change' : 'Filter') + '</span>');
+  pick.setAttribute('aria-label', on ? 'Change the filter' : 'Filter today’s tasks');
+  pick.onclick = () => filterPicker(pick, info);
+  bar.appendChild(pick);
+  if (on) {
+    const all = el('button', 'mb-btn mb-press mb-tap fbtn', '<span>Show all</span>');
+    all.onclick = () => { f.on = 0; tfSet(f); };
+    bar.appendChild(all);
+  }
+  list.appendChild(bar);
+}
+function filterPicker(anchor, info) {
+  const box = el('div', 'fpick');
+  const paint = () => {
+    const f = tfGet(), pool = viewInfo('today').pool || [];
+    box.innerHTML = '';
+    const n = test => pool.filter(test).length;
+    const sect = (title, items) => {
+      if (!items.length) return;
+      box.appendChild(el('div', 'fh', esc(title)));
+      items.forEach(it => {
+        const b = el('button', 'pick' + (it.cls ? ' ' + it.cls : '') + (it.on ? ' on' : ''),
+          '<span class="ic">' + (it.on ? ico('done') : '') + '</span><span class="nm">' + esc(it.label) + '</span>' +
+          '<span class="rt">' + it.n + '</span>');
+        b.setAttribute('aria-pressed', it.on ? 'true' : 'false');
+        b.onclick = () => {
+          const g = tfGet(), L = g[it.k], i = L.indexOf(it.v);
+          if (i > -1) L.splice(i, 1); else L.push(it.v);
+          g.on = 1; tfSet(g); paint();
+        };
+        box.appendChild(b);
+      });
+    };
+    /* projects on today's todos, then any picked that has none today */
+    const pk = []; pool.forEach(x => { const k = x.proj || ''; if (pk.indexOf(k) < 0) pk.push(k); });
+    f.proj.forEach(k => { if (pk.indexOf(k) < 0) pk.push(k); });
+    pk.sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || projName(a).localeCompare(projName(b)));
+    sect('Project', pk.map(k => ({ k: 'proj', v: k, label: k ? '#' + projName(k) : 'No project',
+      on: f.proj.indexOf(k) > -1, n: n(x => (x.proj || '') === k) })));
+    sect('Priority', [1, 2, 3, 4].map(v => ({ k: 'pri', v: v, label: v === 4 ? 'No priority' : 'Priority ' + v,
+      cls: v < 4 ? 'p' + v : '', on: f.pri.indexOf(v) > -1, n: n(x => (+x.pri || 4) === v) })));
+    const tg = []; pool.forEach(x => (x.tags || []).forEach(t2 => { if (tg.indexOf(t2) < 0) tg.push(t2); }));
+    f.tags.forEach(t2 => { if (tg.indexOf(t2) < 0) tg.push(t2); });
+    sect('Label', tg.sort().map(t2 => ({ k: 'tags', v: t2, label: '@' + t2, on: f.tags.indexOf(t2) > -1,
+      n: n(x => (x.tags || []).indexOf(t2) > -1) })));
+    const foot = el('div', 'ffoot', '<span>' + (Journal.filterOn(f)
+      ? 'Showing ' + (pool.length - viewInfo('today').hidden) + ' of ' + pool.length + '.'
+      : 'Pick what Today shows. Nothing is changed.') + '</span>');
+    if (Journal.filterOn(f)) {
+      const all = el('button', 'mb-btn mb-press mb-tap', '<span>Show all</span>');
+      all.onclick = () => { const g = tfGet(); g.on = 0; tfSet(g); paint(); };
+      foot.appendChild(all);
+    }
+    box.appendChild(foot);
+  };
+  paint();
+  if (narrow()) { UI.dialog({ title: 'FILTER TODAY', width: 420, body: b => b.appendChild(box) }); return; }
+  openPop(anchor, box, 'list');
 }
 /* ── a wide window: side by side, never folded ──
    Tom, 2026-10-02: "on a wide window, lay things out side by side; never fold

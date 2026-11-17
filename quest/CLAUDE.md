@@ -483,3 +483,20 @@ under "Plan for it", saved by merge. The rule is `shared/goals.js`, WOOP.
   YOUR PLANS, ROOM) at desktop sizes (1920 x 1080, 3840 x 1080); no phone
   layout work for them. Checked at 1920: cue pop-up, Run through, SAVE
   PICTURE, RAN IT.
+
+## Today's filter (Tom, 2026-11-17: "I may not want all of today's tasks visible at a glance"; 1.0.41)
+
+- A Filter button over Today's list opens a picker beside it (a dialog on a
+  phone): Project, Priority, and Label while any label is on today's todos,
+  each with how many of today's todos it holds. Any pick inside a field,
+  every field across. Claude's call from his data (29 todos due today or late
+  on 2026-11-17: Skool 10, Tom 8, Content 8; priorities on 16; 2 labels).
+- Filtered-out todos are hidden, not dimmed (he said "not visible"); nothing
+  about a todo changes. Overdue, today and Completed all obey it; BLOCK's
+  blocks do not.
+- With a filter on, one gold-edged line says "Showing #Skool. 12 hidden."
+  with Change and Show all. Show all keeps the picks for the next time.
+- The setting is `quest.todayFilter` = `{on, proj, pri, tags}` (`''` no
+  project, 4 no priority). The rule is `shared/journal.js`
+  (`Journal.filterShows`), read by the home screen's NEXT card too.
+- The side's Today count still counts every todo due.

@@ -916,7 +916,36 @@ function dedupeSoon() {
 }
 if (g.Rec && g.Rec.ready) g.Rec.ready(() => { try { dedupe(); } catch (e) { console.warn('[journal] dedupe', e); } });
 
+/* ── QUESTS's Today filter ──
+   Tom, 2026-11-17: "I may not want all of today's tasks visible at a
+   glance". One setting, quest.todayFilter = {on, proj: [key or ''], pri:
+   [1 to 4, 4 is none], tags: [slug]}. QUESTS's Today and the home screen's
+   NEXT card both ask these, so the two cannot disagree. Inside one field any
+   pick matches; across fields every field must. `on` 0 keeps the picks for
+   the next time. Hiding is a view: nothing here writes a todo. Live sync
+   drops an empty list, so a missing list is an empty one. */
+function todayFilter() {
+  const R = Rec(), f = R && R.setting ? R.setting('quest', 'todayFilter') : null;
+  return f && typeof f === 'object' ? f : {};
+}
+const fList = (f, k) => Array.isArray(f[k]) ? f[k] : [];
+function filterOn(f) {
+  f = f || todayFilter();
+  return !!(f.on && (fList(f, 'proj').length || fList(f, 'pri').length || fList(f, 'tags').length));
+}
+function filterShows(p, f) {
+  f = f || todayFilter();
+  if (!filterOn(f)) return true;
+  p = p || {};
+  const pj = fList(f, 'proj'), pr = fList(f, 'pri'), tg = fList(f, 'tags');
+  if (pj.length && pj.indexOf(p.proj || '') < 0) return false;
+  if (pr.length && pr.indexOf(+p.pri || 4) < 0) return false;
+  if (tg.length && !(p.tags || []).some(t => tg.indexOf(t) > -1)) return false;
+  return true;
+}
+
 g.Journal = {
+  todayFilter: todayFilter, filterOn: filterOn, filterShows: filterShows,
   KINDS: KINDS,
   bare: bare, place: place, onDay: onDay, notes: notes,
   parseLine: parseLine, clockMins: clockMins, minsHM: minsHM, endAt: endAt, spanMins: spanMins,
