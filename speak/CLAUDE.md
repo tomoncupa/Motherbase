@@ -205,503 +205,103 @@ Nothing here has run on a phone or with a real voice through a real microphone.
 
 ## Toastmasters, added 2026-11-10
 
-Tom asked what Toastmasters teaches and how the great speakers got good, then:
-*"Integrate what we can with Speak."* Three things the app lacked:
-
-- **TABLE TOPIC**, on TODAY under QUICK PRACTICE, off the path (`TT`, drill
-  `topics`, skill `topics`, chart slot 6). One question he has not seen,
-  shown after the count, from `QUESTIONS`. The clock counts up and a LIGHT
-  meter shows nothing, then green at the shortest time, yellow halfway, red at
-  the longest, as a Toastmasters timer does. He presses STOP; it stops itself
-  30 seconds past red. Goals: time inside the window, fillers at or under the
-  first CLEAN target. The window is his, Settings, TARGETS (`ttMin` 60,
-  `ttMax` 120). Not counted in TODAY'S DRILLS or Steps met; it does count for
-  the streak and the tick. **`?mini=1` opens straight onto its sheet**: the
-  address any quick-practice button or overlay opens.
-- **Read like the greats.** Lincoln at Gettysburg, Roosevelt's 1933 inaugural
-  and Kennedy's 1961 inaugural joined the read passages. All public domain.
-  Douglass learned by reading great speeches aloud; the read drills now do that.
-- **SAME PROMPT.** A take's sheet offers NEW PROMPT and SAME PROMPT. The same
-  prompt runs again and its sheet names the last take on that prompt with its
-  numbers: the great speakers refined the same material over many deliveries.
-  A take keeps its prompt as `p`; older takes are rebuilt from `prompt`
-  (`promptOf`).
-
-Every take now also carries `m.time`, seconds from the first word to STOP.
-
-How it was watched: HISTORY.md: Toastmasters, added 2026-11-10.
+SPEAK PRACTICE (id `topics`, `TT`) is a window drill with Toastmasters lights from `ttMin` to `ttMax`; `?mini=1` opens its sheet. Takes keep `p` (the prompt) and `m.time`; RETRY reruns the same prompt and names the last take on it. (HISTORY.md: Toastmasters, added 2026-11-10)
 
 ## The coach, added 2026-11-16 (SPEAK 1.0.10)
 
-Every take's sheet opens on **WHAT TO FIX**, above the numbers:
-
-- **A strip of the take:** each held sound (the um proxy) a gold tick, each
-  pause a gap, silences over 1.5 s darker, and the pace in each third. A take
-  now keeps `ev`: `end`, `held [[s, dur]]`, `pz [[s, dur]]` (every pause of
-  250 ms or more, in seconds from the start) and `pace [a, b, c]`. The ear's
-  summary returns `pauseAt` for it. Takes before 1.0.10 have no `ev`, so
-  their coach reads the totals only.
-- **The one fault that cost the most** (`coach(t)`), said with where it
-  happened, a FIX in one move, and a DRILL whose goal sits one step past this
-  take's number (`stepLe` 70% of the way, `stepGe` a fixed step), never the
-  final target. A fault on a goal the take missed weighs 1.5 times. Faults:
-  ums right after a pause, ums in the opening seconds, ums near the end, plain
-  fillers over the line, crutch phrases (the top phrase named), speeding up
-  across thirds, too fast or too slow for the style's band, silences over
-  1.5 s (with their times), too few pauses, stammered starts, a flat voice,
-  soft consonants, eyes off the lens. Up to two more show as "Also".
-- **Right / Wrong** on the call. Wrong drops it (the next fault shows) and it
-  never counts toward FOCUS; stored on the take as `fb {faultId: 1|0}`.
-- **Nothing over its line** on a met take offers NEXT: the step it opened.
-
-**Fix drills** (`FIXES`, ids `fix-…`): twelve short drills off the path, one
-per fault, 30 to 45 s. They count their one fault live in the third meter
-(`live`: ums, crutch, silences, pauses, restarts), which turns amber when it
-goes up: an ah-counter on screen. FIRST LINE and LAST LINE (`prep`) count
-down ten seconds with the prompt showing. A fix take keeps `from`, the take
-it came from, and its sheet offers AGAIN and BACK TO THE TAKE, which reruns
-the original drill on the same prompt so the same-prompt line shows whether
-it carried over. Fix takes do not count in TODAY'S DRILLS or Steps met.
-
-**FOCUS** on TODAY, above the drills: a fault that came top in at least two of
-the last five takes this week, with its fix and its drill.
-
-How it was watched: HISTORY.md: The coach, added 2026-11-16 (SPEAK 1.0.10).
+Every take's sheet opens on the one fault that cost the most (`coach(t)`, from `ev`), a fix and a drill one step past this take, with Right/Wrong (`fb`); Wrong drops it from FOCUS. Fix drills (`FIXES`, `fix-…`) count their one fault live and never count in TODAY'S DRILLS or steps. (HISTORY.md: The coach, added 2026-11-16 (SPEAK 1.0.10))
 
 ## The program, added 2026-11-16 (SPEAK 1.0.11)
 
-Five **stages** (`STAGES`), each a set of skills (`skill.stage`), in the
-order the old schools taught: VOICE (PACE, CLEAR), FLUENCY (CLEAN, FLOW),
-MESSAGE (EYES, SHAPE), CRAFT (STORY, DEVICES), THE TALK (SCRIPT).
-`RESEARCH.md` section 12 has the sources.
-
-- **The stage he is on** is the first with a step not met (`curStage`); a
-  step a switch cannot measure does not hold a stage, a missing script does.
-  TODAY's drills come only from skills at or before it, and when fewer than
-  three are left it adds **review**: met steps of earlier stages not run for
-  7 days, oldest first. TODAY'S DRILLS says "Stage 2 of 5, FLUENCY: 3 of 10
-  steps met." PATH draws a heading per stage (met, now with steps to go, or
-  later). **Every step stays startable**: a stage decides what TODAY offers,
-  never what he may do. Not levels: nothing is earned or shown off.
-- **New skills**, 5 steps each: SHAPE (one sentence, point reason example,
-  three parts signposted, problem solution result, open and close a loop),
-  STORY (one minute one turn, start in the scene, voices, three minutes, a
-  five-minute slam), DEVICES (rule of three, the pause, contrast, repeated
-  opening, all of them), SCRIPT (read it, first words only, nothing showing,
-  from memory to the lens, piece to camera clean).
-- **CLEAR step 2 is Pen in the teeth** (`clear-pen`, `halves: 'PEN OUT'`):
-  half the take with a pen, PEN OUT at halfway, crispness measured on the
-  second half only; `penGain` is the second half against the first. CLEAR's
-  later steps moved down one. Passes are by drill id, so no one lost a step.
-- **Window drills** (`win`): the clock counts up and the Toastmasters lights
-  turn at the window's ends and middle; TABLE TOPIC is one (`win` replaced
-  `lights`). `durOf(d)` gives the auto-stop, the window's end plus a quarter.
-- **New numbers**, all on `m`: `openUms` (held sounds in the first 5 s),
-  and from the transcript only, else null: `signs`, `callback`, `contrast`,
-  `repeatOpen` (`devicesOf`), `cover` (`coverage`: script words heard in
-  order, each looked for in the next 12 words heard). SHAPE adds its
-  signpost and callback goals only while the transcript is on.
-- **Scripts**: YOUR SCRIPTS under stage 5 on PATH; write, edit, rehearse this
-  one, delete with UNDO. A SCRIPT step with none is blocked as `'a script'`
-  and its sheet offers Write a script. Its window is the script at 150 a
-  minute, plus or minus 15%. The sheet names the script, the rehearsal count
-  and the take it first came out clean on.
-
-How it was watched: HISTORY.md: The program, added 2026-11-16 (SPEAK 1.0.11).
+Five stages (`STAGES`): VOICE, FLUENCY, MESSAGE, CRAFT, THE TALK. TODAY offers drills only up to `curStage`, plus review; every step stays startable. Passes are by drill id, so reordering steps loses no one a pass. Transcript-only numbers are null without a transcript. (HISTORY.md: The program, added 2026-11-16 (SPEAK 1.0.11))
 
 ## Hearing the feedback, added 2026-11-16 (SPEAK 1.0.12)
 
-The coach's strip is now the take's player: a play button beside it, a
-playhead while it plays, and a tap anywhere on the strip plays from there.
-Each fault, the top one and the "Also" ones, carries its moments (`at`, up to
-six `[s, length]`) drawn as buttons under it; a button plays from 1.5 s before
-the moment to 1.5 s after it ends. Moments: the ums the pattern names, each
-silence over 1.5 s, the third of the take that was fastest or slowest or
-sped up (six seconds of it), the longest run with no pause, each stammered
-start (`ev.rs`, from the ear's new `restartAt`), and each crutch phrase
-(`ev.cx`), which is placed by when its chunk of transcript landed and labelled
-"about" because the recogniser has no clock. A fault with no moment (a flat
-voice, soft consonants, eyes) gets Play the take. The sound stops when the
-sheet closes.
-
-How it was watched: HISTORY.md: Hearing the feedback, added 2026-11-16 (SPEAK 1.0.12).
+The coach's strip is the take's player; each fault carries up to six moments (`at`) that play 1.5 s either side. A crutch phrase placed without a word clock is labelled "about". (HISTORY.md: Hearing the feedback, added 2026-11-16 (SPEAK 1.0.12))
 
 ## FITNESS TOPIC and the fitness bank, added 2026-11-16 (SPEAK 1.0.13)
 
-Tom: *"a separate button from table topic to be a fitness/school topic. So
-this serves a double purpose of me working on my speech, as well as I actually
-get to fill up my personal data bank for use with school and elsewhere."* His
-answers: the bank is *"a sort of fitness databank where other work can pull
-from whether its for skool or content or future projects"*; transcript *"Yes
-for everything, I want a transcript and a voice recording of all my answers"*;
-prompts from viewer questions, Skool terms, and *"a separate automated system"*
-that finds current topics (built by another session, see below).
-
-- **FT**, drill `fitness`, skill `fitness` (`FIT_SKILL`, chart slot 1), on
-  TODAY under QUICK PRACTICE below TABLE TOPIC. Same window and lights as a
-  table topic (`ttMin` to `ttMax`), same goals, style `long`. `forceAsr`: the
-  transcript is on for it even if the switch is off. Not counted in TODAY'S
-  DRILLS. The coach and recording work on it like any take.
-- **Prompts, in order** (`fitPrompt`): an open Todoist task in the store whose
-  text starts `Shoot:` (the daily question engine, Round 1 in Todoist Content,
-  see `tom-context/content-questions.md`), due today or earlier, oldest first,
-  labelled "Today's Shoot question"; then an open `Topic:` task (the weekly
-  topic finder, a desktop scheduled task on Mondays at 1pm, built 2026-11-16 in
-  session "Automated finder for current fitness topics"); then a third of the
-  time "Explain <term> to a beginner." from `SKOOL_TERMS` (39, from
-  `tom-context/skool-brackets.md`, labelled with the bracket), otherwise a
-  viewer question from `FIT_QS` (108, from `content-questions.md`, sources left
-  out). Already-answered questions and ones passed over with NEW PROMPT this
-  visit (`fitSkip`) are skipped. Todoist rows reach the store through the sync in
-  `shared/todoist.js`, which runs in QUESTS and, since STATUS 1.0.97, in
-  STATUS (STATUS.exe every 5 minutes). Between 8 and 16 Nov nothing ran it, so
-  no Shoot task arrived; on 2026-11-16 the 30 Shoot and 7 Topic rows landed.
-- **The bank**: one `answer` row per answer, keyed by its take: `{q, src
-  (shoot, topic, viewer, term), term, bracket, text (the full transcript,
-  20,000 characters at most), words, dur, at}`. Under 64KB, so it syncs
-  everywhere, goes to the sheet's SPEAK tab (in `APP.types`) and into every
-  backup: that is how other work reads it. The recording stays on the device
-  (`tclip`).
-- **BANK tab** (fourth on the nav): ANSWER ONE, EXPORT (the whole bank as
-  `fitness-bank-<date>.md`, grouped by question), a search box over questions
-  and answers, then a card per question with each answer: date, length, words,
-  where the question came from, the words, COPY, PLAY AND COACH (or OPEN TAKE,
-  opening the take's sheet with its player), ANSWER AGAIN (the same question),
-  and a hold or dots menu with Delete from the bank (UNDO).
-- **The transcript is now on by default** (`opt('asr', 1)`), replacing the
-  2026-09-15 "off by default". Tom's own setting still wins where he sets one.
-
-How it was watched: HISTORY.md: FITNESS TOPIC and the fitness bank, added 2026-11-16 (SPEAK 1.0.13).
+FITNESS TOPIC (`FT`, `forceAsr`) takes prompts in order `Shoot:` task, `Topic:` task, Skool term, viewer question (`fitPrompt`). Each answer is an `answer` row under 64KB so it syncs and reaches the sheet; the recording stays on the device. The transcript is on by default. (HISTORY.md: FITNESS TOPIC and the fitness bank, added 2026-11-16 (SPEAK 1.0.13))
 
 ## SPEAK PRACTICE, OTHER TOPIC and compare your answer, added 2026-11-16 (SPEAK 1.0.14)
 
-Asked by Tom in the topic finder's session and passed on here:
-
-- **TABLE TOPIC is now SPEAK PRACTICE** (*"because I also wanted to expand
-  in scope"*): `TOPIC_SKILL.name`, `TT.name`, the SPEAK.exe widget button
-  (`#widGo`) and the Settings targets lines. The id stays `topics`, so old
-  takes keep their drill. `desktop/SpeakApp.cs` still says TABLE TOPIC in a
-  comment only.
-- **OTHER TOPIC** (`OT`, drill and skill `other`, `OTHER_SKILL` chart slot 5),
-  under FITNESS TOPIC in QUICK PRACTICE: FT with its own prompts
-  (`otherPrompt`). First an open Todoist task `Other: <question>` (the daily
-  topic finder, scheduled task `fitness-topic-finder-daily` at 1pm, adds one
-  a day, rotating productivity, philosophy and behaviour change), its subject
-  read off the task's `**Found:** <date>, topic finder, <subject> (` line
-  (`subjOf`); then `OTHER_QS`, 45 built-in questions, 15 per subject. Answers
-  go to the same bank with `subj`; FITNESS TOPIC answers carry
-  `subj: 'fitness'`. The bank is now ANSWER BANK, with FITNESS and OTHER
-  buttons, the subject on each answer's line, and exports as
-  `answer-bank-<date>.md`.
-- **COMPARE YOUR ANSWER**: a prompt that came from a Todoist task keeps the
-  task's description (`td.desc`, 6,000 characters at most) as `p.notes` on the
-  take. That is the Shoot card (IDEA, OPEN, LAST) or the topic finder's Answer
-  notes, What people say and Check. The take's sheet shows it folded under
-  COMPARE YOUR ANSWER, and never during the take, so he never reads an answer
-  off the screen.
-
-How it was watched: HISTORY.md: SPEAK PRACTICE, OTHER TOPIC and compare your answer, added 2026-11-16 (SPEAK 1.0.14).
+OTHER TOPIC (`OT`) is FITNESS TOPIC with `Other:` tasks then `OTHER_QS`, answers carrying `subj`. A Todoist prompt's description is kept as `p.notes` and shown only after the take, under COMPARE YOUR ANSWER, never during it. (HISTORY.md: SPEAK PRACTICE, OTHER TOPIC and compare your answer, added 2026-11-16 (SPEAK 1.0.14))
 
 ## QUESTIONS FOR YOU, added 2026-11-16 (SPEAK 1.0.15)
 
-The Open Decisions page moved into SPEAK (handoff
-`tom-context/handoffs/motherbase-speak-questions.md`; Tom: "absorbing the
-functions of open decisions into Speak... this works in the future for any
-prompts that might happen from speak"). His picks: a tap counts for a pick
-question, voice optional; doctrine answers go to a **Fitness Knowledge Bank**
-(`tom-context/fitness-knowledge-bank.md`), "and Skool pulls from this"; LUL
-is lower, upper, lower.
-
-- **Any producer**, no code change: a Todoist task `Ask: <question>`, its
-  description optionally holding a fenced `ask` block of JSON (`context`,
-  `onRecord`, `kind` choice / rank / brackets / free, `options` or `items` with
-  `rec`, `dest` knowledge / brand / codex, `notePrompt`). No block: the
-  description is the context and the kind is free. Arrives through the
-  Todoist sync as a `note` (`askQueue`, `askSpec`).
-- **TODAY, first card, QUESTIONS FOR YOU** (needs-you-now), oldest first. A
-  row opens the question's sheet (`openAsk`): the question, WHY IT IS ASKED
-  folded (open at 900px and wider) with On record and where it goes, then by
-  kind: option chips with "Recommended" written under one (never a gold
-  fill); a list with up and down buttons and LOCK THIS ORDER; a bracket
-  picker per item, SAVE only once all are picked, no preselected value; or a
-  free answer by note or by voice. A note box under every kind. SPEAK IT
-  starts a take (`AQ`, drill and skill `ask`) with the question on screen.
-- **Answering** (`askAnswer`) writes an `ask` row (undated, keyed by the
-  note's key: `{q, kind, answer, optId, ranking, brackets, note, said, take,
-  dest, context, onRecord, tdId, askedAt, answeredAt}`), ticks the note so the
-  Todoist sync closes the task, and gives UNDO for six seconds (or Ctrl+Z),
-  which removes the answer and unticks the note. A spoken take on a free
-  question answers it with the transcript; on a pick question it is kept as
-  `said` and the question stays until tapped.
-- **BANK, ANSWERED QUESTIONS**: every answer, newest first, with where it goes.
-- **Filing is Claude's**, from the nightly backup, at the row's `dest`
-  (`fitness-knowledge-bank.md` says how). The page cannot write tom-context.
-- **Imported 2026-11-16** as Todoist `Ask:` tasks: rest 2 minutes, the
-  training-priorities order, PPL and LUL timing and the Why We Lift closer
-  (Skool), and market scope as a confirm (TM Brand). The brackets card was
-  dropped (CODEX 1.0.4 already decided it); the Algrowrithm split was
-  answered yes on 2026-11-10 and went straight into the knowledge bank.
-
-How it was watched: HISTORY.md: QUESTIONS FOR YOU, added 2026-11-16 (SPEAK 1.0.15).
+Any producer asks Tom through a Todoist `Ask:` task with an optional fenced `ask` JSON block; SPEAK shows it first on TODAY and writes an `ask` row on answer, ticking the note, with UNDO. "Recommended" is written under an option, never a gold fill. Filing to `dest` is Claude's, from the nightly backup. (HISTORY.md: QUESTIONS FOR YOU, added 2026-11-16 (SPEAK 1.0.15))
 
 ## The widget's three buttons, 2026-11-16 (SPEAK 1.0.16)
 
-Tom asked (through the topic finder's session) for FITNESS TOPIC and OTHER
-TOPIC on the small SPEAK.exe window. `#wid .wbtns` holds SPEAK, FITNESS and
-OTHER side by side, each starting its drill straight away (`data-d`, through
-`drillById`). Measured at 300 x 116: each 84 x 44, nothing clipped, the page
-fits, so `desktop/SpeakApp.cs` and its SMALL size did not change and no new
-exe was needed. Watched in headless Chromium: FITNESS opened FITNESS TOPIC,
-OTHER opened OTHER TOPIC. Not watched in SPEAK.exe itself; it opens the
-hosted page, so it gets the buttons on its next open (twice, per the root
-brief's shared-file trap).
+The widget's buttons start their drill straight away through `drillById` (`data-d`). (HISTORY.md: The widget's three buttons, 2026-11-16 (SPEAK 1.0.16))
 
 ## YOUR VOICE, added 2026-11-16 (SPEAK 1.0.17)
 
-Tom: *"Speak just updates and keeps a continual update of how I actually talk
-and what my speech patterns are. The purpose of this would be to help Claude
-write in my voice and so that I have an awareness of how I talk and be able to
-compare this to other speakers."* His picks: Claude's copy lives in its own
-file, `tom-context/voice-spoken.md`; compare only with speakers he adds.
-
-- **First card on PROGRESS** (`drawVoice`). From every take's `tx` (chunks
-  are breath groups) through `voiceOf`: words, words per breath group, word
-  variety (different words per hundred, moving windows of 100), word length,
-  I / you / we per hundred words, fillers and his crutch list per hundred
-  words; pace and fillers a minute from the last 30 days' takes; phrases he
-  repeats (three-word runs said 3 times or more, at least one non-stop word,
-  a shifted copy of a kept phrase left out), how he starts a thought (first
-  two words of a breath group), and the words he reaches for.
-- **ADD A SPEAKER**: a name and a pasted transcript (30 words at least,
-  40,000 characters at most), a `speaker` row `{name, text, at}`; split into
-  sentences by full stops, which the screen says differs from his breath
-  groups. Each one is a column in the table; a hold or dots menu removes it
-  with UNDO.
-- **COPY FOR CLAUDE** puts the profile on the clipboard as Markdown, the shape
-  `voice-spoken.md`'s Profile section takes.
-- Uses the program's `wordsOf` (one definition; a second one stopped the page
-  loading until it was taken out).
-
-How it was watched: HISTORY.md: YOUR VOICE, added 2026-11-16 (SPEAK 1.0.17).
+YOUR VOICE (`drawVoice`, `voiceOf`) profiles how he talks from every take's `tx`, beside `speaker` rows he adds; COPY FOR CLAUDE feeds `tom-context/voice-spoken.md`. Use the one `wordsOf`; a second definition stopped the page loading. (HISTORY.md: YOUR VOICE, added 2026-11-16 (SPEAK 1.0.17))
 
 ## The camera: mouth, video, every take, 2026-11-16 (SPEAK 1.0.18)
 
-Tom: *"add a webcam recording feature so you can see how I talk and so I can
-maintain eye contact ... I need to practice speaking with my whole mouth
-because apparently I have a habit of speaking from the side of my mouth."*
-
-- **The camera is on for every take** (Settings, Camera on every take,
-  `speak.camAll`, on), not only EYES, so eyes and mouth are read each time.
-  EYES goals still apply only to EYES drills; the coach's eyes fault now fires
-  on any camera take.
-- **Mouth** (`lookAt` adds `mL`, `mR`, `shift`, `gap` from the face tracker's
-  blendshapes and lip landmarks; `mouthOf`): over frames while he is
-  speaking (`T.ear.level() > 0.25`) with the mouth moving, each frame's lean
-  is (left - right) / (left + right) plus the mouth pulled sideways.
-  `mouthEven` is 100 minus the mean size of the lean; `mouthDir` the side that
-  did more; `mouthOpen` the lip gap as a share of face height; `ev.mz` the
-  stretches of 0.8 s or more leaning past 0.35. Target `mouthEven` 85
-  (`DEFAULT_TGT`), a first guess. **Not watched on a real face**, and which way
-  the tracker's left and right fall is from its documentation, not seen.
-- **Coach fault `mouth`** ("Talking from one side") with its moments, fixed by
-  **`fix-mouth`, Whole mouth**: a read passage to the camera, the third meter
-  showing evenness live (`mouthLive`), goal one step up. Also under QUICK
-  PRACTICE while the camera switch is on.
-- **Video**: with the camera on, the recorder takes picture and sound
-  (`video/webm` VP8 and Opus, 250 kbps, else `video/mp4`; Settings, Record
-  video, `speak.recVid`, on). Same `tclip` row, device only; `take.vid`.
-  The take's player shows it mirrored above the strip, and every moment button
-  plays the picture at that moment. About 30 KB a second.
-- **A speaker by name**: Tom asks Claude Code; Claude finds a transcript and
-  adds a Todoist task `Speaker: <name>` whose description is the words (any
-  `**Label:**` lines are dropped). SPEAK lists it beside his pastes, labelled
-  "found by Claude".
-
-How it was watched: HISTORY.md: The camera: mouth, video, every take, 2026-11-16 (SPEAK 1.0.18).
+The camera is on for every take (`speak.camAll`) and reads eyes and mouth (`mouthOf`, target `mouthEven` 85, a guess not watched on a real face). With the camera on the recording is video, same device-only `tclip`. A `Speaker: <name>` Todoist task is a speaker found by Claude. (HISTORY.md: The camera: mouth, video, every take, 2026-11-16 (SPEAK 1.0.18))
 
 ## Possible content and refining, added 2026-11-16 (SPEAK 1.0.19)
 
-Tom: *"how can it detect if something is, oh, this can be content? Do you
-want to refine it into a content?"*, then *"I would like Speak to have its
-own copy of the possible topics, and then we're gonna do this also in Outer
-Heaven ... the option to directly go into refine and iteration mode from a
-fresh speak practice."*
-
-- **The check** (`contentCheck`): a take with 60 words or more of transcript
-  and at least two of `CONTENT_SIGNS` (a story, a strong claim, a list,
-  advice for the viewer) gets "This could be content. It has ..." under its
-  transcript. The signs are a guess [UNTESTED on his takes]; tune them from
-  what he refines and drops.
-- **The way in** (`contentBox`): every take with a transcript, outside the
-  fix drills, ends with REFINE INTO CONTENT (filled when the check fired),
-  or OPEN DRAFT once a draft exists. No draft is made until he presses it.
-- **The row**: `draft`, keyed and dated as its take: `{take, prompt, tx,
-  why, fmt, state, at, doneAt, vers: [{text, by, ask, fmt, at}], cur}`. `by`
-  is `take` (what he said, always version 1), `claude` or `tom`. Kept to 12
-  versions (the first and the newest eleven) so the row stays under 64KB
-  and syncs. `state` is `''`, `done` (MADE IT) or `dropped`; nothing is
-  deleted.
-- **REFINE** (`openRefine`): a format (SHORT, YOUTUBE, POST, STORIES,
-  CAROUSEL, `FMTS`), the version with older and newer buttons, the words in
-  a box he edits himself (his typing edits his own newest version, else
-  starts one, so a Claude version is never overwritten), a "what to change"
-  box and REFINE, and WHAT YOU SAID. In SPEAK.exe the window grows to WIDE
-  (1000 x 820) while it is open (`mbsize:wide`).
-- **Claude only in SPEAK.exe** (`desktop/SpeakRefine.cs`): the page posts
-  `mbrefine:{id, prompt}`, SPEAK.exe runs the bundled claude.exe with no
-  tools and `voice-spoken.md` plus `brand.md` from tom-context as the system
-  prompt, and posts `{mb:'refine', id, text}` back. It sets
-  `window.MB_REFINE`; with no flag the REFINE box is replaced by a line
-  saying so, and he can still edit.
-- **SPEAK's own list**: POSSIBLE CONTENT on BANK, every draft not made or
-  dropped, newest first.
-- **OUTER HEAVEN** reads `draft` rows from the nightly backup, as
-  `knowledge.py` reads `answer` rows. Its side is its own session's work.
+REFINE INTO CONTENT makes a `draft` row only when pressed; versions capped at 12 so it syncs, his typing never overwrites a Claude version, nothing is deleted. Claude refines only inside SPEAK.exe (`desktop/SpeakRefine.cs`, `window.MB_REFINE`). OUTER HEAVEN reads drafts from the nightly backup. (HISTORY.md: Possible content and refining, added 2026-11-16 (SPEAK 1.0.19))
 
 ## FREE SPEAK and jumping off points, added 2026-11-16 (SPEAK 1.0.20)
 
-Tom: *"I also want the three current buttons to stack vertically, and then I
-want a fourth button to be just a free speak. So speak will also become my
-way of turning or transcribing speech to text, and then it will auto sort
-the transcript into the relevant data bank."* And the things he talks about
-*"synthesized into possible prompts"*, in his wallpaper program or *"when I
-click free speech, I'm shown also these possible jumping off points, or I
-can just skip directly into a free flowing ramble."*
-
-- **The widget** stacks four buttons, SPEAK, FITNESS, OTHER, FREE SPEAK, and
-  SPEAK.exe's small window is 300 x 260 to fit them. FREE SPEAK is also on
-  BANK beside FITNESS and OTHER.
-- **FREE SPEAK** (`FS`, `openFree`): with jumping off points, a sheet lists
-  the newest six (hold: Not this one) and JUST RAMBLE; with none it starts a
-  ramble straight away. No lights, no goals, the clock counts up, it stops
-  itself at 15 minutes, transcript forced on. The sheet says DONE, never MET.
-- **The bank**: every free speak is an `answer` with `src: 'free'`, `q`
-  "Free speak" or the jumping off point, and no subject yet.
-- **Filing** (`sortFree`, SPEAK.exe only): Claude reads each unfiled free
-  speak of 30 words or more, oldest first, one at a time, and the answer
-  gets `subj` (fitness, productivity, behaviour change, philosophy or
-  observations, which ARC's three banks read), a title as `q`, and
-  `sorted: 1`. Up to three jumping off points become `topic` rows, `kind:
-  'jump'`, keyed `jump-<take key>-<n>` so two devices write the same rows;
-  starting from one marks it `used`. A ramble made on the phone is filed the
-  next time SPEAK.exe opens.
-- **Points build off each other** (SPEAK 1.0.21). Tom: *"my talking points get synthesized off of each other ... if I talk about separate but related things, you can prompt me on the connection and clarifying questions. So the goal here is to also build upon my knowledge banks and get my thoughts out into an external medium while also improving how I speak."* Claude reads the ramble beside his twenty newest other answers (any kind) and makes up to three points, one of each where it can: `how: 'link'` (a connection between this ramble and earlier answers, ids in `with`), `ask` (a clarifying question about something left vague), `thread` (an idea not finished). The sheet says which, and names the answers a link joins.
-- **Choose your own path** (SPEAK 1.0.22). Tom: *"occasionally act as opposition ... the things I say need to be able to withstand the opposite point of view"*, then *"choose my own path type of thing ... while still letting me revisit old options"*, one prompt at a time. A fourth kind, `push` (Push back): the strongest opposite view of a claim he made, only when he made one. WHAT NEXT sits at the foot of every free speak's sheet (`nextBox`): the points made from that take appear as soon as Claude files it (it polls while the sheet is open), plus SAY IT TIGHTER and JUST RAMBLE. A take started from a point carries `parent` (the take it came from) and `how` in its prompt and its `answer`, so a chain can be walked back. SAY IT TIGHTER (`TIGHT`): the take's title again in 60 seconds, its sheet opening with the first take's numbers beside this one's (pace, fillers, on the lens, mouth evenness). The FREE SPEAK sheet lists every point not taken and folds the taken ones under TAKEN, each startable again.
-- **Points draw on the banks** (SPEAK 1.0.23, spec `talking-points-from-banks.md` from the Knowledge banks session, in the oh-speak-feed side notes). The pool is every live `answer` plus `kpiece` rows from RAMBLES (`ramble|<id>`) and graded posts (`post|<id>`), less any row named in a thread's `srcs`, never Skool (`bankPool`). Claude gets the eight nearest by shared rare words (`bankNear`, idf over the pool) and up to six empty topics from ARC's `arc.bankgaps` setting if ARC saved it (`bankGaps`). A link's `with` may hold bank keys (a `|` tells them from answer keys). A fifth kind, `gap` with `topic`, at most one per ramble and only when ARC's gaps exist. Every free speak of 30+ words is also fed to OUTER HEAVEN's RAMBLES by that side, once.
-- **Only free speaks (and their tighter takes) make jumping off points** for now. The wallpaper
-  showing them is OUTER HEAVEN's work, reading `topic` rows with `kind:
-  'jump'` and no `used` from the nightly backup.
+FREE SPEAK (`FS`) has no goals, stops at 15 minutes, and saves an `answer` with `src: 'free'`. In SPEAK.exe `sortFree` files each one (subject, title) and makes up to three jumping off points as `topic` rows `kind: 'jump'`, keyed the same on every device, of kinds link, ask, thread, push and gap, drawn from the banks (`bankPool`, never Skool). WHAT NEXT ends each free speak's sheet. (HISTORY.md: FREE SPEAK and jumping off points, added 2026-11-16 (SPEAK 1.0.20))
 
 ## From your posts and drafts made, added 2026-11-16 (SPEAK 1.0.25)
 
-Tom approved both through the SPEAK/knowledge master chat ("Yes, all three"). FREE SPEAK is settled as his one place to ramble out loud.
-
-- **postspeech** rows (OUTER HEAVEN, through the inbox; spec `postspeech-spec.md` in the oh-speak-feed side notes) are read as takes of two pseudo drills, `post-story` (style live) and `post-reel` (style short), so `coach()` names their fault (`postFaults`). A cut reel (`raw` false) drops um, dead-air and run-on faults. They never count in TODAY'S DRILLS, steps, PROGRESS or practice numbers.
-- **FOCUS**: a fault top in 2+ posts of the last 14 days counts once more, and posts alone can raise crutch phrases. The card says "and also in N of your posts", or "the top fault in N of your posts" when only posts raised it.
-- **FROM YOUR POSTS** on TODAY under FOCUS: each post of the last 14 days with pace, crutch a minute (top phrase), "at least" ums and long silences; the sheet has the coach's fault and drill, the transcript with crutch phrases marked, the `how` honesty lines and OPEN THE POST.
-- **YOUR VOICE** gains a Posted column, every post's words read as one speaker.
-- **draftmade** (undated, keyed by the take; `tools/backup.html` takes it): the draft shows "Posted <day> as a <kind>, graded N" with the link, leaves POSSIBLE CONTENT, and SPEAK sets its own `draft.state` to `done`, `doneBy: 'post'`, `doneAt` from the row, only if the draft was open (`syncMade`). When the row goes (Tom marked the match wrong), a draft with `doneBy: 'post'` goes back to open; one he pressed MADE IT on stays made.
+`postspeech` rows are read as takes of `post-story` and `post-reel` for the coach, FOCUS and FROM YOUR POSTS, never in drills, steps or PROGRESS. `draftmade` marks a draft done (`doneBy: 'post'`) and undoes that if the row goes; a MADE IT press stays. (HISTORY.md: From your posts and drafts made, added 2026-11-16 (SPEAK 1.0.25))
 
 ## Ending sounds and the marked teleprompter, 2026-11-17 (SPEAK 1.0.38)
 
-Tom: *"a list of words that make me practice pronouncing the last syllable or consonant rather than having a speech"*, and the creator teleprompter *"that shows the script as you speak it, and then it shows how to intone and tempo"*. Three DRILL MENU drills (`LIB`, skill `clear`):
-
-- **Ending sounds: words** (`lib-ends`, kind `ends`) and **in lines** (`lib-endlines`, kind `endlines`, `END_LINES` with `{target}` words). Every target is half of a pair in `END_PAIRS` whose dropped ending makes the other word (card, car), because Whisper and the browser guess the likely word and would hide a plain drop. `endScore` looks for each target in the next 8 words heard: the word is landed (1), its twin is dropped (0), neither is not heard (-1). A take keeps `endW {word: 1|0|-1}` and `m.ends` (% landed). The PC transcript lands later, so `hearTake` calls `endsApply`, which re-scores and patches the goal and pass. Missed words come back (`endOwed`: missed last time or the time before) until landed twice running; worked out from takes, never stored. The take sheet's box says what each drop came out as.
-- **Teleprompter, marked** (`lib-prompter`, kind `prompter`, also every SCRIPT take shown in full). Marks in a script: `*hit*`, `/` pause, `//` long pause, `_slow_` (`parseMarks`; `stripMarks` for cue cards). It follows him by the ear's syllable count against the script's (`sylOf`), not a transcript, so it works in SPEAK.exe; a tap on a line moves the follow there (`mkTaps`). After the take `marksGrade` checks each pause mark against the ear's pauses (within 1.5 s, 0.25 s or 0.8 s long) and each slow part against his syllable rate (10% slower). Emphasis is shown, not measured. Kept as `mk` and `m.marks`. No script: a built-in marked sample (`PROMPT_SAMPLE`).
-- **MARK IT FOR ME** in the script editor, SPEAK.exe only (`markScript`): Claude adds the marks; refused if any word changed.
-- Watched in headless Chromium: the pairs scoring and a late transcript, the box, the owed list, marks grading on a made-up log, a live prompter take on the fake microphone following and taking a tap, the menu, 390 wide with no sideways scroll, no page errors. Not watched with his voice or in SPEAK.exe; the syllable follow's drift on a real read is unknown.
-
-**The pile, not built yet**: per-sound scoring with a phoneme model or forced alignment (OpenPronounce, mcp-server-pronunciation, Montreal Forced Aligner; 1.0.39 only reads how sure Whisper was of each word), a pause countdown on the prompter (Storia), and the endings drill carried into free talk.
+Endings are tested only with minimal pairs (`END_PAIRS`), since a transcriber hides a plain drop; `endScore` keeps `endW` and `m.ends`, re-scored when the PC transcript lands. The teleprompter follows by syllables (`sylOf`), marks are `*hit*` `/` `//` `_slow_`; pauses and slow parts are graded, emphasis is not. MARK IT FOR ME may not change a word. Not built yet: per-sound scoring, a pause countdown, endings in free talk. (HISTORY.md: Ending sounds and the marked teleprompter, 2026-11-17 (SPEAK 1.0.38))
 
 ## Reminders before every take, 2026-11-17 (SPEAK 1.0.40)
 
-Tom: reminders at the start "like to just slow down, breathe, let my words have space", then "make this intelligent ... reactive to my current biggest issues". The count-in shows up to three lines (`mindEl`): his biggest habits now (`mindRank`: every take's top three coach faults over the last 12 takes in 14 days, worse and newer counting more, kept only while the habit is in the last four takes, times 1.5 when the coming drill measures it), each with what to do (`MIND_FOR`, his rewording in `speak.mindTx`) and why ("Fillers, in 5 of your last 5 takes, and this drill measures it"). His calm lines (`speak.mind`, first three "Slow down." "Breathe in before the first word." "Let your words have space.") fill when fewer than three habits show. The count runs five instead of three while they show. Settings, REMINDERS: on or off, SHOWING NOW, his calm lines, every habit's words. Tested headless Chromium at 1280 and 390 on seeded takes, not with his voice.
+The count-in shows up to three reminders from his biggest current habits (`mindRank`, his takes, never a fixed list), each with why, filled by his calm lines (`speak.mind`); every word is his to change (`speak.mindTx`, Settings, REMINDERS). (HISTORY.md: Reminders before every take, 2026-11-17 (SPEAK 1.0.40))
 
 ## Replay marks, leaning words, shadowing, clear words, 2026-11-17 (SPEAK 1.0.39)
 
-Tom asked whether SPEAK was the highest form it could be, then said "All" to the four picks. The take sheet already played the take back with ums and pauses on its strip; that was missed when the picks were written, and he was told.
-
-- **The word clock.** SPEAK.exe's transcriber now returns every word with start, end and how sure it was (`desktop/SpeakRefine.cs` hear.py; `prob` added to CLIP's `tools/engine.py`). Kept on the take as `tw`: `[word, start in tenths of a second, end in tenths, sure in hundredths]`, 1,200 words at most so the row stays under 64KB. The browser's transcript has no clock, so none of the marks below exist in Chrome.
-- **Replay marks** (`wordMarks`, `playerMarks`): ums, crutch phrases, dropped endings (an endings drill's `endW` 0 found as its twin) and unclear words go on the player's strip as lower-half ticks with their own key. PLAY EVERY MISTAKE plays each moment, 0.7 s before to 0.5 s after, merged where they touch, one after another. Pressing play or the strip stops the run.
-- **Clear words** (`m.clear`, `clearPct`): the share of words Whisper was at least half sure of, from 20 words up. Unclear words are tappable chips under the strip. This is Whisper's sureness, not a per-sound score, and the screen says so. Tested on a Windows voice clip: "card" came back "cart" at 0.62.
-- **Words you leaned on** (`leanList`, `leanBox`): a word from `LEAN` used 3 or more times in a take, or a phrase 2 or more, at least once a minute, or any run of 2 to 3 small words said 3 times; never one already on his crutch list. ADD TO CRUTCH LIST puts it there. Shows only when there is one.
-- **Shadowing** (`lib-shadow`, CLEAR AND EXPRESSIVE): he picks a clip (audio or video, under 25 MB, the first 90 s used) in the drill sheet. Its pitch line is read by the same `Ear` as his voice and kept with the sound in one `smodel` row, padded past 64KB so it stays on the device, chosen by the `shadow` setting. The take plays it, draws the four seconds around now (theirs grey, his gold), stops 1.5 s after the clip ends, and scores `m.shadow`: the best correlation of his line against theirs with him 0 to 1.5 s behind. `take.sh` keeps both lines in tenths of a second so the sheet draws anywhere. The microphone has echo cancelling off, so the clip through speakers leaks into his line; earphones are asked for, and a near-perfect match with no lag is flagged as the clip heard.
-
-Tested in headless Chromium with a faked SPEAK.exe and a made-up clip: marks, the run, the chips, the leaning box and its button, a live shadow take on the fake microphone, the sheet, 390 px with no overflow, no page errors. Not tested: his voice, a real clip, earphones, inside SPEAK.exe.
+SPEAK.exe's whisper gives a word clock (`tw`), which drives the replay marks, PLAY EVERY MISTAKE and Clear words (`m.clear`, Whisper's sureness, said on screen to be no per-sound score); none exist in Chrome. Words you leaned on never repeats his crutch list. Shadowing keeps the clip on the device (`smodel`, padded) and both pitch lines on the take (`sh`); a zero-lag near-perfect match is flagged as the clip heard. (HISTORY.md: Replay marks, leaning words, shadowing, clear words, 2026-11-17 (SPEAK 1.0.39))
 
 ## TODAY'S PLAN, from the day before, 2026-11-17 (SPEAK 1.0.37)
 
-Tom: *"At the end of the day I want Speak to analyze my takes for the day to create a smarter plan for tomorrow."*
-
-- **One `splan` row per practice day** (dated the day it read, key `''`). `planRules`: the top fault of each take tallied, the fix drill of the top two, any step not met that day, the stage's next steps, Don't stop, three in all; a headline ("3 takes, 0 met. X came top in 3."), one cue for every take. Then in SPEAK.exe `planClaude` sends every take's numbers, faults and Claude's point with a list of allowed drill ids and keeps Claude's three (unknown ids dropped, filled from the rules' list), its headline and cue.
-- **When it is made**: by itself at midnight while SPEAK is open (`Day.on`), on the first open after a practice day, again when that day gained takes, and by Claude the first time SPEAK.exe opens after a phone-only plan (`planCheck`). PLAN TOMORROW on the TODAY card makes it from today's takes now and opens it; once made it reads TOMORROW'S PLAN.
-- **Where it shows**: TODAY'S DRILLS becomes TODAY'S PLAN with the plan's drills in order, each with its why; REMEMBER THIS TIME hides until the day's first take, since the plan carries the cue.
-- **Right/Wrong** on the fault it names: Wrong makes the plan again without that fault (`no`).
-- Watched in headless Chromium with three seeded takes and a fake Claude: the rules plan, Claude's plan (a bogus id dropped), Wrong remade it, PLAN TOMORROW, 390 wide no sideways scroll. Not watched inside SPEAK.exe with real Claude.
+One `splan` row per practice day, made by rules then by Claude in SPEAK.exe (unknown drill ids dropped); TODAY'S PLAN shows its drills with why. Wrong on its fault remakes it without that fault (`no`). (HISTORY.md: TODAY'S PLAN, from the day before, 2026-11-17 (SPEAK 1.0.37))
 
 ## DO THIS NEXT and SEND TO WRITE, 2026-11-16 (SPEAK 1.0.34)
 
-Tom: *"I don't just want numbers and statistics. I want the best course of action given what I just outputted. It doesn't have to be every speak take. It can just give me a button with content or send to [WRITE's] inbox as a raw seed."*
-
-- **DO THIS NEXT** at the top of every take's sheet (`doNext`), one verdict with its button, the numbers below: no transcript and the PC can write one, WRITE THE TRANSCRIPT; else the take reads like content (the content check, or coherence and concision both 4 or better), REFINE INTO CONTENT; else the weakest fault's drill, now ("Fix the weakest thing now: ..."); else Don't stop. It waits for the PC transcript and Claude's reading, and redraws when they land.
-- **SEND TO WRITE AS A RAW SEED** beside it on any take with a transcript: marks the take `seed: 1, seedAt`. OUTER HEAVEN brings only marked takes into WRITE's Inbox as raw seeds.
-- **The coach weighs ums by count as well as rate** (14 ums against 2 outranks 4 stammered starts), so the weakest fault matches what the numbers show.
-- **How this was missed**: every test ran in headless Chromium with a fake transcript plugged in, never a real take inside SPEAK.exe, whose engine has no speech-to-text. Root brief, Known traps.
+Every take's sheet leads with one DO THIS NEXT verdict and button (`doNext`). SEND TO WRITE marks a take `seed`; OUTER HEAVEN brings in only marked takes. Test real takes inside SPEAK.exe, never only with a fake transcript. (HISTORY.md: DO THIS NEXT and SEND TO WRITE, 2026-11-16 (SPEAK 1.0.34))
 
 ## The transcript on the PC, summary, weakest, retry, 2026-11-16 (SPEAK 1.0.33)
 
-Tom: *"why was there no transcript? I also want to know which was my weakest metric ... a summary of what I said to be created as a draft to be added to data bank OR an option to retry the prompt WITHOUT losing my first entry."*
-
-- **Why there was none**: SPEAK.exe runs the page in WebView2, which has no speech-to-text of its own (Chrome and Edge get it from an online service), so every take made in SPEAK.exe came back with no transcript and pace "estimated from syllables". The recogniser's error is now kept on the take as `asrErr`.
-- **The fix** (`hearTake`, `desktop/SpeakRefine.cs` `Hear`): when a take ends with no transcript inside SPEAK.exe (`window.MB_HEAR`), its recording goes to SPEAK.exe (`mbhear:{id, ext, b64}`), which runs CLIP's transcriber (faster-whisper in `Downloads/CLIP/tools/venv`, `engine.transcribe(video, 'fast')`) and posts back the sentences. The take gets `tx`, `asr: 1`, `asrBy: 'pc'`, crutch phrases from `scan`, word count and pace from words; a bank answer for the take gets the words; then coherence, concision and filing run. An older take with a recording shows WRITE THE TRANSCRIPT ON THIS PC. Needs Record takes on (the default). Tested on Faizan Asif's video: every word came back.
-- **Weakest this take** heads NEXT TIME: the coach's top fault and why.
-- **SUMMARY**: Claude's reading (`judgeTake`) also writes 2 to 4 sentences of what he said (`judge.sum`), shown on the take with ADD TO KNOWLEDGE BANK; an answer in the bank gets it as `sum`.
-- **RETRY, KEEP THIS ONE** (was SAME PROMPT): a new take on the same prompt; the first take and its answer stay.
-- **QUESTIONS FOR YOU** hides a question once any copy of it is answered (matched by its words too) and shows each question once (`askKey`). Tom: "why is this still open I just answered it".
+WebView2 has no speech-to-text, so inside SPEAK.exe a take with no transcript goes to CLIP's faster-whisper (`hearTake`, `window.MB_HEAR`) and comes back as `tx`, `asrBy: 'pc'`; this needs Record takes on. RETRY keeps the first take. QUESTIONS FOR YOU hides a question once any copy is answered (`askKey`). (HISTORY.md: The transcript on the PC, summary, weakest, retry, 2026-11-16 (SPEAK 1.0.33))
 
 ## What each number means, NEXT TIME and reminders, 2026-11-16 (SPEAK 1.0.32)
 
-Tom: *"I have these numbers but I don't know what my metrics are or what I can do about them"*, "3 suggestions for drills", "reminders for the next time I do a speak entry".
-
-- **Every reading on a take's sheet** (`readOf`) shows its target, met (green) or missed (amber), and when missed the one thing to do (`MEAN_FIX`). Targets: his TARGETS and the style's pace band; for counts with no target of his own, a coach's line (held sounds 2 or fewer, stammered starts 1 or fewer, sound share 80% or under, long pauses 2 or fewer, crutch phrases none).
-- **NEXT TIME** under the numbers (`nextBoxFor`): the coach's top cues and three drills (`nextDrills`: the fix drills of the top faults, then Silence not um or Soft start when the counts call for them, then Land it no tag, Don't stop, Just a Minute).
-- **The reminder** (`speak.remind`, written when a take finishes, `remindFrom`): REMEMBER THIS TIME on TODAY under the TODAY card, and the first cue on the count before every take. A take with no transcript adds "Transcript was off".
+Every reading shows its target, met or missed, and the one thing to do (`readOf`, `MEAN_FIX`). NEXT TIME gives cues and three drills (`nextDrills`); `speak.remind` carries a cue to the next take. (HISTORY.md: What each number means, NEXT TIME and reminders, 2026-11-16 (SPEAK 1.0.32))
 
 ## CHECK THE COACH, added 2026-11-16 (SPEAK 1.0.30)
 
-Proves the eye, mouth and crispness readings follow him before he trusts them. One minute, camera on, four parts of 15 s the screen names (`CHECK_PH`): NORMAL, LOOK AWAY, SIDE OF THE MOUTH, MUMBLE. Each part is measured on its own (`checkSnap`: on-the-lens share of that part's looks, `mouthOf` evenness, the ear's raw crispness from the part's start). A reading passes only if it moved the right way against NORMAL (`checkResult`): on the lens down 30 points or more looking away, evenness down 10 or more from one side, crispness 15% or more lower mumbling. Stored as a take of `lib-check` with `m: {check}`; the coach and FOCUS ignore it. Pressed from TODAY (CHECK THE COACH) or the DRILL MENU under EYES ON THE LENS. Headless Chromium's fake camera has no face, so eyes and mouth read "not measured" there and its constant tone fails crispness, as it should; only his own face and voice can pass it.
+CHECK THE COACH (`lib-check`) passes a reading only if it moved the right way against NORMAL; the coach and FOCUS ignore it. Only his own face and voice can pass it. (HISTORY.md: CHECK THE COACH, added 2026-11-16 (SPEAK 1.0.30))
 
 ## Coherence and concision, added 2026-11-16 (SPEAK 1.0.29)
 
-Claude in SPEAK.exe reads every take of 40 words or more (not warm-ups or fix drills) and scores coherence and concision 1 to 5, each with one line why quoting his words, and his main point in one sentence (`judgeTake`, stored on the take as `judge: {coh, cohWhy, con, conWhy, point, at}`). The take's sheet shows both beside the other numbers, waiting while Claude reads. At 2 or under the coach names `unclear` (fix: Point, reason, example) or `wordy` (fix: One sentence), and his Right/Wrong mark on that fault is how the reading is checked. A take made away from the PC is read the next time SPEAK.exe is open, one at a time.
+Claude in SPEAK.exe scores takes of 40+ words for coherence and concision 1 to 5 with a quoted why (`judgeTake`, `judge`); 2 or under names `unclear` or `wordy`, checked by his Right/Wrong. (HISTORY.md: Coherence and concision, added 2026-11-16 (SPEAK 1.0.29))
 
 ## Desktop first, 2026-11-16 (SPEAK 1.0.27)
 
-Tom: *"Is the speak exe different from speak in main menu? Because I want them to be the same ... speak will primarily be a desktop app."*
-
-- **SPEAK.exe opens the whole app** in an ordinary, resizable window (about 1100 x 860, size and place kept in `speak-app.txt` as `full=`). The old always-on-top widget is **Mini widget** in the tray's menu (`mini=1`); the page's `mbsize:` messages only move the window in mini mode.
-- **TODAY** opens with a TODAY card: TODAY'S TAKES (a sheet of today's takes, each opening its sheet), FREE SPEAK, DRILL MENU, and the **Camera** switch (`speak.camAll`, on by default). The same switch sits on every drill's sheet. In the widget, "N takes today" is a button to the same sheet.
-- **ADD TO KNOWLEDGE BANK** under any take with a transcript that is not in the bank yet: an `answer` with `src: 'take'`, filed by `sortFree` like a free speak.
-- **Two minutes at least**: SPEAK PRACTICE, the topics and FREE SPEAK keep STOP locked as KEEP GOING m:ss until TARGETS' shortest time, now 120 s (red light 180 s). Tom: "set a minimum speaking time of 2 minutes".
-- **Pace targets for a direct speaker** (Tom's authority style, measured against Faizan Asif's 277 wpm and his own 141 to 165): Talking head 160 to 190, Short-form 170 to 200, Live 160 to 190. A band he saved in TARGETS still wins.
+SPEAK.exe opens the whole app; the mini widget is a tray choice. SPEAK PRACTICE, topics and FREE SPEAK lock STOP until two minutes. Pace bands are a direct speaker's (160 to 190 talking head); a band he saved wins. (HISTORY.md: Desktop first, 2026-11-16 (SPEAK 1.0.27))
 
 ## SPEAK.exe: the tray, the mini widget and the full app, 2026-11-16 (SPEAK 1.0.31)
 
-Tom: *"I want speak to auto start, and I want it to be a tray icon. And if I click the tray icon, I can have the four buttons always available. Just give it a complete settings menu for the mini widget and for the full EXE app."*
-
-- **A tray icon first** (`desktop/SpeakApp.cs`, `App`). Start with Windows writes `SPEAK.exe --tray` to the Run key; with "Start in the tray" on, no window opens at boot. Opening SPEAK again (the desktop shortcut) signals the running copy, which opens the full app.
-- **Two windows, one store**: the **mini widget** (`?widget=1`, the four stacked buttons, growing for a take and shrinking back) and the **full app**. A left click on the tray icon opens the widget by the tray (click again to tuck it away); the right-click menu has Mini widget, Open SPEAK, Free speak, Drill menu, Settings and Quit SPEAK.
-- **PROGRAM** tab, first in SPEAK's Settings inside SPEAK.exe (`drawProgram`), in both windows: Start with Windows, Start in the tray, what a tray click opens (Mini widget or Full app), where the widget opens (by the tray or where it was left), widget on top, widget tucks away when clicking elsewhere, full app on top, and the full app's close button (into the tray or quit). The page posts `mbset:key=value`; the program saves `speak-app.txt` and tells every window (`{mb:'exe', cfg}`, `window.MB_EXE`).
-- **The widget's top row** has today's takes, a button to the full app (`mbopen:full`) and Settings.
-- A `SPEAK.lnk` on his desktop opens `desktop/SPEAK.exe`.
+SPEAK.exe lives in the tray with two windows on one store; its PROGRAM settings post `mbset:` and are saved in `speak-app.txt`. (HISTORY.md: SPEAK.exe: the tray, the mini widget and the full app, 2026-11-16 (SPEAK 1.0.31))
 
 ## DRILL MENU, added 2026-11-16 (SPEAK 1.0.26)
 
-Tom: *"populate the drills menu ... and then I also want you to recommend the best drill for what I'm currently working on. And I also like the idea of not stopping."*
-
-- **DRILL MENU** (`openMenu`), a button on PATH and under TODAY'S DRILLS: BEST FOR YOU NOW on top (`menuPick`: FOCUS's fix drill; else Land it, no tag when crutch phrases showed in his posts or takes this fortnight; else Don't stop), then every drill folded by what it works on (`MENU_GROUPS`, by skill). Picking one closes the menu and opens the drill.
-- **Its own drills** (`LIB`, not on PATH's stages): Don't stop (Faizan Asif's daily rep, two minutes, no STOP, `noStop`), Just a Minute (the BBC game, 60 s, no silence, no repeats), Land it, no tag (a direct speaker's statement with no "right?", crutch 0), Pace ladder 160-180, 180-200, 200-220 (crutch 0 on each rung), One word per line (the actor's operative word, `STRESS_LINES`, pitch spread goal).
-- **`noStop`**: the take's STOP is replaced by a disabled KEEP GOING; the take ends itself at its time. Back still cancels.
+DRILL MENU (`openMenu`) puts BEST FOR YOU NOW first (`menuPick`), then every drill by skill (`MENU_GROUPS`). `LIB` drills sit off the stages; `noStop` drills end themselves. (HISTORY.md: DRILL MENU, added 2026-11-16 (SPEAK 1.0.26))
 
 ## Needs from the foundation
 
@@ -710,25 +310,8 @@ Tom: *"populate the drills menu ... and then I also want you to recommend the be
 
 ## The widget, added 2026-11-10
 
-Tom chose "Own PC widget" for the overlay. `desktop/SpeakApp.cs` is
-SPEAK.exe; `desktop/README.md` has the program's side.
-
-- `?widget=1` puts `widget` on the body: header, nav and main hide, and
-  `#wid` shows the name, today's take count, and one TABLE TOPIC button that
-  calls `startTake(TT)` with no drill sheet first.
-- The page sizes the window by message: `mbsize:big` the moment a take, its
-  numbers or any sheet is up, `mbsize:small` only after 1.2 s of nothing
-  open, because the take closing and its numbers opening leave a gap that
-  would flicker the window. In a browser the messages go nowhere.
-- Watched in Chromium at 300x116 and 440x760 with a fake microphone: nothing
-  overflows the small window, the take ran, the numbers came up, CLOSE
-  shrank it once. The exe, 2026-11-16 on his PC, live copy: 300x116 inside,
-  on top, title bar #080B10; TABLE TOPIC grew it to 440x760 (moved up to fit
-  the screen) with a real question and the real mic; the mouse's back button
-  cancelled the take, saving nothing, and it went back to its spot. Escape
-  does not end a take. Not watched in the exe: STOP, the numbers, CLOSE.
+`?widget=1` shows only the widget; the page sizes SPEAK.exe's window by `mbsize:` messages, shrinking only after 1.2 s with nothing open so it does not flicker. (HISTORY.md: The widget, added 2026-11-10)
 
 ## History, moved from the root brief on 2026-09-22
 
 Moved to HISTORY.md (HISTORY.md: History, moved from the root brief on 2026-09-22).
-
