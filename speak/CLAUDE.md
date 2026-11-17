@@ -235,6 +235,10 @@ Any producer asks Tom through a Todoist `Ask:` task with an optional fenced `ask
 
 Tom: "I have to know why we're doing what we're doing, how we're doing it, what to avoid ... which links are linear and dependent and which ones run in parallel. What buttons to start the task in Claude." The `ask` block also carries `why`, `how`, `avoid` (text or a list), `waitsOn`, `holdsUp`, `alongside` (lists of other questions' words or steps) and `start` `{folder, prompt}`. `askDetail` draws WHY, HOW, AVOID and LINKS as their own blocks, two across from 900px; an old ask shows `context` as WHY. A link naming another open question opens it. Every kind has an answer box with TALK (`askMic`): inside SPEAK.exe the `mbhear:` path (CLIP's faster-whisper), in a browser the browser's recogniser, hidden where neither exists. START IN CLAUDE (`askStart`) opens `claude://code/new?q=&folder=` with the task, his answer and the question; he presses send. OUTER HEAVEN's QUESTIONS tab answers the same notes through the inbox (`ask` rows). Tested in headless Chromium at 390 and 1280; TALK tested with a spoken WAV through CLIP's real transcriber with the page's `mbhear:` message routed to the same script SPEAK.exe runs, not inside SPEAK.exe itself.
 
+## A spoken answer is the answer, 2026-11-17 (SPEAK 1.0.45)
+
+Tom: "why is it asking me about 2-minute rests? I believe I answered that in Speak yesterday. Integrate better." His 137 s SPEAK IT take had words only once the PC transcript landed, and a pick question waited for a tap. Now any take on a question with words answers it, any kind (`by: 'voice'`, `answer` the transcript); `askFromTakes` runs on open and whenever `hearTake` lands a transcript on an ask take. OUTER HEAVEN's `asks._answered` counts the same take, so it hides there before SPEAK opens.
+
 ## The widget's three buttons, 2026-11-16 (SPEAK 1.0.16)
 
 The widget's buttons start their drill straight away through `drillById` (`data-d`). (HISTORY.md: The widget's three buttons, 2026-11-16 (SPEAK 1.0.16))

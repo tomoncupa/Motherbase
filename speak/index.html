@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.44, 2026-11-17">
+<meta name="mb-version" content="1.0.45, 2026-11-17">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -2745,13 +2745,14 @@ function askAnswerText(a) {
   return String(a.answer || '');
 }
 /* save an answer, close the question here and in Todoist, Undo for six seconds */
-function askAnswer(q, fields, h) {
+function askAnswer(q, fields, h, quiet) {
   const was = Rec.get('ask', null, q.key);
   const row = Object.assign({}, was || {}, { q: q.q, kind: q.kind, dest: q.dest || '', context: q.context || '', onRecord: q.onRecord || '',
     tdId: q.tdId, askedAt: q.askedAt || 0 }, fields, { answeredAt: Date.now() });
   Rec.set('ask', null, q.key, row);
   const note = Rec.get('note', q.date, q.key);
   if (note) Rec.patch('note', q.date, q.key, { done: 1 });
+  if (quiet) { draw(); return; }
   Mobile.feedback('complete');
   UI.undo('answered: ' + q.q, () => {
     if (was) Rec.set('ask', null, q.key, was); else Rec.del('ask', null, q.key);
@@ -2854,6 +2855,23 @@ function askStart(q, said) {
   try { const w = window.open(url, '_blank'); if (!w && !window.chrome?.webview) location.href = url; } catch (e) { location.href = url; }
   UI.toast('Opening Claude.');
 }
+/* A spoken answer is the answer, whatever kind the question is (Tom,
+   2026-11-17: "I believe I answered that in Speak yesterday"). His 137 s
+   take on Rest 2 minutes waited because the PC wrote its transcript after
+   the take ended and a pick question waited for a tap. So any open question
+   with a take of its own that has words is answered by them, on every open
+   and whenever a transcript lands. Kept once: askAnswer marks it answered. */
+function askFromTakes() {
+  const open = askQueue();
+  if (!open.length) return;
+  const byAsk = {};
+  takes().forEach(t => { if (t.p && t.p.ask && t.tx && (!byAsk[t.p.ask] || (t.at || 0) > (byAsk[t.p.ask].at || 0))) byAsk[t.p.ask] = t; });
+  open.forEach(q => {
+    const t = byAsk[q.key];
+    if (t) askAnswer(q, { answer: t.tx.slice(0, 20000), said: t.tx.slice(0, 20000), take: t.key, by: 'voice' }, null, true);
+  });
+}
+Rec.ready(() => setTimeout(askFromTakes, 3000));
 function openAsk(q) {
   const wide = window.innerWidth >= 900;
   UI.dialog({
@@ -3263,6 +3281,7 @@ function hearTake(t, blob) {
       if (tw.length) m.clear = clearPct(twOf({ tw: tw }));
       Rec.patch('take', t.date, t.key, Object.assign({ tx: text.slice(0, 4000), asr: 1, asrBy: 'pc', hits: sc.hits, m: m }, tw.length ? { tw: tw } : {}));
       endsApply(t, text);
+      if (x.p && x.p.ask) setTimeout(askFromTakes, 200);
       if (Rec.has('answer', t.date, t.key)) Rec.patch('answer', t.date, t.key, { text: text.slice(0, 20000), words: words });
       setTimeout(() => judgeTake(), 300); setTimeout(sortFree, 600);
     };
@@ -4802,7 +4821,7 @@ function finishTake(m, secs) {
   if (d === AQ && T.prompt && T.prompt.ask) {
     const words = asrOn ? T.listener.out.chunks.join(' ').slice(0, 20000) : '';
     const q = askQueue().filter(x => x.key === T.prompt.ask)[0];
-    if (q && q.kind === 'free' && words) askAnswer(q, { answer: words, said: words, take: take.key }, null);
+    if (q && words) askAnswer(q, { answer: words, said: words, take: take.key, by: 'voice' }, null);
     else if (q) Rec.set('ask', null, q.key, Object.assign({}, Rec.get('ask', null, q.key) || {}, { q: q.q, said: words, take: take.key }));
   }
   if (d.bank && T.prompt && (T.prompt.text || d === FS)) {
