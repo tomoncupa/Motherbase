@@ -41,8 +41,15 @@ Tom picked from the review page (claude.ai/artifact/UPC7MfBNsYeNBvvr6xvTUq). Rul
 - The Every and Habits add boxes draw on `--bg` with `--text-1`. They had no background and drew white under light text.
 - A weekday with no day on it is `.day.wempty`: its name and picker, no body. A weekday running a day keeps its column.
 - A `{lifeos:1, show}` message opens a spot: `schedule` the Schedule page, `habits` or `every` that section with the cursor in its add box. HOME's EVERY & HABITS uses all of it.
-- Not picked: bigger habit squares (3) and text at 12px with no em dashes (4).
 - The self-test's two drag checks ("drag into a routine", "drag between routines") failed with or without this change, so something in 1.0.26 or 1.0.27 broke them. Not looked into.
+
+## 1.0.29, 2026-11-17: review picks 3 and 4
+
+Tom asked for both after all. Rules that stand:
+
+- Habit squares are `--s-4` (16px; the review said 18, which is off the scale). The grid starts at the left under the name, and all seven weekday letters show.
+- Everything on the Schedule page reads at `--f-1` or more: one `#sched` rule raises the shared classes (weekbar, day columns, section heads, hints) there only. The Day and Summary views still carry 9 to 11.5px labels.
+- No em dashes in the Schedule page's text or tooltips, nor in the Day, Schedule, Summary and + Day tab tips.
 
 ## Needs from the home screen
 
