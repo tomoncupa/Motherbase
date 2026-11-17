@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.39, 2026-11-17">
+<meta name="mb-version" content="1.0.40, 2026-11-17">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -20,6 +20,7 @@
 <script src="../shared/journal.js"></script>
 <script src="../shared/chapter.js"></script>
 <script src="../shared/goals.js"></script>
+<script src="../shared/notice.js"></script>
 <script src="../shared/todoist.js"></script>
 <script src="../shared/mobile.js"></script>
 <script src="../shared/sound.js"></script>
@@ -300,6 +301,7 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .gh .lnk.ob{margin-left:0;text-decoration-color:var(--border-strong)}
 .woop{margin-top:var(--s-1)}
 .woop .nx b{color:var(--text-1);font-weight:600}
+.ncv{display:block;width:100%;height:auto;margin:0 auto;max-width:540px}
 .woopnudge{font-size:var(--f-2);color:var(--warn);margin:var(--s-1) 0}
 .wwk{padding:var(--s-2) 0;border-bottom:var(--border-width) solid var(--border)}
 .wwk .for{font-size:var(--f-2);color:var(--text-2);overflow-wrap:anywhere}
@@ -996,19 +998,58 @@ function woopTap(a, v) {
 /* the daily run-through (WOOP point 2): the best result, then what stands in
    the way, then the plan, read in that order */
 function runThrough(a) {
-  const w = Goals.woop(a) || {};
-  UI.dialog({ title: 'RUN THROUGH', width: 520, body: b => {
-    b.appendChild(el('p', 'dq', esc(a.text) + (a.by ? ', by ' + esc(dayWord(a.by)) : '')));
-    [['Picture it', w.outcome], ['What stands in the way', w.obstacle], ['If', w.if], ['Then', w.then]].forEach(p => {
-      if (!p[1]) return;
-      b.appendChild(el('h4', 'sh', esc(p[0])));
-      b.appendChild(el('p', 'oldnote', esc(p[1])));
-    });
-  }, actions: [{ label: 'CLOSE' }, { label: 'RAN IT', kind: 'go', fn: () => {
-    Goals.run(a.key, T(), { ran: 1 });
-    Mobile.feedback('success');
-  } }] });
+  let cv = null;
+  UI.dialog({ title: 'RUN THROUGH', width: 560, body: b => {
+    /* the goal as a NOTICE quest window (Tom, 2026-11-17), read top to bottom:
+       the wish, the outcome, the obstacle, the plan */
+    cv = noticeOf(Notice.woop(Goals.card(a)));
+    b.appendChild(cv);
+  }, actions: [{ label: 'SAVE PICTURE', fn: () => { savePicture(cv, a.tag || 'goal'); return false; } },
+    { label: 'RAN IT', kind: 'go', fn: () => { Goals.run(a.key, T(), { ran: 1 }); Mobile.feedback('success'); } }] });
 }
+/* a NOTICE window as a canvas on the page, Block style, no made-up rewards */
+function noticeOf(q) {
+  const c = Notice.draw(q, 'block', { rewards: () => [] });
+  c.className = 'ncv';
+  c.setAttribute('role', 'img');
+  c.setAttribute('aria-label', [q.title, ...(q.sections || []).map(s => s.text), ...(q.msgs || [])].filter(Boolean).map(s => s.replace(/[.]$/, '')).join('. '));
+  return c;
+}
+/* the window as a picture: the phone's share sheet, else a download */
+function savePicture(c, name) {
+  if (!c) return;
+  c.toBlob(bl => {
+    if (!bl) return;
+    const f = typeof File === 'function' ? new File([bl], name + '.png', { type: 'image/png' }) : null;
+    if (f && navigator.canShare && navigator.canShare({ files: [f] })) { navigator.share({ files: [f] }).catch(() => {}); return; }
+    const u = URL.createObjectURL(bl), l = document.createElement('a');
+    l.href = u; l.download = name + '.png'; document.body.appendChild(l); l.click(); l.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 4000);
+    UI.toast('Picture saved');
+  }, 'image/png');
+}
+/* ── the moment, as a pop-up (Tom, 2026-11-17: "Notifications can be pop
+   ups") ── When a goal's planned if-moment comes while QUESTS is open, a
+   NOTICE notification pops up with KEPT IT and NOT TODAY. Once a goal a day
+   on this page; closing it leaves the two buttons on the goal. It never
+   closes itself. */
+const CUE_SEEN = {};
+function cueCheck() {
+  if (document.hidden || document.querySelector('.ncue')) return;
+  const t = T(), hm = nowHHMM();
+  const a = Goals.cards().find(g => {
+    const x = Rec.get('note', t, Goals.cueKey(g.key, t));
+    return x && x.at && x.at <= hm && !CUE_SEEN[g.key + t] && Goals.keptOn(g.key, t) == null;
+  });
+  if (!a) return;
+  CUE_SEEN[a.key + t] = 1;
+  Mobile.feedback('select');
+  UI.dialog({ title: 'NOW', width: 520, body: b => { const c = noticeOf(Notice.cue(Goals.card(a))); c.classList.add('ncue'); b.appendChild(c); },
+    actions: [{ label: 'NOT TODAY', fn: () => woopTap(a, 0) }, { label: 'KEPT IT', kind: 'go', fn: () => woopTap(a, 1) }] });
+}
+setInterval(cueCheck, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(cueCheck, 800); });
+Rec.ready(() => setTimeout(cueCheck, 1500));
 /* typed outcome, obstacle, if, then and odds, merged into what the goal has */
 function woopFields(b, w0) {
   const w = Object.assign({}, w0 || {});
