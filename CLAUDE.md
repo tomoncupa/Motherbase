@@ -311,7 +311,7 @@ An app may read any type. It writes only the types it owns.
 | `take` | **speak** | timestamp id, dated | `{drill, skill, style, dur, m, goals, pass, asr, cam, tx, prompt, tw, sh}` — one practice take (`tw` each word's time and sureness from SPEAK.exe's transcriber): every number the ear read, each goal as it stood with `got` and `ok`, and the transcript if there was one. The day's warm-up is one `take` with `drill: 'warm'` |
 | `topic` | **speak** | id | `{text, kind}` — his own prompt: a topic, a story, or three bullets |
 | `answer` | **speak** | the take's key, dated as the take | `{q, src, term, bracket, subj, text, words, dur, at}` — the answer bank (fitness, productivity, philosophy, behaviour change): one spoken answer to a FITNESS TOPIC question, its full transcript. Other work (Skool, content) reads it from the backup or the sheet |
-| `ask` | **speak** | the `Ask:` note's key, undated | `{q, kind, answer, optId, ranking, brackets, note, said, take, dest, context, onRecord, tdId, askedAt, answeredAt}` — Tom's answer to a question any producer asked through a Todoist `Ask:` task. Claude files it at `dest`; see `tom-context/fitness-knowledge-bank.md` |
+| `ask` | **speak**; **OUTER HEAVEN** through the inbox (merged, and the note ticked) | the `Ask:` note's key, undated | `{q, kind, answer, optId, ranking, brackets, note, said, take, dest, context, onRecord, tdId, askedAt, answeredAt}` — Tom's answer to a question any producer asked through a Todoist `Ask:` task. Claude files it at `dest`; see `tom-context/fitness-knowledge-bank.md` |
 | `splan` | **speak** | `''`, dated the practice day it read | `{n, met, top: {id, n}, head, cue, drills: [{id, why}], by, no, mark, at}` — the next day's plan made from that day's takes: by the numbers (`by: 'rules'`), then by Claude in SPEAK.exe (`by: 'claude'`). `no` the faults he marked wrong. TODAY shows the newest one from before today |
 | `story` | **speak** | `st-<take key>-<n>` when Claude found it in a take, `st-<time>` when typed, undated | `{title, moment, line, src, from, fromKind, fromTitle, fromDate, at, gone, scan}` — one story from his own life: `moment` the five-second change in it, `line` a way in, `src` `found` or `tom`, `from` the take or `kpiece` it was found in (`fromKind` `ramble` or `post` for a piece). `gone` is Not a story. `st-<piece key>-scan` with `scan: 1` and no title only marks a RAMBLES piece or post as read. A telling is a take whose `p.story` is the key, never stored here |
 | `smodel` | **speak** | timestamp id, undated | `{name, mime, dur, f0, at, data, pad}` — a clip he shadows: its sound and its pitch line (semitones, a tenth of a second each), padded past 64KB so it stays on the device like `tclip`. A take shadowed keeps both lines on `take.sh` |
@@ -552,7 +552,7 @@ back. `desktop/README.md` has the rest.
 store. Backup.exe hands every `*.json` in `Documents/Motherbase inbox` to
 `tools/backup.html` before it loads; a file is `{kind: 'motherbase-inbox',
 rows: [{type, date, key, payload}], gone: [{type, date, key}]}`, only the
-types in the page's `INBOX_TYPES` go in (`kpiece` so far), and taken files
+types in the page's `INBOX_TYPES` go in, and taken files
 move to `done/`. Once a day, signed in, so rows reach every device through
 live sync. `Backup.exe --force` runs it now. A file named `train-cleanup-*.json`
 may also carry `fix` (fields merged into TRAIN `exercise`, `set` or `excat`
