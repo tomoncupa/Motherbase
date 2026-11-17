@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.42, 2026-11-17">
+<meta name="mb-version" content="1.0.43, 2026-11-17">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -175,7 +175,7 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .ask-mic.on{border-color:var(--bad);color:var(--bad)}
 .ask-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s-2);margin-top:var(--s-3)}
 @media (min-width:900px){.ask-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
-.ask-blk{padding:var(--s-3);border-radius:var(--radius-md);font-size:var(--f-2);line-height:var(--lh-body)}
+.ask-blk{padding:var(--s-3);border-radius:var(--radius-md);background:var(--surface-2);border:var(--border-width) solid var(--line);font-size:var(--f-2);line-height:var(--lh-body)}
 .ask-blk h4{margin:0 0 var(--s-1);font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);color:var(--accent)}
 .ask-blk p{margin:0 0 var(--s-2)}
 .ask-blk p:last-child{margin-bottom:0}
@@ -2772,7 +2772,7 @@ const ASK_LINKS = [['waitsOn', 'Waits on'], ['holdsUp', 'Holds up'], ['alongside
 const askList = v => (Array.isArray(v) ? v : v ? [v] : []).map(x => String(x && (x.q || x.label) || x || '').trim()).filter(Boolean);
 function askDetail(q, h) {
   const g = el('div', 'ask-grid');
-  const blk = (lab, html) => { const d = el('div', 'ask-blk mb-plate'); d.innerHTML = '<h4>' + lab + '</h4>' + html; g.appendChild(d); return d; };
+  const blk = (lab, html) => { const d = el('div', 'ask-blk'); d.innerHTML = '<h4>' + lab + '</h4>' + html; g.appendChild(d); return d; };
   const para = s => String(s).split(/\n+/).filter(Boolean).map(p => '<p>' + esc(p) + '</p>').join('');
   const why = q.why || q.context;
   if (why || q.onRecord) blk('WHY', (why ? para(why) : '') + (q.onRecord ? '<p class="muted">On record now: ' + esc(q.onRecord) + '</p>' : ''));
@@ -2801,11 +2801,11 @@ function askDetail(q, h) {
 function askMic(box) {
   const pc = !!window.MB_HEAR && window.MediaRecorder && navigator.mediaDevices;
   if (!pc && !ASR) return null;
-  const b = el('button', 'mb-btn mb-press mb-tap ask-mic', ICN('mic') + '<span>TALK</span>');
+  const b = el('button', 'mb-btn mb-press mb-tap ask-mic', ICN('mic') + '<span class="lab">TALK</span>');
   b.setAttribute('aria-label', 'Say your answer');
   let rec = null, stream = null, chunks = [], sr = null;
   const put = t => { t = String(t || '').trim(); if (!t) return; box.value = (box.value.trim() ? box.value.trim() + ' ' : '') + t; box.dispatchEvent(new Event('input')); };
-  const label = s => { b.querySelector('span').textContent = s; };
+  const label = s => { b.querySelector('.lab').textContent = s; };
   const done = () => { b.classList.remove('on'); label('TALK'); b.disabled = false; };
   b.onclick = async () => {
     if (pc) {
@@ -2834,7 +2834,7 @@ function askMic(box) {
     }
     if (sr) { sr.stop(); return; }
     sr = new ASR();
-    sr.lang = S.get('lang', '') || navigator.language || 'en-US';
+    sr.lang = opt('lang', '') || navigator.language || 'en-US';
     sr.continuous = true; sr.interimResults = false;
     sr.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) put(e.results[i][0].transcript); };
     sr.onerror = e => { if (e.error !== 'no-speech' && e.error !== 'aborted') UI.toast('Speech to text stopped: ' + esc(e.error), { bad: true }); };
@@ -2857,7 +2857,7 @@ function askStart(q, said) {
 function openAsk(q) {
   const wide = window.innerWidth >= 900;
   UI.dialog({
-    title: 'QUESTION FOR YOU', width: 560,
+    title: 'QUESTION FOR YOU', width: (q.why || q.how || q.avoid) ? 820 : 560,
     body: (b, h) => {
       b.appendChild(el('p', 'what', esc(q.q)));
       b.appendChild(askDetail(q, h));
@@ -2922,7 +2922,7 @@ function openAsk(q) {
         sb.title = 'Opens a new Claude Code session' + (q.start.folder ? ' in ' + q.start.folder : '') + ' with this task typed in';
         sb.onclick = () => askStart(q, note.value.trim());
         const sa = el('div', 'acts'); sa.appendChild(sb); b.appendChild(sa);
-        b.appendChild(el('p', 'muted', 'START IN CLAUDE opens a new Claude Code session' + (q.start.folder ? ' in ' + esc(q.start.folder.split(/[\\/]/).pop()) : '') + ' with the task and your answer typed in. You press send.'));
+        b.appendChild(el('p', 'muted ask-help', 'START IN CLAUDE opens a new Claude Code session' + (q.start.folder ? ' in ' + esc(q.start.folder.split(/[\\/]/).pop()) : '') + ' with the task and your answer typed in. You press send.'));
       }
       const said = Rec.get('ask', null, q.key);
       if (said && said.said) b.appendChild(el('p', 'muted', 'You said: ' + esc(said.said.slice(0, 400))));

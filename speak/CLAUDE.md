@@ -231,6 +231,10 @@ OTHER TOPIC (`OT`) is FITNESS TOPIC with `Other:` tasks then `OTHER_QS`, answers
 
 Any producer asks Tom through a Todoist `Ask:` task with an optional fenced `ask` JSON block; SPEAK shows it first on TODAY and writes an `ask` row on answer, ticking the note, with UNDO. "Recommended" is written under an option, never a gold fill. Filing to `dest` is Claude's, from the nightly backup. (HISTORY.md: QUESTIONS FOR YOU, added 2026-11-16 (SPEAK 1.0.15))
 
+## Detailed questions, TALK and START IN CLAUDE, 2026-11-17 (SPEAK 1.0.43)
+
+Tom: "I have to know why we're doing what we're doing, how we're doing it, what to avoid ... which links are linear and dependent and which ones run in parallel. What buttons to start the task in Claude." The `ask` block also carries `why`, `how`, `avoid` (text or a list), `waitsOn`, `holdsUp`, `alongside` (lists of other questions' words or steps) and `start` `{folder, prompt}`. `askDetail` draws WHY, HOW, AVOID and LINKS as their own blocks, two across from 900px; an old ask shows `context` as WHY. A link naming another open question opens it. Every kind has an answer box with TALK (`askMic`): inside SPEAK.exe the `mbhear:` path (CLIP's faster-whisper), in a browser the browser's recogniser, hidden where neither exists. START IN CLAUDE (`askStart`) opens `claude://code/new?q=&folder=` with the task, his answer and the question; he presses send. OUTER HEAVEN's QUESTIONS tab answers the same notes through the inbox (`ask` rows). Tested in headless Chromium at 390 and 1280; TALK tested with a spoken WAV through CLIP's real transcriber with the page's `mbhear:` message routed to the same script SPEAK.exe runs, not inside SPEAK.exe itself.
+
 ## The widget's three buttons, 2026-11-16 (SPEAK 1.0.16)
 
 The widget's buttons start their drill straight away through `drillById` (`data-d`). (HISTORY.md: The widget's three buttons, 2026-11-16 (SPEAK 1.0.16))
