@@ -803,3 +803,30 @@ headless Chromium at 1920 and 390: contents, the project pick, a tick from
 NEXT TASK.
 
 **1.0.132** (Tom: "why they wide purple and ugly", picked A, B and C): the three cards draw ruled lines, not plates (`rowlist ruled qrows`), the colour only on the tick box, and are 3 wide. C, the card shrinking to its rows, was not built: it is the auto-size Tom turned off on 2026-11-16 ("the overall widget size should be manually set"); Fit to contents on the card menu does it once.
+
+## One widget for ROOM's wallpaper (2026-11-17, 1.0.134)
+
+Tom wanted the wallpaper to carry the home screen's widgets ("Just put full
+widget functionality ... Copy the grid system"). OUTER HEAVEN frames this page
+once per widget instead of copying widgets:
+
+- **`?widget=<type>&n=<k>`** draws only the k-th card of that type on his
+  board, with its own settings, filling the page on a clear background
+  (`html.wmode`, set in the head before the first paint). No such card: a
+  fresh one at its factory size. Nothing in this mode saves the board: the
+  head's remove, menu and arrows are hidden and the head takes no press, so
+  the card cannot be dragged, sized or removed (`wmodeList`, a sparse list,
+  so card indices stay his board's).
+- **`?widget=list`** (and `sync`) draws nothing and posts
+  `{mbWidgets, cards, types, stickies, signedIn}` to the parent, on ready
+  and every minute (`wmodeTell`).
+- **Typing:** in this mode a focused box posts `{mbTyping: 1}` / `0` to the
+  parent, so the wallpaper behind the desktop knows when to hand it keys.
+- **STICKY NOTE has several notes:** `cfg.sk` (or `&key=` in this mode)
+  stores the note as the setting `lifeos.sticky.<key>`; no key is the old
+  `lifeos.sticky`. Its card menu gains Which note once a second note exists.
+- **Live sync in a frame:** `shared/cloud.js` connects from a frame named
+  `?sync=1` whose top is another site (the wallpaper), never from the
+  suite's own frames (`LEAD`).
+- Tested in headless Chromium from another origin: one card drawn, header
+  hidden, background clear, a keyed sticky saved and `mbTyping` sent.

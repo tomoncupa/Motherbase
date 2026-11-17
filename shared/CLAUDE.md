@@ -928,3 +928,7 @@ tick the way unticking does (`doneOn`, `doneAt` go, `by` goes back); it
 left them, so a cancelled todo still showed as done on that day. `tick` on
 a cancelled todo sets `cancelled: 0`, and a repeat's done copy is never
 cancelled. One `journal:` smoke check through a stand-in store.
+
+## One connection from a frame under another site (2026-11-17, `cloud.js`)
+
+ROOM's wallpaper (OUTER HEAVEN, http on this PC) frames the home screen one widget at a time (HOME 1.0.134), so no suite page there is the top document and none would connect. `LEAD` lets a frame connect when its address carries `?sync=1` AND its top is another site (reading `top.location` throws); the suite's own frames keep `top === self` as the rule. It replaces the three `g.top` checks (onUnkept, autoFlush, start). From a HOME/ROOM session at Tom's ask. Not watched signed in: the wallpaper's WebView2 sign-in is the test.

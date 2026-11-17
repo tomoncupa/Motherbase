@@ -124,6 +124,19 @@ var probed = null;
 function csave() { if (probed) return; try { localStorage.setItem(CKEY, JSON.stringify(cfg)); } catch (e) {} }
 cread();
 
+/* The one document that connects. Normally the top one. ROOM's wallpaper
+   (OUTER HEAVEN, an http page on this PC) frames the home screen one widget
+   at a time, so every suite page there is a frame and none is top: the
+   wallpaper names one of them with ?sync=1 and that one connects for the
+   rest, which share its rows through the store (2026-11-17). Only a frame
+   whose top is another site may do this, so the suite's own frames never
+   open a second connection. */
+var LEAD = (function () {
+  if (g.top === g) return true;
+  if (!/[?&]sync=1(&|$)/.test(g.location.search)) return false;
+  try { return !g.top.location.href; } catch (e) { return true; }
+})();
+
 /* Another frame pasted the config or signed in. Same reason the mirror does
    this: an app opened before the paste would otherwise answer "not set up" for
    the rest of the session. */
@@ -221,7 +234,7 @@ function onUnkept() {
   if (cfg.seen) { cfg.seen = ''; csave(); }
   note(UNKEPT, 0);
 }
-if (g.top === g && g.Rec && g.Rec.onUnkept) {
+if (LEAD && g.Rec && g.Rec.onUnkept) {
   g.Rec.onUnkept(onUnkept);
   if (unkeptNow()) onUnkept();
 }
@@ -727,7 +740,7 @@ function pending() {
    left waiting for signal tries again in a minute, then every five. */
 var autoT = null, autoGap = 60000;
 function autoFlush() {
-  if (g.top !== g || isFile()) return;
+  if (!LEAD || isFile()) return;
   if (autoT) { clearTimeout(autoT); autoT = null; }
   if (!probe && !cfg.on) return;
   pending().then(function (l) {
@@ -948,7 +961,7 @@ function start() {
   if (started) return Promise.resolve(false);
   if (!probe) {
     if (!cfg.on || !cfg.cfg) return Promise.resolve(false);
-    if (g.top !== g) return Promise.resolve(false);   /* one connection per document */
+    if (!LEAD) return Promise.resolve(false);   /* one connection per document */
     if (missing(cfg.cfg)) return Promise.resolve(false);
   }
   /* The signed-in account is the source of truth for the uid, not the one we

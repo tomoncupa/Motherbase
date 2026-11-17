@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.133, 2026-11-17">
+<meta name="mb-version" content="1.0.134, 2026-11-17">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -13,7 +13,21 @@
    and goes home. Only under the home screen: _review.html frames this page
    too, and it has no stayIn. */
 try { if (window.frameElement && typeof parent.stayIn === 'function') location.replace('about:blank'); } catch (e) {}
+/* ?widget=<type>: ONE widget, filling the page, nothing else on it, for
+   ROOM's wallpaper (OUTER HEAVEN) to frame (2026-11-17). Set before the
+   first paint so no header flashes. drawHome reads WMODE. */
+if (/[?&]widget=/.test(location.search)) document.documentElement.classList.add('wmode');
 </script>
+<style>
+html.wmode, html.wmode body { background: transparent !important; overflow: hidden; }
+html.wmode #wrap > *, html.wmode #grid > .w { visibility: hidden; }
+html.wmode #wrap > main, html.wmode #wrap > main > #home { visibility: visible; background: transparent; }
+html.wmode #grid > .w.wone { visibility: visible; position: fixed !important; inset: 0 !important; width: auto !important; height: auto !important;
+  margin: 0 !important; grid-area: auto !important; transform: none !important; z-index: 5; }
+html.wmode #grid > .w.wone .w-head { pointer-events: none; }
+html.wmode #grid > .w.wone .w-head .x, html.wmode #grid > .w.wone .w-head .wdots, html.wmode #grid > .w.wone .w-head .mv { display: none; }
+html.wmode #cardframes, html.wmode #over:empty { display: none; }
+</style>
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -3970,9 +3984,21 @@ const WIDGETS = {
   sticky: {
     nm: 'STICKY NOTE', w: 4, h: 3, grp: 'DESK',
     sub: () => 'saved with your data',
-    draw(body) {
+    /* Several notes since 2026-11-17: ROOM's wallpaper + makes a note of its
+       own, `lifeos.sticky.<key>`, so it reaches every device as a row. A card
+       with no `sk` is the first note, `lifeos.sticky`, as it always was, and
+       the card menu picks which note a card shows. */
+    menu(cfg, redraw) {
+      const keys = Rec.all('setting').filter(r => /^lifeos\.sticky\.[\w-]+$/.test(r.key)).map(r => r.key.slice(13));
+      if (!keys.length) return [];
+      const first = s => (String(s || '').trim().split(/\s*\n/)[0] || 'Empty note').slice(0, 40);
+      return [{ label: 'Which note', sub: [{ label: first(Rec.setting('lifeos', 'sticky')), check: !cfg.sk, fn: () => { delete cfg.sk; redraw(); } }]
+        .concat(keys.map(k => ({ label: first(Rec.setting('lifeos', 'sticky.' + k)), check: cfg.sk === k, fn: () => { cfg.sk = k; redraw(); } }))) }];
+    },
+    draw(body, cfg) {
+      const name = cfg && cfg.sk ? 'sticky.' + cfg.sk : 'sticky';
       const ta = document.createElement('textarea');
-      ta.value = Rec.setting('lifeos', 'sticky') || '';
+      ta.value = Rec.setting('lifeos', name) || '';
       ta.placeholder = 'Anything.';
       ta.spellcheck = false;
       ta.setAttribute('aria-label', 'Sticky note');
@@ -3993,7 +4019,7 @@ const WIDGETS = {
          the last key, and at once when the box is left (the page leaving
          blurs it first, UI.commitFocused), so a note typed and closed inside
          the half second is kept. */
-      const save = () => { clearTimeout(t); if (ta.value !== (Rec.setting('lifeos', 'sticky') || '')) Rec.setting('lifeos', 'sticky', ta.value); };
+      const save = () => { clearTimeout(t); if (ta.value !== (Rec.setting('lifeos', name) || '')) Rec.setting('lifeos', name, ta.value); };
       ta.oninput = () => { fit(); clearTimeout(t); t = setTimeout(save, 500); };
       ta.onblur = save;
       body.appendChild(ta);
@@ -7842,6 +7868,44 @@ const PLANDAY = {
   },
 };
 
+/* ── one widget, for ROOM's wallpaper (2026-11-17) ──
+   OUTER HEAVEN's wallpaper frames this page once per widget, as
+   `?widget=<type>&n=<k>&bare=1`: the k-th card of that type on his board,
+   with its own settings, else a fresh one. `&key=<k>` on a sticky note is
+   a note of its own, the setting `lifeos.sticky.<k>`. `?widget=list`
+   draws nothing and hands the wallpaper his cards and every type. Nothing
+   here ever saves the board: the head's buttons are hidden and the card
+   cannot be dragged, removed or sized. */
+const WQ = new URLSearchParams(location.search);
+const WMODE = WQ.get('widget') || '';
+function wmodeList() {
+  const a = [];
+  if (WMODE === 'list' || WMODE === 'sync' || !WIDGETS[WMODE]) return a;
+  const key = (WQ.get('key') || '').replace(/[^\w-]/g, '');
+  const mine = key ? [] : layout.map((c, i) => [c, i]).filter(([c]) => c && c.t === WMODE);
+  const k = Math.max(0, Number(WQ.get('n')) || 0);
+  if (mine[k]) a[mine[k][1]] = mine[k][0];
+  else { const W = WIDGETS[WMODE]; a[layout.length] = Object.assign({ t: WMODE, w: W.w || 4, h: W.h || 3 }, key ? { sk: key } : {}); }
+  return a;
+}
+function wmodeTell() {
+  if ((WMODE !== 'list' && WMODE !== 'sync') || parent === window) return;
+  const cards = [], seen = {};
+  layout.forEach(c => { const W = c && WIDGETS[c.t]; if (!W || String(c.t).indexOf('app-') === 0) return;
+    const n = seen[c.t] = (seen[c.t] == null ? 0 : seen[c.t] + 1);
+    cards.push({ t: c.t, n, nm: W.nmFor ? W.nmFor(c) : W.nm, w: c.w, h: c.h }); });
+  const types = Object.keys(WIDGETS).filter(t => t.indexOf('app-') !== 0 && WIDGETS[t].nm)
+    .map(t => ({ t, nm: WIDGETS[t].nm, w: WIDGETS[t].w || 4, h: WIDGETS[t].h || 3, grp: WIDGETS[t].grp || '' }));
+  const stickies = Rec.all('setting').filter(r => /^lifeos\.sticky\.[\w-]+$/.test(r.key) && !r.deleted).map(r => r.key.slice(13));
+  try { parent.postMessage({ mbWidgets: 1, cards, types, stickies, signedIn: !!(window.Cloud && Cloud.state && Cloud.state().on) }, '*'); } catch (e) {}
+}
+/* Typing in a framed widget: the wallpaper sits behind the desktop and is
+   handed keys only while it knows a box here has the caret. */
+if (WMODE) {
+  const ed = t => t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  document.addEventListener('focusin', e => { if (ed(e.target)) try { parent.postMessage({ mbTyping: 1 }, '*'); } catch (x) {} });
+  document.addEventListener('focusout', e => { if (ed(e.target)) try { parent.postMessage({ mbTyping: 0 }, '*'); } catch (x) {} });
+}
 function drawHome() {
   useBoard();
   PLANDAY.seed();
@@ -7856,9 +7920,10 @@ function drawHome() {
   const ord = seenOrder();
   ord.forEach((i, k) => { seen[i] = k; });
   document.body.classList.toggle('editing', editing);
-  layout.forEach((cfg, i) => {
+  const list = WMODE ? wmodeList() : layout;
+  list.forEach((cfg, i) => {
     const W = WIDGETS[cfg.t]; if (!W) return;
-    const n = el('div', 'w mb-card');
+    const n = el('div', 'w mb-card' + (WMODE ? ' wone' : ''));
     n.style.setProperty('--cw', cfg.w); n.style.setProperty('--ch', cfg.h);
     if (cfg.x) { n.classList.add('at'); n.style.setProperty('--gx', cfg.x); n.style.setProperty('--gy', cfg.y); }
     if (NARROW()) n.style.order = rank[i];
@@ -9343,6 +9408,7 @@ LifeOS.ready(() => {
   LifeOS.prune(800);
   go(location.hash.slice(1) || 'home');
   refreshDataBtn();
+  if (WMODE) { wmodeTell(); setTimeout(wmodeTell, 5000); setInterval(wmodeTell, 60000); }
 });
 clock(); setInterval(clock, 20000);
 /* midnight: today rolls over, so the home screen must too */
