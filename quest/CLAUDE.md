@@ -443,7 +443,7 @@ date one by one mode"; 4A. The rule is `shared/chapter.js`.
   of 212 WebKit. STATUS (1.0.98) and BLOCK (1.0.26) read from a new chapter
   too; TRAIN does not, it counts in training blocks (Tom).
 
-## WOOP (Tom, 2026-11-17: all ten points, joined to the week plan and plan tomorrow; 1.0.39)
+## Vision goals (WOOP; Tom, 2026-11-17: all ten points, joined to the week plan and plan tomorrow; 1.0.39)
 
 Every goal may carry a WOOP (wish, outcome, obstacle, plan): `aim.woop =
 {outcome, obstacle, if, then, odds, oddsWs, pic}`, typed in the goal sheet
@@ -500,3 +500,4 @@ under "Plan for it", saved by merge. The rule is `shared/goals.js`, WOOP.
   project, 4 no priority). The rule is `shared/journal.js`
   (`Journal.filterShows`), read by the home screen's NEXT card too.
 - The side's Today count still counts every todo due.
+- **The name on screen is "vision goals"** (Tom, 2026-11-17: "Change the term whoop to vision goals"; 1.0.41). Never print WOOP to him; code keeps `woop`, `wrun`, `Goals.hasWoop` so no data moves.

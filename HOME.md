@@ -763,7 +763,7 @@ Tom: recovery should not be "hyper individualized to me", and should follow "the
 - The row's hover says why: the sets, and the log only when it moved the window.
 - **An untrained muscle is green, never grey** (Tom: "have the body show up as green, not empty and gray if I am untrained for a couple of days ... meant to motivate me to train more often, not guilt me"): ready, at the lowest brightness (0.4; trained muscles 0.4 to 1 by sets). After days off the whole body reads green and the card says "Every muscle is ready to train".
 
-## WOOP in Plan the day and THIS WEEK (2026-11-17, 1.0.129)
+## Vision goals (WOOP) in Plan the day and THIS WEEK (2026-11-17, 1.0.129; the step is VISION GOALS since 1.0.133)
 
 Tom said yes to all ten WOOP points and asked for them joined to plan
 tomorrow. Plan the day now asks, after Today or Tomorrow and before BLOCK,
