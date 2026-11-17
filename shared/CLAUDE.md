@@ -471,6 +471,18 @@ gave 4,984. Nothing was lost; the files were short.
   dropped). A busy page holds its IndexedDB transactions open, and nothing
   else on the store is answered. One `todoist:` and one `rec:` smoke check.
 
+## One merge per answer (2026-11-17, `cloud.js` 0.2.12)
+
+Tom: "why does motherbase take so long to open". The hosted home screen in
+his Chrome froze for 116 s in one long frame inside Firebase's socket
+handler (Long Animation Frame entries, read off the live tab): 1,023 rows
+had arrived since that browser last opened, `onRow` merged each one alone,
+so each announced and the home screen redrew once per row, about 113 ms
+each. That frame is also why the device row read first paint 39.9 s. `onRow`
+now gathers rows and `flushRows` merges them as one `Rec.merge` when the
+SDK's loop ends (a 0 ms timer), and before the value event, a push or an
+unlisten acts. One `live sync:` smoke check (40 rows, one merge).
+
 ## Live sync boundaries (2026-09-24, `cloud.js` 0.1.3)
 
 A row stamped more than a day ahead (`soon()`) is never sent and never moves

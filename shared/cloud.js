@@ -1,4 +1,4 @@
-/* shared/cloud.js — 0.2.4 — Firebase as a SECOND sync, beside the Google Sheet,
+/* shared/cloud.js — 0.2.12 — Firebase as a SECOND sync, beside the Google Sheet,
    and since 0.2.0 the trays a client and the coach send each other things by.
 
    Tom, 2026-09-20: "Keep the google sheet sync, I like it". So this is not a
@@ -857,6 +857,17 @@ function rules(coach) {
    times and returns early when nothing moved, so re-delivery costs one
    comparison and removes the off-by-one that an exclusive boundary would need
    to get right in a place where getting it wrong loses a row.              */
+/* ── one merge per answer, 0.2.12 (2026-11-17) ──
+
+   The SDK hands over every row of one answer in one synchronous loop, one
+   child event each. Until 0.2.12 each was merged on its own, so each one
+   announced, and every page redrew once per row: 1,023 rows that had
+   arrived overnight froze the home screen in Chrome for 116 seconds, at
+   about 113ms a redraw (measured 2026-11-17, Tom: "why does motherbase take
+   so long to open"). Rows now gather and go into ONE `Rec.merge` as soon as
+   the loop ends, or before the answer's value event is acted on, so one
+   answer is one announce, one redraw and one save of `seen`. */
+var inbox = [], inboxT = 0;
 function onRow(snap) {
   var v = null;
   try { v = snap.val(); } catch (e) {}
@@ -865,15 +876,27 @@ function onRow(snap) {
      payload was only those, such as BLOCK's `{v: []}`, comes down with no
      payload at all, and an app reading a field off it throws (2026-09-25). */
   if (v.payload == null && !v.deleted) v.payload = {};
+  inbox.push(v);
+  if (!inboxT) inboxT = setTimeout(flushRows, 0);
+}
+function flushRows() {
+  clearTimeout(inboxT); inboxT = 0;
+  if (!inbox.length) return;
+  var list = inbox; inbox = [];
   var R = store(), n = 0;
-  try { n = R ? R.merge([v]) : 0; } catch (e) { return; }
-  var at = v.updated_at || '';
-  cloudAt[v.id] = at;
-  /* The cloud holds an older copy than this device: something wrote over a
-     newer one. Ours goes back up. */
-  var mine = mineOf(v.id);
-  if (mine && (mine.updated_at || '') > at) { redo[v.id] = 1; nudge(); }
-  if (at && at > (cfg.seen || '') && at <= soon() && !unkeptNow()) { cfg.seen = at; csave(); }
+  try { n = R ? R.merge(list) : 0; } catch (e) { return; }
+  var seen = cfg.seen || '', top = soon(), unkept = unkeptNow(), resend = 0;
+  list.forEach(function (v) {
+    var at = v.updated_at || '';
+    cloudAt[v.id] = at;
+    /* The cloud holds an older copy than this device: something wrote over a
+       newer one. Ours goes back up. */
+    var mine = mineOf(v.id);
+    if (mine && (mine.updated_at || '') > at) { redo[v.id] = 1; resend = 1; }
+    if (at && at > seen && at <= top && !unkept) seen = at;
+  });
+  if (seen !== (cfg.seen || '')) { cfg.seen = seen; csave(); }
+  if (resend) nudge();
   if (n) { last.got += n; landed('got'); }
 }
 /* This device's own copy of a row, tombstone or not. */
@@ -907,6 +930,7 @@ function listen() {
   /* A value event comes after every child event of the same answer, so by
      now each row the cloud holds in the window has been merged. */
   q.once('value').then(function () {
+    flushRows();
     if (q !== query || !started) return;
     loaded = true; say();
     mark('first');
@@ -915,6 +939,7 @@ function listen() {
   }, function () {});
 }
 function unlisten() {
+  flushRows();
   try { if (query) { query.off('child_added', onRow); query.off('child_changed', onRow); query.off('child_removed', onGone); } } catch (e) {}
   query = null;
 }
@@ -1181,6 +1206,8 @@ function write(patch) {
 
 function push(why) {
   if (!started || !db || !uid) return Promise.resolve(0);
+  /* rows heard but not yet merged go in first, so a push sees them */
+  flushRows();
   /* Not before the cloud has answered, and never blind. The top of this file
      says why; the push runs by itself once both are true. */
   if (!loaded || !conn) { owed = true; return Promise.resolve(0); }

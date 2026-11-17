@@ -3991,6 +3991,12 @@ async function run() {
       put(E(F.id), mk('f', ago(100), 'ancient'));
       await Cloud._push(); await settle();
       L.below = CDB[E(F.id)].payload.v === 'here';
+      /* 2026-11-17: 1,023 rows arriving one merge each froze the home screen
+         116 s, one redraw a row. A burst of rows is one merge. */
+      { let calls = 0; const m0 = S2.merge; S2.merge = l => { calls++; return m0(l); };
+        for (let i = 0; i < 40; i++) put(E('local|x||burst' + i), mk('burst' + i, ago(0.1), i));
+        await settle();
+        L.burst = calls === 1 && !!S2._rows['local|x||burst39']; L.burstN = calls; S2.merge = m0; }
       wipe();
 
       /* The daily check. The cloud holds g (live) and h (a tombstone) this
@@ -4044,6 +4050,7 @@ async function run() {
     ok('live sync: back online, the cloud is read again before anything goes up', !!(L.reread && L.back), say);
     ok('live sync: the window starts two days before the last row heard', !!L.window, say);
     ok('live sync: a row pushed below the window over a newer one is put back', !!L.below, say);
+    ok('live sync: rows that arrive together go into the store as one merge', !!L.burst, say + ' — merges: ' + L.burstN);
     ok('live sync: the daily check fetches rows this device lacks, tombstones too', !!L.fetched, say);
     ok('live sync: the daily check leaves purged old ticks and test rows alone', !!L.left, say);
     ok('live sync: the daily check sends rows the cloud lacks', !!L.up, say);
