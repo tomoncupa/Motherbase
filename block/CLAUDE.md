@@ -64,6 +64,16 @@ Tom: "prepare for when we wake up not the best versions of ourselves ... accommo
 - **Start from your 2020 chart** seeds his chart read off the picture; the floor on Brush teeth and Salt drink is a guess and is his to change.
 - The bin and the footer are hidden on Flow (a view change).
 
+## 1.0.31, 2026-11-17: drawn like his 2020 chart
+
+Tom: "I don't like how curvy the layout is. Match super closer the image I gave you, along with the spacing." Rules that stand:
+
+- Boxes are solid blocks in their kind's colour with the words centred; the words take whichever of `--bg` and `--text-1` reads better on that fill in the theme worn (`fInk`, measured).
+- Arrows are straight lines with right-angle turns (`fRoute`): straight down; down, across, down to the next row; out the side along the gap between columns, each line in a gap on its own lane, a fan (3 or more out of one box) sharing one; a long way back up and to the left loops round the right of everything. The first route that crosses no other box wins.
+- An arrow's words sit beside its line on the canvas colour, no box. In Plan the line itself is picked (a wide invisible stroke), so a wordless arrow carries no marker. `dash` 1 draws a path he might take dashed.
+- His proportions: box 144 x 72, columns 192 apart, rows 108 apart, snapping to 12px. "No way back" is the words only, no outline.
+- "Start from your 2020 chart" (and "Add your 2020 chart" in the flow menu) is the whole picture now, 39 boxes, read off the image; no fixed times, floor on Brush Teeth and Salt Drink (a guess).
+
 ## Needs from the home screen
 
 The new chapter: `HOME.md`, Needs from BLOCK (2026-11-16), asks STREAKS and EVERY & HABITS to count from `Chapter.from('block')`. HOME 1.0.75 copied `rhPeriod`, `rhPer` and `act` ticking into its EVERY & HABITS card (`rhAnyState`, `rhTickH`). Change both when habit maths changes.
