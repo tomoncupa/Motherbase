@@ -613,6 +613,10 @@ Tom: *"a list of words that make me practice pronouncing the last syllable or co
 
 **The pile, not built yet**: per-sound scoring with a phoneme model or forced alignment (OpenPronounce, mcp-server-pronunciation, Montreal Forced Aligner; 1.0.39 only reads how sure Whisper was of each word), a pause countdown on the prompter (Storia), and the endings drill carried into free talk.
 
+## Reminders before every take, 2026-11-17 (SPEAK 1.0.40)
+
+Tom: reminders at the start "like to just slow down, breathe, let my words have space", then "make this intelligent ... reactive to my current biggest issues". The count-in shows up to three lines (`mindEl`): his biggest habits now (`mindRank`: every take's top three coach faults over the last 12 takes in 14 days, worse and newer counting more, kept only while the habit is in the last four takes, times 1.5 when the coming drill measures it), each with what to do (`MIND_FOR`, his rewording in `speak.mindTx`) and why ("Fillers, in 5 of your last 5 takes, and this drill measures it"). His calm lines (`speak.mind`, first three "Slow down." "Breathe in before the first word." "Let your words have space.") fill when fewer than three habits show. The count runs five instead of three while they show. Settings, REMINDERS: on or off, SHOWING NOW, his calm lines, every habit's words. Tested headless Chromium at 1280 and 390 on seeded takes, not with his voice.
+
 ## Replay marks, leaning words, shadowing, clear words, 2026-11-17 (SPEAK 1.0.39)
 
 Tom asked whether SPEAK was the highest form it could be, then said "All" to the four picks. The take sheet already played the take back with ums and pauses on its strip; that was missed when the picks were written, and he was told.

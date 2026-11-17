@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.39, 2026-11-17">
+<meta name="mb-version" content="1.0.40, 2026-11-17">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -201,6 +201,13 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 #take .clock{font-family:var(--font-mono);font-size:var(--f-5);font-weight:var(--w-bold);font-variant-numeric:tabular-nums}
 #take .mid{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:var(--s-4);max-width:calc(var(--s-10) * 5);
   width:100%;margin:0 auto;overflow:auto}
+.mind{max-width:calc(var(--s-10) * 6);margin:var(--s-4) auto 0;padding:0 var(--s-3);text-align:center}
+.mind p{margin:var(--s-4) 0;font-size:var(--f-3);color:var(--text-1)}
+.mind p .why{display:block;font-size:var(--f-1);color:var(--text-muted);margin-top:var(--s-1)}
+.mindprev{margin-bottom:var(--s-4)}
+.mindf{width:100%;min-width:0}
+.mindta{width:100%;box-sizing:border-box;min-height:calc(var(--s-10) * 1.5);font:inherit;resize:vertical}
+.mindprev .mind{text-align:left;margin:0}
 #take .count{font-family:var(--font-display);font-size:var(--f-9);font-weight:var(--w-bold);text-align:center;color:var(--accent)}
 #take .say{font-family:var(--font-display);font-size:var(--f-4);text-align:center;color:var(--text-2);letter-spacing:var(--track-cap)}
 #take .meters{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s-3);max-width:calc(var(--s-10) * 5);width:100%;margin:0 auto}
@@ -3782,7 +3789,7 @@ function nextDrills(t) {
 function remindFrom(t) {
   const fs = coach(t).slice(0, 2), m = t.m || {}, cues = fs.map(f => f.cue);
   if (!t.asr) cues.push('Transcript was off: your crutch phrases and coherence were not read.');
-  return { take: t.key, at: Date.now(), cues: cues.slice(0, 3), drills: nextDrills(t).map(x => x.id),
+  return { take: t.key, at: Date.now(), cues: cues.slice(0, 3), faults: fs.map(f => f.id), drills: nextDrills(t).map(x => x.id),
     nums: [m.wpm != null ? Math.round(m.wpm) + ' wpm' : '', m.fpm != null ? r1(m.fpm) + ' fillers/min' : ''].filter(Boolean).join(', ') };
 }
 function nextBoxFor(t, h) {
@@ -4104,6 +4111,80 @@ async function startTakeNow(d, warmStep, prompt) {
   if (!T.live) return;
   runTake();
 }
+/* ══════════════ before every take (SPEAK 1.0.40) ══════════════
+   Tom, 2026-11-17: "the prompt at the start also showed some reminders,
+   like to just slow down, breathe, let my words have space ... it's easy to
+   overcome the power of habit if you're aware of what the habits are and you
+   know what to do", then "make this intelligent ... reactive to my current
+   biggest issues and what would be the most effective for me to take into
+   account". So the count-in names his biggest habits right now, each with the
+   one thing to do about it, read from his recent takes: every take's top
+   three faults, the worse and the newer counting more, a habit only while
+   it still turns up in his last four takes, and a habit the coming drill
+   measures moved up. When nothing stands out, his three calm lines show.
+   Every line is his to reword (Settings, REMINDERS). The count runs five
+   instead of three while they show, the length of a breath. */
+const MIND_BASE = ['Slow down.', 'Breathe in before the first word.', 'Let your words have space.'];
+const MIND_FOR = {
+  'um-pause': 'When you pause, breathe in. Start again on a real word.',
+  'um-start': 'One breath, and know your first sentence before you speak.',
+  'um-end': 'Know your last line. Say it, then stop.',
+  fillers: 'Silence is fine. Let a pause sit where an um wants to go.',
+  crutch: 'End the sentence where the phrase would go, and hold a beat.',
+  speedup: 'Hold the pace you start with all the way to the end.',
+  fast: 'Slow down. Give each word its full length.',
+  slow: 'Keep it moving: shorter thoughts, less waiting.',
+  'dead-air': 'Keep pauses short: a breath, not a search.',
+  'run-on': 'Let your words have space. Pause at the end of each thought.',
+  restarts: 'Start each sentence soft and a little slow.',
+  flat: 'Lift your voice on the one word that matters in each sentence.',
+  mumble: 'Open your mouth and land every last sound.',
+  eyes: 'Talk to one person behind the lens.',
+  mouth: 'Use your whole mouth, both sides.',
+  wordy: 'Say the point first, then stop.',
+  unclear: 'One idea at a time: point, reason, example.',
+};
+/* the reading each habit is judged on, so a drill that measures it moves it up */
+const MIND_METRIC = { 'um-pause': 'fpm', 'um-start': 'fpm', 'um-end': 'fpm', fillers: 'fpm', crutch: 'crutch', speedup: 'wpm', fast: 'wpm', slow: 'wpm',
+  'dead-air': 'longP', 'run-on': 'pauses', restarts: 'restarts', flat: 'pitch', mumble: 'crisp', eyes: 'eye', mouth: 'mouthEven', wordy: 'concision', unclear: 'coherence' };
+const mindOn = () => optOn('mindOn', 1);
+function mindBase() { const v = opt('mind', null); return Array.isArray(v) ? v.filter(x => String(x).trim()) : MIND_BASE.slice(); }
+function mindText(id) { const o = opt('mindTx', null) || {}; return String(o[id] || '').trim() || MIND_FOR[id] || ''; }
+/* his biggest habits right now: [{id, n, of, score}], worst first */
+function mindRank(d) {
+  const ts = takes().filter(t => t.drill !== 'warm' && t.date >= Day.shift(Day.today(), -13) && (drillById(t.drill) || {}).check !== true).slice(-12).reverse();
+  if (!ts.length) return [];
+  const sc = {}, n = {}, recent = {};
+  ts.forEach((t, i) => coach(t).slice(0, 3).forEach((f, k) => {
+    if (!MIND_FOR[f.id]) return;
+    sc[f.id] = (sc[f.id] || 0) + f.sev * Math.pow(0.85, i) * (k === 0 ? 1.3 : 1);
+    n[f.id] = (n[f.id] || 0) + 1;
+    if (i < 4) recent[f.id] = 1;
+  }));
+  const want = {};
+  ((d && d.goals ? d.goals(targets()) : []) || []).forEach(g => { want[g.m] = 1; });
+  return Object.keys(sc).filter(id => recent[id])
+    .map(id => ({ id: id, n: n[id], of: ts.length, score: sc[id] * (want[MIND_METRIC[id]] ? 1.5 : 1), drill: !!want[MIND_METRIC[id]] }))
+    .sort((a, b) => b.score - a.score);
+}
+/* what shows: up to three habits, then his calm lines to fill */
+function mindLines(d) {
+  const rk = mindRank(d).slice(0, 3), out = rk.map(r => ({ id: r.id, text: mindText(r.id),
+    why: (FAULT[r.id] || r.id) + ', in ' + r.n + ' of your last ' + r.of + ' takes' + (r.drill ? ', and this drill measures it' : '') }));
+  mindBase().forEach(x => { if (out.length < 3 && !out.some(o => o.text.toLowerCase() === x.toLowerCase())) out.push({ id: '', text: x, why: '' }); });
+  return out;
+}
+function mindEl(d) {
+  const ls = mindLines(d);
+  if (!ls.length) return null;
+  const box = el('div', 'mind');
+  ls.forEach(x => {
+    const p = el('p', x.id ? 'hab' : null, esc(x.text));
+    if (x.why) p.appendChild(el('span', 'why', esc(x.why)));
+    box.appendChild(p);
+  });
+  return box;
+}
 function countIn() {
   return new Promise(res => {
     const mid = $('#tkMid'); mid.innerHTML = '';
@@ -4111,10 +4192,11 @@ function countIn() {
     const prep = T.d && T.d.prep && !T.warm;
     mid.appendChild(el('div', 'say', T.cam ? 'LOOK AT THE LENS' : T.warm ? T.warm.how.toUpperCase() : prep ? T.d.prep : 'READY'));
     if (prep) { mid.appendChild(promptEl(T.prompt)); mid.appendChild(el('p', 'muted', esc(T.d.how))); }
-    else if (T.d && T.d.fix && !T.warm) mid.appendChild(el('p', 'muted', esc(T.d.how)));
-    else if (!T.warm) { const r = opt('remind', null); if (r && r.cues && r.cues[0]) mid.appendChild(el('p', 'muted', 'Remember: ' + esc(r.cues[0]))); }
+    let mind = null;
+    if (!T.warm && !prep && mindOn()) { mind = mindEl(T.d); if (mind) mid.appendChild(mind); }
+    if (!prep && T.d && T.d.fix && !T.warm) mid.appendChild(el('p', 'muted', esc(T.d.how)));
     $('#tkMeters').innerHTML = ''; $('#tkFoot').innerHTML = '';
-    let k = prep ? 10 : 3;
+    let k = prep ? 10 : mind ? 5 : 3;
     n.textContent = String(k);
     /* the eyes are read every quarter second through the count: that is the
        lens zone the whole take is measured against */
@@ -4633,10 +4715,11 @@ function openSettings() {
   const tabs = [
     { id: 'targets', name: 'TARGETS', draw: drawTargets },
     { id: 'crutch', name: 'CRUTCHES', draw: drawCrutch },
+    { id: 'mind', name: 'REMINDERS', draw: drawMind },
     { id: 'gear', name: 'MIC & CAMERA', draw: drawGear },
   ];
   if (window.MB_EXE) tabs.unshift({ id: 'program', name: 'PROGRAM', draw: drawProgram });
-  UI.settings(APP.id, tabs, { order: (window.MB_EXE ? ['program'] : []).concat(['targets', 'crutch', 'gear', 'data']) });
+  UI.settings(APP.id, tabs, { order: (window.MB_EXE ? ['program'] : []).concat(['targets', 'crutch', 'mind', 'gear', 'data']) });
 }
 /* PROGRAM: SPEAK.exe's own settings, in the mini widget and the full app
    alike (Tom, 2026-11-16: "give it a complete settings menu for the mini
@@ -4725,6 +4808,37 @@ function drawCrutch(p) {
   const acts = el('div', 'acts');
   const reset = el('button', 'mb-btn mb-press mb-tap', 'Reset the list');
   reset.onclick = () => { Rec.setting(APP.id, 'crutch', null); redraw(); };
+  acts.appendChild(reset); p.appendChild(acts);
+}
+function drawMind(p) {
+  p.appendChild(UI.row('Reminders before every take', 'your biggest habits right now, on the count, which runs five instead of three while they show', UI.toggle(mindOn(), on => Rec.setting(APP.id, 'mindOn', on ? 1 : 0))));
+  const prev = el('div', 'mindprev');
+  const draw = () => { prev.innerHTML = ''; prev.appendChild(el('h3', null, 'SHOWING NOW')); const m = mindEl(null); if (m) prev.appendChild(m); };
+  draw(); p.appendChild(prev);
+  p.appendChild(el('h3', null, 'WHEN NOTHING STANDS OUT'));
+  p.appendChild(el('p', 'muted', 'Your own lines, one a line. They fill the space when fewer than three habits are showing.'));
+  const ta = document.createElement('textarea');
+  ta.className = 'mb-input mindta'; ta.rows = 4; ta.value = mindBase().join('\n');
+  let st = null;
+  const save = () => { clearTimeout(st); Rec.setting(APP.id, 'mind', ta.value.split(/\n/).map(x => x.trim()).filter(Boolean)); draw(); };
+  ta.oninput = () => { clearTimeout(st); st = setTimeout(save, 500); };
+  ta.onblur = save;
+  p.appendChild(ta);
+  p.appendChild(el('h3', null, 'WHAT EACH HABIT SAYS'));
+  p.appendChild(el('p', 'muted', 'Reword any of these. Clear one to go back to the first wording.'));
+  const rk = mindRank(null).map(r => r.id);
+  Object.keys(MIND_FOR).sort((a, b) => (rk.indexOf(a) < 0 ? 99 : rk.indexOf(a)) - (rk.indexOf(b) < 0 ? 99 : rk.indexOf(b))).forEach(id => {
+    const f = UI.field('text', { value: mindText(id) });
+    f.classList.add('mindf');
+    let t2 = null;
+    const put = () => { clearTimeout(t2); const o = Object.assign({}, opt('mindTx', null) || {}), v = f.value.trim(); if (v && v !== MIND_FOR[id]) o[id] = v; else delete o[id]; Rec.setting(APP.id, 'mindTx', o); if (!v) f.value = MIND_FOR[id]; draw(); };
+    f.oninput = () => { clearTimeout(t2); t2 = setTimeout(put, 600); };
+    f.onblur = put;
+    p.appendChild(UI.row(FAULT[id] || id, rk.indexOf(id) >= 0 ? 'showing up in your takes now' : '', f));
+  });
+  const acts = el('div', 'acts');
+  const reset = el('button', 'mb-btn mb-press mb-tap', 'Back to the first wording');
+  reset.onclick = () => { Rec.setting(APP.id, 'mind', null); Rec.setting(APP.id, 'mindTx', null); p.innerHTML = ''; drawMind(p); };
   acts.appendChild(reset); p.appendChild(acts);
 }
 function drawGear(p) {
