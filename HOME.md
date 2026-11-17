@@ -775,3 +775,16 @@ ROOM's wallpaper lifts the goal's card. THIS WEEK adds under each WOOP goal
 its if-then and "Kept K of C planned days this week" (`Goals.kept`). The rule
 lives in `shared/goals.js`. Tested in headless Chromium at 1920 by clicking
 TOMORROW, typing 23:00 and NEXT; the THIS WEEK line by drawing the card.
+
+## NEXT (2026-11-17, 1.0.130)
+
+Tom: "a widget that only shows the next 1 or 3 next tasks". `WIDGETS.next`, 4
+by 2: open todos due today or late in QUESTS's Today order (late first by
+priority then time, then today's by the clock, untimed after), ticked through
+`Journal.tick` like TODO. Its menu: Show the next task / Show the next 3 tasks
+(`cfg.n`, 3 is the default), and Follow the QUESTS filter (part `qf`, on),
+which hides what QUESTS's Today filter hides (`Journal.filterShows`, one rule
+for both). The line under the title says how many the filter hid. Small and
+hover-free because ROOM's wallpaper will frame the board. Claude's call, open
+to Tom: the switch defaults to following the filter. Tested in headless
+Chromium by drawing the card after clicking a filter in QUESTS.
