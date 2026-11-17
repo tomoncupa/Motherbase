@@ -436,6 +436,16 @@
     }
     if (g.Journal && g.Journal.publishNotes) g.Journal.publishNotes(d, g.Rec.appId);
   }
+  /* one goal as the data a NOTICE window draws (Notice.woop, Notice.cue) */
+  function card(a) {
+    const w = woop(a) || {}, p = path(a), k = kept(a);
+    const by = a.by ? new Date(a.by + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    let num = null;
+    if (p && p.type === 'count') num = { label: p.unit.charAt(0).toUpperCase() + p.unit.slice(1) + ' this week', cur: p.now, max: p.target };
+    else if (p && p.line) num = { label: p.line };
+    return { key: a.key, wish: a.text, by: by, outcome: w.outcome || '', obstacle: w.obstacle || '', if: w.if || '', then: w.then || '',
+      num: num, kept: k.kept, pic: w.pic || '' };
+  }
   /* the cards ROOM hangs: open goals with a WOOP, three at most (AIM_CAP) */
   const cards = () => aims().filter(hasWoop).slice(0, 3);
   /* A goal's task onto today, the way QUESTS's date menu does it; hands back
@@ -452,5 +462,5 @@
     aims: aims, of: of, order: order, health: health, next: next, mark: mark, toToday: toToday,
     startOf: startOf, fed: fed, stuck: stuck, SRC_NAME: SRC_NAME, LB: LB, kindOf: kindOf, fmt: fmt, path: path,
     MONEY_OF: MONEY_OF, PRO_OF: PRO_OF, pnum: pnum, woop: woop, hasWoop: hasWoop, inner: inner, keptOn: keptOn,
-    kept: kept, run: run, runOf: runOf, cue: cue, cueKey: cueKey, cards: cards };
+    kept: kept, run: run, runOf: runOf, cue: cue, cueKey: cueKey, cards: cards, card: card };
 })(typeof window !== 'undefined' ? window : this);

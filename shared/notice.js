@@ -315,7 +315,8 @@
       /* the line under the name: an item's rank, or a status effect's kind and
          how long it lasts */
       const sub = q.kind === 'item' && q.rank ? 'RANK ' + q.rank
-        : q.kind === 'status' ? [q.etype || 'BUFF', q.dur].filter(Boolean).join('  ·  ') : '';
+        : q.kind === 'status' ? [q.etype || 'BUFF', q.dur].filter(Boolean).join('  ·  ')
+        : q.kind === 'woop' ? (q.dur || '').toUpperCase() : '';
       if (sub) {
         ctx.font = faceOf(st, 11, 700);
         if (draw) { ctx.fillStyle = q.debuff ? st.warn : st.mute; ctx.textBaseline = 'top'; spaced(ctx, sub, CX, y, 3, 'center'); }
@@ -326,8 +327,16 @@
         q.desc.forEach(d => para(wrapText(ctx, d, CW), bodyOf(st, 13, 500), st.mute, 'center', 19, false));
         y += 8;
       }
+      /* a WOOP's parts, each under its own label, read left to right */
+      (q.sections || []).forEach(s => {
+        if (!s.text) return;
+        y += 6; label(s.label, st.mute);
+        ctx.font = bodyOf(st, 15, 500);
+        para(wrapText(ctx, s.text, CW), bodyOf(st, 15, 500), ink, 'left', 21, false);
+        y += 4;
+      });
       if (q.goals.length) {
-        y += 6; label('GOAL', st.mute);
+        y += 6; label(q.goalHead || 'GOAL', st.mute);
         /* A goal with a number is counted: no tick box, the count on the right.
            No bar under it: Tom, 2026-09-25, "games dont show bars". A goal
            without a number keeps its box. */
@@ -457,6 +466,37 @@
   }
   /* ══════════════ THE ENGINE ends ══════════════ */
 
+  /* ── a WOOP goal as a window (Tom, 2026-11-17: "Both, we can expand NOTICE
+     to be able to accommodate WOOP. Notifications can be pop ups") ──
+     Built from the goal's data, never from typed text, so nothing is parsed
+     and NOTICE's made-up rewards never reach a real goal (root brief: no
+     XP, no levels). Draw with `Notice.draw(q, style, {rewards: () => []})`.
+       woop(w)  w = {wish, by, outcome, obstacle, if, then, num: {label, cur,
+                max, unit} or {label}, kept}. A QUEST: the wish as its name,
+                "By <date>" under it, OUTCOME, OBSTACLE, IF / THEN, then the
+                live number and the days kept as its goal lines.
+       cue(w)   the moment: a NOTIFICATION, "If <if>", "Then <then>", and
+                the wish. QUESTS and ROOM pop it up with KEPT IT / NOT TODAY.
+     Never says what a behaviour did to a number. */
+  const blank = () => ({ head: '', title: '', rank: '', etype: '', dur: '', desc: [], goals: [], rewards: [], penalty: [], lines: [], typedRewards: false });
+  function woop(w) {
+    const q = Object.assign(blank(), { kind: 'woop', head: 'QUEST', title: w.wish || 'A goal', dur: w.by ? 'By ' + w.by : '', goalHead: 'PROGRESS' });
+    q.sections = [
+      { label: 'OUTCOME', text: w.outcome || '' },
+      { label: 'OBSTACLE', text: w.obstacle || '' },
+      { label: 'IF, THEN', text: w.if || w.then ? 'If ' + (w.if || 'the moment comes') + ', then ' + (w.then || 'the plan') + '.' : '' },
+    ];
+    if (w.num && w.num.label) q.goals.push({ label: w.num.label, done: w.num.max != null && w.num.cur >= w.num.max,
+      cur: w.num.max != null ? w.num.cur : null, max: w.num.max != null ? w.num.max : null, unit: w.num.unit || '' });
+    if (w.kept != null) q.goals.push({ label: 'Kept the plan ' + w.kept + (w.kept === 1 ? ' day' : ' days'), done: w.kept > 0, cur: null, max: null, unit: '' });
+    return q;
+  }
+  function cue(w) {
+    const q = Object.assign(blank(), { kind: 'notice', head: 'NOTIFICATION' });
+    q.msgs = ['If ' + (w.if || 'the moment comes') + '.', 'Then ' + (w.then || 'the plan') + '.', w.wish || ''].filter(Boolean);
+    return q;
+  }
+
   g.Notice = { STYLES: STYLES, get: get, list: list, frame: frame, clipPath: clipPath, vars: vars, wear: wear, bracket: bracket,
-    AUTO_HEAD: AUTO_HEAD, parse: parse, draw: drawWindow, compose: compose };
+    AUTO_HEAD: AUTO_HEAD, parse: parse, draw: drawWindow, compose: compose, woop: woop, cue: cue };
 })(window);
