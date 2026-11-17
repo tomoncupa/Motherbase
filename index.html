@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.130, 2026-11-17">
+<meta name="mb-version" content="1.0.131, 2026-11-17">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -2265,6 +2265,31 @@ function rhStreakH(r, dates, today, start, made, floor) {
 const monday = d => LifeOS.shift(d, -((Day.dow(d) + 6) % 7));
 const peso = n => (n < 0 ? '-' : '') + '\u20b1' + Math.round(Math.abs(n)).toLocaleString();
 /* a todo drawn the shared way, with its box ticking it */
+/* QUESTS's Today order on rows, for the NEXT and PROJECT TASKS cards:
+   QUESTS's sortQ (priority, time, when written) for late ones, its sortDay
+   (the clock first) for today's. A todo with no `due` is due the day it was
+   written; `''` is No date. */
+const dueOfRow = r => r.payload.due === undefined ? r.date : (r.payload.due || null);
+const openTodo = r => r.payload.kind === 'todo' && !r.payload.done && !r.payload.cancelled;
+const atMins = r => r.payload.at ? +r.payload.at.slice(0, 2) * 60 + +r.payload.at.slice(3, 5) : 9999;
+const nextQ = (a, b) => ((+a.payload.pri || 4) - (+b.payload.pri || 4)) || (atMins(a) - atMins(b)) ||
+  ((a.payload.t || 0) - (b.payload.t || 0));
+function nextOrder(rows) {
+  const t = LifeOS.day();
+  return rows.filter(r => dueOfRow(r) < t).sort(nextQ)
+    .concat(rows.filter(r => dueOfRow(r) === t).sort((a, b) => (atMins(a) - atMins(b)) || nextQ(a, b)));
+}
+/* ticking rows; a late one says how late, and with `all`, a later one its day */
+function taskRows(L, all) {
+  const t = LifeOS.day(), wrap = el('div', 'rowlist');
+  L.forEach(r => {
+    const d = dueOfRow(r);
+    const row = tickRow(r, r.date, d && (d < t || (all && d > t)) ? dueWords(d) : '');
+    row.classList.add('wraps');
+    wrap.appendChild(row);
+  });
+  return wrap;
+}
 function tickRow(x, day, tail) {
   const r = bulletRow(x, day, () => { tickTodo(x); drawHome(); });
   if (tail) r.appendChild(el('span', 'd', esc(tail)));
@@ -3763,52 +3788,85 @@ const WIDGETS = {
     },
   },
 
-  /* ══════════════ NEXT ══════════════
-     Tom, 2026-11-17: "a widget that only shows the next 1 or 3 next tasks".
-     Open todos due today or late, in QUESTS's Today order: late ones first
-     (priority, then time), then today's by the clock, untimed after. Ticked
-     with Journal.tick like every other todo. Follows QUESTS's Today filter
-     (Journal.filterShows) unless its menu says not to. Small on purpose: it
-     also hangs on ROOM's wallpaper, where nothing can be hovered. */
+  /* ══════════════ NEXT TASK, NEXT 3 TASKS, PROJECT TASKS ══════════════
+     Tom, 2026-11-17: "a widget that only shows the next 1 or 3 next tasks",
+     then "Quest widgets for 1 task, 3 task, tasks only in a certain
+     project": three cards in the picker. Open todos in QUESTS's Today order
+     (`nextOrder`): late first (priority, then time), then today's by the
+     clock, untimed after. Ticked with Journal.tick like every other todo.
+     NEXT TASK and NEXT 3 TASKS follow QUESTS's Today filter
+     (Journal.filterShows) unless the menu says not to; PROJECT TASKS is its
+     own filter. Small and hover-free: ROOM's wallpaper frames the board. */
   next: {
-    nm: 'NEXT', w: 4, h: 2, app: 'quest', to: ['quest', 'today'],
+    nm: 'NEXT 3 TASKS', w: 4, h: 3, app: 'quest', to: ['quest', 'today'],
     rows(cfg) {
       const t = LifeOS.day(), F = partOn(cfg, 'qf') ? Journal.todayFilter() : {};
-      const dueOf = r => r.payload.due === undefined ? r.date : (r.payload.due || null);
-      const all = noteRows().filter(r => r.payload.kind === 'todo' && !r.payload.done && !r.payload.cancelled &&
-        dueOf(r) && dueOf(r) <= t);
-      const mins = r => r.payload.at ? +r.payload.at.slice(0, 2) * 60 + +r.payload.at.slice(3, 5) : 9999;
-      /* QUESTS's sortQ and sortDay, on rows */
-      const q = (a, b) => ((+a.payload.pri || 4) - (+b.payload.pri || 4)) ||
-        (mins(a) - mins(b)) || ((a.payload.t || 0) - (b.payload.t || 0));
+      const all = noteRows().filter(r => openTodo(r) && dueOfRow(r) && dueOfRow(r) <= t);
       const shown = all.filter(r => Journal.filterShows(r.payload, F));
-      const late = shown.filter(r => dueOf(r) < t).sort(q);
-      const now = shown.filter(r => dueOf(r) === t).sort((a, b) => (mins(a) - mins(b)) || q(a, b));
-      return { list: late.concat(now), hidden: all.length - shown.length, dueOf: dueOf };
+      return { list: nextOrder(shown), hidden: all.length - shown.length };
     },
+    /* a NEXT card from the day it took a count from its menu keeps it */
     count: cfg => (cfg && cfg.n) === 1 ? 1 : 3,
-    menu: (cfg, redraw) => [
-      { label: 'Show the next task', check: WIDGETS.next.count(cfg) === 1, fn: () => { cfg.n = 1; redraw(); } },
-      { label: 'Show the next 3 tasks', check: WIDGETS.next.count(cfg) === 3, fn: () => { delete cfg.n; redraw(); } },
-      partToggle(cfg, 'qf', 'Follow the QUESTS filter', redraw),
-    ],
+    menu: (cfg, redraw) => [partToggle(cfg, 'qf', 'Follow the QUESTS filter', redraw)],
     sub: cfg => {
       const R = WIDGETS.next.rows(cfg), n = R.list.length;
       return (n ? n + ' due today' : 'nothing due') + (R.hidden ? ', ' + R.hidden + ' hidden by the filter' : '');
     },
-    draw(body, cfg) {
-      const R = WIDGETS.next.rows(cfg), t = LifeOS.day();
+    draw(body, cfg, W) {
+      const R = WIDGETS.next.rows(cfg);
       if (!R.list.length) {
         body.appendChild(el('div', 'empty', R.hidden ? 'Every task today is hidden by the QUESTS filter.' : 'Nothing due today.'));
         return;
       }
-      const wrap = el('div', 'rowlist');
-      R.list.slice(0, WIDGETS.next.count(cfg)).forEach(r => {
-        const d = R.dueOf(r);
-        const row = tickRow(r, r.date, d < t ? dueWords(d) : '');
-        row.classList.add('wraps');
-        wrap.appendChild(row);
-      });
+      body.appendChild(taskRows(R.list.slice(0, (W || WIDGETS.next).count(cfg))));
+    },
+  },
+  next1: {
+    nm: 'NEXT TASK', w: 4, h: 2, app: 'quest', to: ['quest', 'today'],
+    count: () => 1,
+    menu: (cfg, redraw) => WIDGETS.next.menu(cfg, redraw),
+    sub: cfg => WIDGETS.next.sub(cfg),
+    draw(body, cfg) { WIDGETS.next.draw(body, cfg, WIDGETS.next1); },
+  },
+  projtasks: {
+    nm: 'PROJECT TASKS', w: 4, h: 4, app: 'quest', to: ['quest'],
+    /* the project picked on the card, else the one with the most open */
+    proj(cfg) {
+      if (cfg && cfg.proj && Rec.get('project', null, cfg.proj)) return cfg.proj;
+      const n = {};
+      noteRows().forEach(r => { if (openTodo(r) && r.payload.proj) n[r.payload.proj] = (n[r.payload.proj] || 0) + 1; });
+      return Object.keys(n).sort((a, b) => n[b] - n[a])[0] || '';
+    },
+    pname: k => { const p = k && Rec.get('project', null, k); return (p && p.name) || k || ''; },
+    nmFor: cfg => { const k = WIDGETS.projtasks.proj(cfg); return k ? '#' + WIDGETS.projtasks.pname(k).toUpperCase() : 'PROJECT TASKS'; },
+    rows(cfg) {
+      const k = WIDGETS.projtasks.proj(cfg), t = LifeOS.day();
+      const mine = noteRows().filter(r => openTodo(r) && k && r.payload.proj === k);
+      const now = mine.filter(r => dueOfRow(r) && dueOfRow(r) <= t);
+      const later = mine.filter(r => dueOfRow(r) && dueOfRow(r) > t)
+        .sort((a, b) => dueOfRow(a).localeCompare(dueOfRow(b)) || nextQ(a, b));
+      const none = mine.filter(r => !dueOfRow(r)).sort(nextQ);
+      return nextOrder(now).concat(later, none);
+    },
+    menu: (cfg, redraw) => {
+      const cur = WIDGETS.projtasks.proj(cfg);
+      const P = Rec.all('project').filter(r => r.payload && !r.deleted)
+        .map(r => ({ k: r.key, nm: r.payload.name || r.key, ord: r.payload.ord || 0 }))
+        .sort((a, b) => a.ord - b.ord || a.nm.localeCompare(b.nm));
+      return P.length ? [{ label: 'Project', sub: P.map(p => ({ label: '#' + p.nm, check: p.k === cur,
+        fn: () => { cfg.proj = p.k; redraw(); } })) }] : [];
+    },
+    sub: cfg => {
+      const L = WIDGETS.projtasks.rows(cfg), t = LifeOS.day(), d = L.filter(r => dueOfRow(r) && dueOfRow(r) <= t).length;
+      return L.length ? L.length + ' open' + (d ? ', ' + d + ' due today' : '') : 'nothing open';
+    },
+    draw(body, cfg) {
+      const k = WIDGETS.projtasks.proj(cfg);
+      if (!k) { body.appendChild(el('div', 'empty', 'No projects in QUESTS.')); return; }
+      const L = WIDGETS.projtasks.rows(cfg);
+      if (!L.length) { body.appendChild(el('div', 'empty', 'Nothing open in #' + esc(WIDGETS.projtasks.pname(k)) + '.')); return; }
+      const wrap = taskRows(L.slice(0, 4), true);
+      if (L.length > 4) wrap.appendChild(el('div', 'empty', (L.length - 4) + ' more in QUESTS'));
       body.appendChild(wrap);
     },
   },
@@ -7596,7 +7654,7 @@ function widgetMenu(i, x, y) {
 
 const NARROW = () => matchMedia('(max-width:820px)').matches;
 /* the icon of a widget that draws for no one app, by what it is about */
-const WIC = { lockedin: 'energy', workdone: 'done', todo: 'done', next: 'done', ideas: 'edit', events: 'today', streaks: 'star',
+const WIC = { lockedin: 'energy', workdone: 'done', todo: 'done', next: 'done', next1: 'done', projtasks: 'done', ideas: 'edit', events: 'today', streaks: 'star',
   sticky: 'edit', clock: 'timer', timer: 'timer', stopwatch: 'timer', intervals: 'timer', alarms: 'timer',
   countdown: 'timer', worldclock: 'timer', desktime: 'timer', calendar: 'calendar', year: 'calendar', life: 'calendar',
   links: 'link', apps: 'menu', upcoming: 'calendar', projects: 'filter', onthisday: 'history', recap: 'history',
@@ -8428,7 +8486,9 @@ const ABOUT = {
   lockedin: 'How consistent you are: training sessions a week, meals tracked a day, calorie deficit or surplus, and steps, averaged over the weeks you pick, beside the stretch before.',
   workdone: 'What got done and what your numbers averaged, over 7 and 30 days and longer.',
   todo: 'Open todos, tickable, each naming where it came from.',
-  next: 'Only the next task, or the next 3, due today or late, in QUESTS order. Follows the QUESTS filter.',
+  next: 'The next 3 tasks due today or late, in QUESTS order. Follows the QUESTS filter.',
+  next1: 'Only the next task due today or late, in QUESTS order. Follows the QUESTS filter.',
+  projtasks: 'Open tasks in one QUESTS project, picked from the card’s menu: due today first, then by date.',
   ideas: 'Your idea bullets, the ! lines.',
   events: 'Your event bullets, what happened.',
   streaks: 'Everything on a run right now, and for how many days.',

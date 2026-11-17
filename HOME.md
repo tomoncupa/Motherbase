@@ -788,3 +788,16 @@ for both). The line under the title says how many the filter hid. Small and
 hover-free because ROOM's wallpaper will frame the board. Claude's call, open
 to Tom: the switch defaults to following the filter. Tested in headless
 Chromium by drawing the card after clicking a filter in QUESTS.
+
+**1.0.131, the same day** (Tom: "Quest widgets for 1 task, 3 task, tasks only
+in a certain project"): three cards in the picker, NEXT TASK (`next1`, 4x2),
+NEXT 3 TASKS (`next`, now 4x3 so the third row fits) and PROJECT TASKS
+(`projtasks`, 4x4). The count is no longer a menu choice; an old NEXT card
+with `cfg.n` 1 keeps showing one. PROJECT TASKS takes its project from the
+card's menu or its setup page (`cfg.proj`), else the project with the most
+open tasks, and names itself after it (#SKOOL): today's and late tasks in
+Today order, then later ones by date (with the day), then No date, 4 shown
+and "N more in QUESTS". It does not follow the QUESTS filter. Shared helpers
+`dueOfRow`, `openTodo`, `nextOrder`, `taskRows` sit above `tickRow`. Tested in
+headless Chromium at 1920 and 390: contents, the project pick, a tick from
+NEXT TASK.
