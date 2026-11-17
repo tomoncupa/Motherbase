@@ -576,3 +576,7 @@ SPEAK.exe; `desktop/README.md` has the program's side.
   the screen) with a real question and the real mic; the mouse's back button
   cancelled the take, saving nothing, and it went back to its spot. Escape
   does not end a take. Not watched in the exe: STOP, the numbers, CLOSE.
+
+## Eye reading fixed, full app preloaded (1.0.46, 2026-11-17)
+- Tom: "I don't think Speak is able to accurately measure how much eye contact I have with the camera." His only camera take (16 Nov, an `ask`) read 1% on the lens with a 30.6 s look away. Cause: the lens zone was read during the count, while the screen showed a big number and reminders to read, and before the face finder had loaded, so the zone was missing or taken from the screen. Now `lensLock` waits for the finder, shows only LOOK AT THE LENS at the top edge, and takes the median of 1.5 s of looks. No zone means "not measured", never a low number. [UNTESTED on his face: run Check the coach]
+- SPEAK.exe builds the full app hidden at start (`PreloadFull`, `Warm`), so the mini widget's open-full button and the tray only show a page already loaded. [TESTED: log shows the full page loaded 2 s after a --tray start, before any click; a second start showed the window]

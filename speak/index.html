@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.45, 2026-11-17">
+<meta name="mb-version" content="1.0.46, 2026-11-17">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -221,6 +221,7 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .mindta{width:100%;box-sizing:border-box;min-height:calc(var(--s-10) * 1.5);font:inherit;resize:vertical}
 .mindprev .mind{text-align:left;margin:0}
 #take .count{font-family:var(--font-display);font-size:var(--f-9);font-weight:var(--w-bold);text-align:center;color:var(--accent)}
+#take .say.lens{position:absolute;top:var(--s-3);left:0;right:0}
 #take .say{font-family:var(--font-display);font-size:var(--f-4);text-align:center;color:var(--text-2);letter-spacing:var(--track-cap)}
 #take .meters{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s-3);max-width:calc(var(--s-10) * 5);width:100%;margin:0 auto}
 #take .meter{padding:var(--s-3);border-radius:var(--radius-md);text-align:center}
@@ -4467,6 +4468,8 @@ async function startTakeNow(d, warmStep, prompt) {
   if (T.cam) faceEngine().catch(() => {});
   await countIn();
   if (!T.live) return;
+  if (T.cam) await lensLock();
+  if (!T.live) return;
   runTake();
 }
 /* ══════════════ before every take (SPEAK 1.0.40) ══════════════
@@ -4562,19 +4565,44 @@ function countIn() {
     $('#tkMeters').innerHTML = ''; $('#tkFoot').innerHTML = '';
     let k = prep ? 10 : mind ? 5 : 3;
     n.textContent = String(k);
-    /* the eyes are read every quarter second through the count: that is the
-       lens zone the whole take is measured against */
-    if (T.cam) T.eyeTick = setInterval(() => readEye(true), 250);
     const tick = () => {
       if (!T.live) { clearInterval(T.eyeTick); return res(); }
       Sfx.play('blip');
       k--;
-      if (k <= 0) { clearInterval(T.eyeTick); T.calibrated = true; return res(); }
+      if (k <= 0) { T.calibrated = true; return res(); }
       n.textContent = String(k);
       setTimeout(tick, 1000);
     };
     setTimeout(tick, 1000);
   });
+}
+/* the lens zone, read on its own (SPEAK 1.0.46). Before, it was read during
+   the count, while the screen showed a big number and the reminders to read,
+   and before the face finder had finished loading: his only camera take
+   (16 Nov) came out 1% on the lens with a 30.6 s look away, which is the
+   zone missing or taken from the screen. Now the finder must be ready, the
+   screen shows nothing but LOOK AT THE LENS at its top edge, nearest the
+   camera, and the zone is the middle of 1.5 s of looks, so a glance does not
+   move it. No zone, no number: the take says eyes were not measured. */
+async function lensLock() {
+  const mid = $('#tkMid'); mid.innerHTML = '';
+  const say = el('div', 'say lens', engineState === 'ready' ? 'LOOK AT THE LENS' : 'STARTING THE EYE READER');
+  mid.appendChild(say);
+  let fl = null;
+  try { fl = await faceEngine(); } catch (e) { fl = null; }
+  if (!fl || !T.live) return;
+  say.textContent = 'LOOK AT THE LENS';
+  await new Promise(r => setTimeout(r, 400));
+  T.eye.calib = [];
+  const end = performance.now() + 1500;
+  while (T.live && performance.now() < end) {
+    await readEye(true);
+    await new Promise(r => setTimeout(r, 80));
+  }
+  const c = T.eye.calib;
+  if (c.length < 6) { T.eye.calib = []; return; }
+  const med = k => { const v = c.map(x => x[k]).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; };
+  T.eye.base = { gh: med('gh'), gv: med('gv'), yaw: med('yaw'), pitch: med('pitch') };
 }
 async function readEye(calib) {
   if (!T.live || !T.cam) return;
@@ -4595,11 +4623,6 @@ function runTake() {
     if (T.warm.kind === 'twister') mid.appendChild(promptEl({ kind: 'twister', items: pick(TWISTERS, 3) }));
     else mid.appendChild(el('p', 'muted', T.warm.how));
   } else { T.pm = null; T.sh = null; mid.appendChild(promptEl(T.prompt)); }
-  /* the eye reading taken during the count becomes the lens zone */
-  if (T.cam && T.eye.calib.length) {
-    const c = T.eye.calib, avg = k => c.reduce((s, x) => s + x[k], 0) / c.length;
-    T.eye.base = { gh: avg('gh'), gv: avg('gv'), yaw: avg('yaw'), pitch: avg('pitch') };
-  }
   meters.innerHTML = '';
   const mk = (id, k) => { const m = el('div', 'meter mb-plate off'); m.id = id; m.innerHTML = '<div class="k">' + k + '</div><div class="v">·</div>'; meters.appendChild(m); return m; };
   const mPace = mk('mPace', T.warm ? (T.warm.kind === 'hiss' ? 'sound' : T.warm.kind === 'siren' ? 'spread' : 'crisp') : 'pace');
@@ -4667,7 +4690,7 @@ function runTake() {
         const mo = mouthOf(T.eye.looks.slice(-30), T.t0, 5);
         setMeter(mEye, mo ? Math.round(mo.even) + '%' : (engineState === 'failed' ? 'off' : '\u2026'), mo ? (mo.even >= targets().mouthEven ? 'in' : 'out') : 'off');
       } else if (T.cam) {
-        const recent = T.eye.looks.slice(-10), on = recent.filter(x => x.on).length, seen = recent.filter(x => x.seen).length;
+        const recent = T.eye.looks.slice(-10), on = recent.filter(x => x.on).length, seen = recent.filter(x => x.seen && x.on != null).length;
         setMeter(mEye, seen ? Math.round(on / seen * 100) + '%' : (engineState === 'failed' ? 'off' : '…'), seen ? (on / seen >= 0.8 ? 'in' : 'out') : 'off');
       } else if (w) {
       } else if (d && d.live) {
@@ -4743,9 +4766,9 @@ function finishTake(m, secs) {
   const words = asrOn ? T.listener.out.words : 0;
   const ums = asrOn ? Math.max(tx.asrUms, m.held) : m.held;
   const fillers = ums + (asrOn ? tx.crutch : 0);
-  const eyes = T.eye.looks.filter(x => x.seen);
+  const eyes = T.eye.looks.filter(x => x.seen && x.on != null);
   let eye = null, eyeAway = null;
-  if (T.cam && eyes.length >= 10) {
+  if (T.cam && T.eye.base && eyes.length >= 10) {
     eye = eyes.filter(x => x.on).length / eyes.length * 100;
     let away = 0, run = 0, last = null;
     T.eye.looks.forEach(x => { if (x.seen && !x.on) { if (last != null) run += (x.t - last); away = Math.max(away, run); } else run = 0; last = x.t; });

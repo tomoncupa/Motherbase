@@ -80,6 +80,10 @@ static class App
         else if (GetBoot()) SetBoot(true);   /* keeps the --tray in the Run key */
         if (Array.IndexOf(args, "--mini") >= 0) ShowMini(true);
         else if (!(boot && On("hidden"))) ShowFull();
+        /* the full app loads hidden at start, so opening it from the mini
+           widget or the tray only shows a page that is already there (Tom,
+           2026-11-17: "I want it to load a lot faster") */
+        marshal.BeginInvoke((Action)PreloadFull);
         new Thread(() => { while (true) { wake.WaitOne(); try { marshal.BeginInvoke((Action)ShowFull); } catch { } } }) { IsBackground = true }.Start();
         Application.Run(new ApplicationContext());
     }
@@ -108,6 +112,12 @@ static class App
         };
     }
 
+    static void PreloadFull()
+    {
+        if (Full != null && !Full.IsDisposed) return;
+        Full = new Speak(false);
+        Full.Warm();
+    }
     public static void ShowFull()
     {
         if (Full == null || Full.IsDisposed) Full = new Speak(false);
@@ -251,6 +261,12 @@ class Speak : Form
         TopMost = mini ? App.On("miniTop") : App.On("fullTop");
     }
 
+    /* builds the window's handles without showing it, so the web engine
+       starts and the page loads in the background */
+    public void Warm()
+    {
+        IntPtr h = Handle; IntPtr w = web.Handle;
+    }
     public void Bring()
     {
         if (!Visible) Show();
