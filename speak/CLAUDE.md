@@ -303,6 +303,16 @@ SPEAK.exe lives in the tray with two windows on one store; its PROGRAM settings 
 
 DRILL MENU (`openMenu`) puts BEST FOR YOU NOW first (`menuPick`), then every drill by skill (`MENU_GROUPS`). `LIB` drills sit off the stages; `noStop` drills end themselves. (HISTORY.md: DRILL MENU, added 2026-11-16 (SPEAK 1.0.26))
 
+## Storytelling, 2026-11-17 (SPEAK 1.0.41)
+
+Tom: "can it also guide me towards being a better storyteller", then "A B C", and the prompts "designed in such a way so that I don't directly think about this and more like it happens naturally". Matthew Dicks's Storyworthy: a story is a five-second moment where something changed in you; start far from it, say the stakes early, end on the change.
+
+- **Nothing asks him for a story.** `judgeTake` also asks Claude for up to two `stories` in any take of 40+ words that is not itself a telling; each becomes a `story` row keyed by its take, kept once. TODAY'S QUESTION (`DQ`, drill `daily`, `STORY_QS`, one a day by the date, skipping answered ones) is an everyday question whose answer goes to the bank as `src: 'daily'`; the word story is never in it.
+- **YOUR STORIES** on BANK, least told first: TELL ONE, ADD ONE, a sheet per story (the moment, a way in, where it came from, every telling with its four parts), TELL IT (`lib-tell`), IN 60 SECONDS (`story-60`), NOT A STORY (`gone`, UNDO). A story drill's prompt is one of his stories 70% of the time (`storyNext`); a take on one keeps `p.story`.
+- **The story judge**: a story take (`isStoryTake`) is read on four parts, each 1 to 5 with a quoted why (`judge.st`: moment, stakes, scene, end), shown on its sheet. Two or under is a coach fault (`ST_FAULT`: `st-moment`, `st-stakes`, `st-scene`, `st-end`), so FOCUS, the plan and the reminders (`MIND_FOR`) carry it; the reminders boost it before a story drill.
+- **Fix drills** `fix-st-moment`, `fix-st-stakes`, `fix-st-scene`, `fix-st-end` retell the story they came from, and unlike other fixes are judged again.
+- Tested in headless Chromium at 1280 and 390 with a fake Claude: a story found in a free speak, a telling judged, the coach and reminders naming `st-stakes`, both sheets, BANK, a live TODAY'S QUESTION take on the fake microphone, no sideways scroll, no page errors. Not tested with his voice or real Claude; how well Claude spots his stories is unknown.
+
 ## Needs from the foundation
 
 - A device-only row type: one `Rec` would keep and back up but live sync

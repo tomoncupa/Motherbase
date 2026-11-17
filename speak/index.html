@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.40, 2026-11-17">
+<meta name="mb-version" content="1.0.41, 2026-11-17">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -326,7 +326,7 @@ const APP = {
   name: 'Speak',
   icon: '◍',
   blurb: 'talk to the camera, measured: pace, fillers, flow, clarity, eyes',
-  types: ['take', 'topic', 'script', 'answer', 'ask', 'speaker', 'draft', 'splan'],
+  types: ['take', 'topic', 'script', 'answer', 'ask', 'speaker', 'draft', 'splan', 'story'],
 };
 
 Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id);
@@ -1220,6 +1220,10 @@ const LIB = [
     goals: t => [{ m: 'marks', op: 'ge', v: 70 }],
     why: 'Radio and voiceover readers mark their scripts: the word to hit, where to pause, where to slow down. Reading the marks out loud is how a delivery gets rehearsed, not just the words.',
     how: 'Read your script as it scrolls with you. Hit the underlined words, stop at each bar, slow down on the dotted parts. Tap a line if the scroll falls behind.' },
+  { id: 'lib-tell', skill: 'story', name: 'Tell one of yours', style: 'story', kind: 'story', asr: true, win: t => [60, 180],
+    goals: t => [{ m: 'time', op: 'in', v: [60, 180] }, { m: 'heldP', op: 'ge', v: 1 }],
+    why: 'Storytellers get good by telling the same true story many times, each time a little tighter. Your stories come from what you have said in SPEAK; each telling sits beside the last.',
+    how: 'Tell it from inside the moment. Say what you wanted early, slow down where it changed, and end there.' },
   { id: 'lib-shadow', skill: 'clear', name: 'Shadowing', style: 'read', kind: 'shadow', shadow: true,
     get dur() { const m = shModel(); return m ? Math.ceil(m.dur) + 3 : 30; },
     goals: t => [{ m: 'shadow', op: 'ge', v: 60 }],
@@ -1279,15 +1283,94 @@ const FIXES = [
     goals: t => [{ m: 'eye', op: 'ge', v: stepGe(srcM().eye, t.eye, 10) }, { m: 'eyeAway', op: 'le', v: 2 }],
     why: 'Eyes leave the lens to look for the next sentence, and the screen never has it.',
     how: 'Find the next thought with the eyes still on the lens. Glances under two seconds.' },
+  /* storytelling fixes (SPEAK 1.0.41): one per story part Claude found weak.
+     Their prompt is one of his own stories when YOUR STORIES has any. */
+  { id: 'fix-st-moment', skill: 'story', name: 'Find the five seconds', style: 'story', kind: 'story', dur: 60, asr: true,
+    goals: t => [{ m: 'heldP', op: 'ge', v: 1 }],
+    why: 'Matthew Dicks, who has won The Moth more than fifty times: every story is about a five-second moment where something changed in you. Without it, a story is a list of things that happened.',
+    how: 'One line of before. Then the moment it changed, slowly, with a pause in it. One line of after.' },
+  { id: 'fix-st-stakes', skill: 'story', name: 'Stakes first', style: 'story', kind: 'story', dur: 45, asr: true, prep: 'FIRST LINE',
+    goals: t => [{ m: 'openUms', op: 'le', v: 0 }],
+    why: 'A listener stays when they know what could be won or lost. Said late, the stakes come after they stopped caring.',
+    how: 'In the count, find a first or second sentence that says what you wanted, or what you were afraid of. Then tell it.' },
+  { id: 'fix-st-scene', skill: 'story', name: 'Start later', style: 'story', kind: 'story', dur: 45, asr: true,
+    goals: t => [{ m: 'openUms', op: 'le', v: 0 }],
+    why: 'Most stories start long before the part worth hearing. Start where you were and what was happening at that second.',
+    how: 'Open on a place and a moment. No "so, this one time", no background first.' },
+  { id: 'fix-st-end', skill: 'story', name: 'End on the change', style: 'story', kind: 'story', dur: 60, asr: true, prep: 'LAST LINE',
+    goals: t => [{ m: 'longP', op: 'le', v: 1 }],
+    why: 'A story is about how you changed, so it ends there. Anything after the change makes it trail off.',
+    how: 'In the count, pick your last line: what you understood, or who you became. Say it, then press STOP.' },
 ];
 FIXES.forEach(f => { f.fix = true; f.step = 0; });
 const isFix = id => /^fix-/.test(id || '');
-const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : id === 'free' ? FS : id === 'tight' ? TIGHT : id === 'post-story' ? PS_STORY : id === 'post-reel' ? PS_REEL : DRILLS.concat(FIXES, LIB).filter(d => d.id === id)[0] || null;
+/* STORYTELLING (SPEAK 1.0.41). Tom, 2026-11-17: "can it also guide me
+   towards being a better storyteller", then A, B and C, and the prompts
+   "designed in such a way so that I don't directly think about this and more
+   like it happens naturally". After Matthew Dicks's Storyworthy: a story is a
+   five-second moment where something changed; start as far from it as you
+   can, say the stakes early, end on the change. So nothing asks him for a
+   story: Claude finds them in whatever he says (`judgeTake` returns
+   `stories`), one everyday question a day feeds it (`DQ`, his Homework for
+   Life without the name), a story take is read on four parts (`judge.st`),
+   and each weak part is a coach fault with a fix drill above. */
+const STORY_QS = ['What surprised you today?', 'Who made you laugh this week, and how?', 'What did you almost not do today?',
+  'What did a client say recently that stuck with you?', 'When did you change your mind about something lately?', 'What went wrong today, even something small?',
+  'What did you notice today that most people would walk past?', 'Who did you help this week, and what happened?', 'What was the hardest moment in your training this week?',
+  'What made you proud today?', 'What did you learn the hard way recently?', 'What conversation are you still thinking about?',
+  'When did you feel out of your depth this week?', 'What did you see someone do at the gym that stayed with you?', 'What went better than you expected lately?',
+  'What annoyed you today, and why?', 'When were you wrong recently?', 'What did you try for the first time lately?',
+  'What from today would you want to remember in a year?', 'Who did you talk to for the first time recently?', 'What did a client do this week that you did not expect?',
+  'What made today different from yesterday?', 'What did you decide today, and what tipped it?', 'When did you nearly quit something this week?',
+  'What reminded you of your younger self recently?', 'What took longer than it should have today?', 'When did you feel strong this week?',
+  'What did someone teach you lately?', 'What mistake did you see coming and make anyway?', 'Who did you think about today, and why?'];
+/* today's question: one a day, by the date, skipping ones already answered */
+function dailyQ() {
+  const said = {}; answers().filter(a => a.src === 'daily').forEach(a => { said[String(a.q).toLowerCase()] = 1; });
+  const pool = STORY_QS.filter(q => !said[q.toLowerCase()]), list = pool.length ? pool : STORY_QS;
+  const n = Math.floor(Date.parse(Day.today() + 'T00:00:00Z') / 864e5);
+  return { kind: 'dailyq', text: list[n % list.length], src: 'daily', label: 'Today’s question' };
+}
+const dailyDone = () => answers().filter(a => a.src === 'daily' && a.date === Day.today())[0] || null;
+const DQ = Object.assign({}, FT, { id: 'daily', skill: 'free', kind: 'dailyq', name: 'Today’s question', style: 'live', open: true, dur: 300,
+  win: null, goals: () => [],
+  why: 'One everyday question a day, answered out loud. Your answer goes in your bank, and anything that happened to you in it is kept in YOUR STORIES for later.',
+  how: 'Answer it the way you would tell a friend. A minute or two is plenty. Press STOP when you are done.' });
+/* YOUR STORIES: `story` rows, undated, keyed `st-<take key>-<n>` when Claude
+   found one, `st-<time>` when he added it. A telling is any take whose
+   prompt carries the story's key (`p.story`), never stored on the row. */
+const storiesAll = () => Object.entries(Rec.map('story')).map(([k, v]) => Object.assign({ key: k }, v));
+const storiesLive = () => storiesAll().filter(s => !s.gone && s.title).sort((a, b) => (b.at || 0) - (a.at || 0));
+const tellsOf = s => takes().filter(t => t.p && t.p.story === s.key);
+/* the next story to tell: told least, then oldest told, then newest found */
+function storyNext() {
+  const ls = storiesLive().map(s => { const ts = tellsOf(s); return { s: s, n: ts.length, last: ts.length ? ts[ts.length - 1].at || 0 : 0 }; });
+  ls.sort((a, b) => a.n - b.n || a.last - b.last || (b.s.at || 0) - (a.s.at || 0));
+  return ls[0].s;
+}
+const storyPrompt = s => ({ kind: 'story', text: s.title, moment: s.moment || '', story: s.key, label: 'One of your stories' });
+const isStoryTake = t => { const d = t && drillById(t.drill); return !!((d && (d.skill === 'story' || d.kind === 'story')) || (t && t.p && t.p.story)); };
+/* stories Claude found in one take: kept once, never over one he removed */
+function storyAdd(t, list) {
+  (Array.isArray(list) ? list : []).slice(0, 2).forEach((s, i) => {
+    const title = String(s && s.title || '').trim().slice(0, 80), key = 'st-' + t.key + '-' + i;
+    if (!title || Rec.has('story', null, key)) return;
+    Rec.set('story', null, key, { title: title, moment: String(s.moment || '').trim().slice(0, 300), line: String(s.line || '').trim().slice(0, 200), src: 'found', from: t.key, fromDate: t.date, at: Date.now() });
+  });
+}
+const ST_PARTS = [['moment', 'Moment of change'], ['stakes', 'Stakes early'], ['scene', 'Starts in the scene'], ['end', 'Ends on the change']];
+const stLine = st => st ? ST_PARTS.filter(p => st[p[0]]).map(p => p[1].split(' ')[0] + ' ' + st[p[0]]).join(' · ') : '';
+const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : id === 'free' ? FS : id === 'daily' ? DQ : id === 'tight' ? TIGHT : id === 'post-story' ? PS_STORY : id === 'post-reel' ? PS_REEL : DRILLS.concat(FIXES, LIB).filter(d => d.id === id)[0] || null;
 const LIVE = { held: 'ums', crutch: 'crutch', longPauses: 'silences', pauses: 'pauses', restarts: 'restarts' };
 /* each fault the coach can name, in a few words, for FOCUS */
 const FAULT = { 'wordy': 'Too many words for the point', 'unclear': 'Hard to follow', 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
   fillers: 'Fillers', crutch: 'Crutch phrases', speedup: 'Speeding up', fast: 'Too fast', slow: 'Too slow', 'dead-air': 'Long silences',
-  'run-on': 'Too few pauses', mouth: 'Talking from one side', restarts: 'Stammered starts', flat: 'A flat voice', mumble: 'Soft consonants', eyes: 'Eyes off the lens' };
+  'run-on': 'Too few pauses', mouth: 'Talking from one side', restarts: 'Stammered starts', flat: 'A flat voice', mumble: 'Soft consonants', eyes: 'Eyes off the lens',
+  'st-moment': 'No moment of change', 'st-stakes': 'Stakes came late', 'st-scene': 'A run-up before the story', 'st-end': 'The ending trailed off' };
+const ST_FAULT = [['moment', 'st-moment', 'Name the five seconds where something changed in you, and build to them.', 'fix-st-moment'],
+  ['stakes', 'st-stakes', 'In your first sentence or two, say what you wanted or what you were afraid of.', 'fix-st-stakes'],
+  ['scene', 'st-scene', 'Open inside a place and a moment. Cut everything before it.', 'fix-st-scene'],
+  ['end', 'st-end', 'End on what changed in you, then stop.', 'fix-st-end']];
 /* what went wrong in one take, worst first: {id, sev, what, cue, fix} */
 function coach(t) {
   const d = t && t.drill !== 'warm' ? drillById(t.drill) : null;
@@ -1351,6 +1434,9 @@ function coach(t) {
   const jg = t.judge;
   if (jg && jg.con != null && jg.con <= 2) add('wordy', 'concision', (3 - jg.con) / 2 + 0.4, 'Concision ' + jg.con + ' of 5: ' + (jg.conWhy || ''), 'Say the point in one sentence first. Everything after it has to earn its place.', 'shape-one', []);
   if (jg && jg.coh != null && jg.coh <= 2) add('unclear', 'coherence', (3 - jg.coh) / 2 + 0.4, 'Coherence ' + jg.coh + ' of 5: ' + (jg.cohWhy || ''), 'Point, reason, example, then the point again.', 'shape-prep', []);
+  /* the four story parts, read by Claude on a story take (SPEAK 1.0.41) */
+  const st = jg && jg.st;
+  if (st) ST_FAULT.forEach(([k, id, cue, fix]) => { if (st[k] != null && st[k] <= 2) add(id, 'story', (3 - st[k]) / 2 + 0.4, ST_PARTS.filter(q => q[0] === k)[0][1] + ' ' + st[k] + ' of 5: ' + (st[k + 'Why'] || ''), cue, fix, []); });
   const fb = t.fb || {};
   return out.filter(f => fb[f.id] !== 0).sort((x, y) => y.sev - x.sev);
 }
@@ -2282,6 +2368,8 @@ function promptFor(kind, d) {
     const pool = own.length && Math.random() < 0.5 ? own.map(t => t.text) : TOPICS;
     return { kind: 'topic', text: pick(pool, 1)[0] };
   }
+  if (kind === 'dailyq') return dailyQ();
+  if (kind === 'story' && storiesLive().length && Math.random() < 0.7) return storyPrompt(storyNext());
   if (kind === 'story') { const own = mine.filter(t => t.kind === 'story'); return { kind: 'story', text: pick(own.length && Math.random() < 0.5 ? own.map(t => t.text) : STORIES, 1)[0] }; }
   if (kind === 'hook') return { kind: 'hook', text: pick(HOOKS, 1)[0] };
   if (kind === 'question') return { kind: 'question', text: pick(QUESTIONS, 1)[0] };
@@ -2314,7 +2402,8 @@ function promptEl(p) {
   else if (p.kind === 'hook') box.innerHTML = '<div class="muted">Start on this line</div>' + esc(p.text);
   else if (p.kind === 'question') box.innerHTML = '<div class="muted">Answer this</div>' + esc(p.text);
   else if (p.kind === 'free' && !p.text) box.innerHTML = '<div class="muted">Free speak</div>Whatever is on your mind.';
-  else if (p.kind === 'fitq' || p.kind === 'otherq' || p.kind === 'askq' || p.kind === 'free') box.innerHTML = '<div class="muted">' + esc(p.label || 'Answer this') + '</div>' + esc(p.text);
+  else if (p.kind === 'story' && p.story) box.innerHTML = '<div class="muted">' + esc(p.label || 'One of your stories') + '</div>' + esc(p.text) + (p.moment ? '<div class="muted">The moment: ' + esc(p.moment) + '</div>' : '');
+  else if (p.kind === 'fitq' || p.kind === 'otherq' || p.kind === 'askq' || p.kind === 'dailyq' || p.kind === 'free') box.innerHTML = '<div class="muted">' + esc(p.label || 'Answer this') + '</div>' + esc(p.text);
   else if (p.kind === 'frame') box.innerHTML = esc(p.text) + '<div class="frame">' + p.frame.map(f => '<span>' + esc(f) + '</span>').join('') + '</div>';
   else if (p.kind === 'dev') box.innerHTML = '<div class="muted">' + esc(p.device) + '</div>' + esc(p.text);
   else if (p.kind === 'script') {
@@ -2704,7 +2793,7 @@ function openAsk(q) {
    everywhere, go to the sheet's SPEAK tab and into every backup, which is
    how other work reads them. */
 let bankQ = '';
-const SRC_NAME = { free: 'Free speak', take: 'Practice take', shoot: 'Shoot question', topic: 'Current topic', viewer: 'Viewer question', term: 'Skool term', other: 'Current topic', otherbank: 'Question' };
+const SRC_NAME = { daily: 'Today’s question', free: 'Free speak', take: 'Practice take', shoot: 'Shoot question', topic: 'Current topic', viewer: 'Viewer question', term: 'Skool term', other: 'Current topic', otherbank: 'Question' };
 const srcLine = a => (SRC_NAME[a.src] || 'Question') + (a.bracket ? ' [' + a.bracket + ']' : '') + (a.subj ? ' \u00b7 ' + a.subj : '');
 function bankText(list) {
   const by = {}; list.forEach(a => { (by[a.q] = by[a.q] || []).push(a); });
@@ -2716,6 +2805,85 @@ function copyText(text, what) {
   const done = () => UI.toast(what + ' copied.');
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => UI.toast('Copy failed.', { bad: true }));
   else UI.toast('Copy failed.', { bad: true });
+}
+/* YOUR STORIES (SPEAK 1.0.41): every story found in what he said, or added
+   by hand, least told first, each with its tellings side by side */
+function storyRow(s) {
+  const ts = tellsOf(s), last = ts[ts.length - 1], sl = last && last.judge && stLine(last.judge.st);
+  const r = el('button', 'row mb-plate mb-press mb-tap');
+  r.style.setProperty('--c', 'var(--data-3)');
+  r.innerHTML = '<span class="tx"><span class="nm">' + esc(s.title) + '</span><span class="sub">' + esc((s.moment ? s.moment + ' · ' : '') +
+    (ts.length ? 'told ' + ts.length + (ts.length === 1 ? ' time' : ' times') + (sl ? ', last: ' + sl : '') : 'not told yet')) + '</span></span>';
+  r.onclick = () => openStory(s);
+  Mobile.hold(r, e => UI.menu(e && e.clientX || 0, e && e.clientY || 0, [
+    { label: 'Not a story', kind: 'bad', fn: () => storyGone(s) },
+  ], { title: 'STORY' }), { dots: true, dotsLabel: 'More for this story' });
+  return r;
+}
+function storyGone(s, h) {
+  Rec.patch('story', null, s.key, { gone: 1 });
+  if (h) h.close(); draw();
+  UI.undo('took a story off the list', () => { Rec.patch('story', null, s.key, { gone: 0 }); draw(); });
+}
+function drawStories(m) {
+  const ls = storiesLive();
+  const c = card('YOUR STORIES', String(ls.length));
+  c.appendChild(el('p', 'muted', ls.length ? 'Found in what you say, least told first. Tell one again and it sits beside the last telling.'
+    : 'None yet. Stories you tell in any take, free speak or today’s question land here by themselves, found by Claude in SPEAK on the PC.'));
+  const acts = el('div', 'acts');
+  if (ls.length) { const tb = el('button', 'mb-btn go mb-press mb-tap', ICN('play') + '<span>TELL ONE</span>'); tb.onclick = () => startTake(drillById('lib-tell'), null, storyPrompt(storyNext())); acts.appendChild(tb); }
+  const ab = el('button', 'mb-btn mb-press mb-tap', ICN('add') + '<span>ADD ONE</span>'); ab.onclick = addStory; acts.appendChild(ab);
+  c.appendChild(acts);
+  const sorted = ls.map(s => ({ s: s, n: tellsOf(s).length })).sort((a, b) => a.n - b.n || (b.s.at || 0) - (a.s.at || 0));
+  const list = el('div', 'list');
+  sorted.slice(0, storyAll ? sorted.length : 8).forEach(x => list.appendChild(storyRow(x.s)));
+  c.appendChild(list);
+  if (sorted.length > 8) { const mb = el('button', 'mb-btn mb-press mb-tap', '<span>' + (storyAll ? 'SHOW FEWER' : 'SHOW ALL ' + sorted.length) + '</span>'); mb.onclick = () => { storyAll = !storyAll; draw(); }; c.appendChild(mb); }
+  paintIcons(c);
+  m.appendChild(c);
+}
+let storyAll = false;
+function addStory() {
+  let ti, mo;
+  UI.dialog({
+    title: 'ADD A STORY', width: 520,
+    body: b => {
+      ti = el('input', 'mb-input'); ti.placeholder = 'A few words to know it by'; ti.setAttribute('aria-label', 'Story title');
+      mo = el('input', 'mb-input'); mo.placeholder = 'The moment something changed (optional)'; mo.setAttribute('aria-label', 'The moment');
+      b.appendChild(ti); b.appendChild(mo); UI.focusSoon(ti);
+    },
+    actions: [{ label: 'CLOSE' }, { label: 'ADD', kind: 'go', fn: () => {
+      const t = ti.value.trim(); if (!t) { UI.toast('Give it a few words.'); return false; }
+      Rec.set('story', null, 'st-' + Date.now().toString(36), { title: t.slice(0, 80), moment: mo.value.trim().slice(0, 300), src: 'tom', at: Date.now() }); draw();
+    } }],
+  });
+}
+function openStory(s) {
+  const ts = tellsOf(s).slice().reverse(), src = s.from && takes().filter(x => x.key === s.from)[0];
+  UI.dialog({
+    title: 'STORY', width: 600,
+    body: (b, h) => {
+      b.appendChild(el('p', 'what', esc(s.title)));
+      if (s.moment) b.appendChild(el('p', null, '<b>The moment:</b> ' + esc(s.moment)));
+      if (s.line) b.appendChild(el('p', 'muted', 'A way in: “' + esc(s.line) + '”'));
+      if (src) { const sb = el('button', 'mb-btn mb-press mb-tap', '<span>WHERE IT CAME FROM, ' + esc(Day.label(src.date).toUpperCase()) + '</span>'); sb.onclick = () => { h.close(); showTake(src); }; b.appendChild(sb); }
+      b.appendChild(el('h3', null, 'TELLINGS'));
+      if (!ts.length) b.appendChild(el('p', 'muted', 'Not told yet. Each telling is read on four parts: the moment of change, stakes early, starting in the scene, ending on the change.'));
+      const list = el('div', 'list');
+      ts.forEach(t => {
+        const r = el('button', 'row mb-plate mb-press mb-tap'), sl = t.judge && stLine(t.judge.st);
+        r.innerHTML = '<span class="tx"><span class="nm">' + esc(Day.label(t.date) + ' · ' + mmss(t.m && t.m.time || t.dur || 0)) + '</span><span class="sub">' + esc(sl || (REF.on ? 'Claude is reading it' : 'Read by Claude in SPEAK on the PC')) + '</span></span>';
+        r.onclick = () => { h.close(); showTake(t); };
+        list.appendChild(r);
+      });
+      b.appendChild(list);
+    },
+    actions: [
+      { label: 'NOT A STORY', kind: 'bad', fn: () => storyGone(s) },
+      { label: 'IN 60 SECONDS', fn: () => { startTake(drillById('story-60'), null, Object.assign(storyPrompt(s), { label: 'One of your stories, in a minute' })); } },
+      { label: 'TELL IT', kind: 'go', fn: () => { startTake(drillById('lib-tell'), null, storyPrompt(s)); } },
+    ],
+  });
 }
 function drawBank(m) {
   const all = answers();
@@ -2748,6 +2916,7 @@ function drawBank(m) {
     top.appendChild(box);
   } else top.appendChild(el('p', 'muted', 'No answers yet.'));
   m.appendChild(top);
+  drawStories(m);
   drawContent(m);
   const done = askedAll();
   if (done.length) {
@@ -2782,7 +2951,7 @@ function drawBank(m) {
         const tk = takes().filter(x => x.key === a.key)[0];
         if (tk) { const op = el('button', 'mb-btn mb-press mb-tap', hasClip(tk) ? 'PLAY AND COACH' : 'OPEN TAKE'); op.onclick = () => showTake(tk); ra.appendChild(op); }
         const again = el('button', 'mb-btn mb-press mb-tap', 'ANSWER AGAIN');
-        const od = a.src === 'free' ? FS : a.src === 'other' || a.src === 'otherbank' ? OT : FT;
+        const od = a.src === 'free' ? FS : a.src === 'daily' ? DQ : a.src === 'other' || a.src === 'otherbank' ? OT : FT;
         again.onclick = () => startTake(od, null, { kind: od.kind, text: a.q, src: a.src, term: a.term, bracket: a.bracket, subj: a.subj, label: 'Again' });
         ra.appendChild(again);
         row.appendChild(ra);
@@ -3180,7 +3349,7 @@ const SORT = { busy: false, tried: {} };
 const JUDGE = { busy: false, tried: {} };
 async function judgeTake(t) {
   if (!REF.on || JUDGE.busy) return;
-  const x = t || takes().filter(y => y.tx && !y.judge && !JUDGE.tried[y.key] && y.drill !== 'warm' && !isFix(y.drill) && wordsOf(y.tx).length >= 40).pop();
+  const x = t || takes().filter(y => y.tx && !y.judge && !JUDGE.tried[y.key] && y.drill !== 'warm' && (!isFix(y.drill) || /^fix-st-/.test(y.drill)) && wordsOf(y.tx).length >= 40).pop();
   if (!x || x.judge || JUDGE.tried[x.key] || !x.tx || wordsOf(x.tx).length < 40) { if (t) setTimeout(() => judgeTake(), 2000); return; }
   JUDGE.busy = true; JUDGE.tried[x.key] = 1;
   const r = await askRefine('Grade one spoken practice take by Tom, a fitness coach training to speak on camera like a direct, authoritative creator. ' +
@@ -3188,7 +3357,9 @@ async function judgeTake(t) {
     '"sum": two to four sentences summarising what he said, in his words, ready to keep in his knowledge bank. ' +
     'Coherence: does it make one clear point a listener can follow, in an order that builds (5), or does it wander, restart and contradict itself (1)? ' +
     'Concision: does every sentence earn its place (5), or is the point buried in repeats, tags and detours (1)? Ignore transcription errors and missing punctuation. ' +
-    'Name the specific thing in each why, quoting a few of his words.' +
+    'Name the specific thing in each why, quoting a few of his words. ' +
+    (x.p && x.p.story ? '' : '"stories": up to 2 stories from his own life that he told or touched on, each {"title": under 8 words, "moment": the five-second moment where something changed in him, one sentence, "line": a first line he could open it with, inside the scene}; [] when there is none. A story happened to him at a time and a place and changed how he thinks or feels; an opinion, advice or a habit is not one. ') +
+    (isStoryTake(x) ? '"st": this take was a story; grade it on Matthew Dicks\'s rules, each 1 to 5 with a one-line why quoting his words: {"moment": is there one clear moment where something changed in him, and does the story build to it, "momentWhy", "stakes": does he say early what he wanted or feared, "stakesWhy", "scene": does it open inside a place and a moment rather than with background or "so this one time", "sceneWhy", "end": does it end on the change rather than trail off or add a moral after it, "endWhy"}. ' : '') +
     (x.prompt ? '\n\nThe prompt: ' + x.prompt : '') + '\n\nTHE TRANSCRIPT:\n' + x.tx);
   JUDGE.busy = false;
   let o = null;
@@ -3196,6 +3367,11 @@ async function judgeTake(t) {
   const n = v => { v = Math.round(+v); return v >= 1 && v <= 5 ? v : null; };
   if (o && n(o.coh) && n(o.con)) Rec.patch('take', x.date, x.key, { judge: { coh: n(o.coh), cohWhy: String(o.cohWhy || '').slice(0, 300), con: n(o.con), conWhy: String(o.conWhy || '').slice(0, 300), point: String(o.point || '').slice(0, 300), sum: String(o.sum || '').slice(0, 1200), at: Date.now() } });
   if (o && o.sum && Rec.has('answer', x.date, x.key)) Rec.patch('answer', x.date, x.key, { sum: String(o.sum).slice(0, 1200) });
+  if (o && o.st && typeof o.st === 'object' && isStoryTake(x)) {
+    const st = {}; ST_PARTS.forEach(([k]) => { const v = n(o.st[k]); if (v) { st[k] = v; st[k + 'Why'] = String(o.st[k + 'Why'] || '').slice(0, 300); } });
+    if (Object.keys(st).length) Rec.patch('take', x.date, x.key, { judge: Object.assign({}, (Rec.get('take', x.date, x.key) || {}).judge || {}, { st: st }) });
+  }
+  if (o && !(x.p && x.p.story)) storyAdd(x, o.stories);
   setTimeout(() => judgeTake(), 2000);
 }
 if (REF.on) Rec.ready(() => setTimeout(() => judgeTake(), 9000));
@@ -3234,7 +3410,7 @@ function bankGaps(a) {
 }
 async function sortFree() {
   if (!REF.on || SORT.busy) return;
-  const a = answers().filter(x => (x.src === 'free' || x.src === 'take') && !x.sorted && !SORT.tried[x.key] && wordsOf(x.text || '').length >= 30).pop();
+  const a = answers().filter(x => (x.src === 'free' || x.src === 'take' || x.src === 'daily') && !x.sorted && !SORT.tried[x.key] && wordsOf(x.text || '').length >= 30).pop();
   if (!a) return;
   SORT.busy = true; SORT.tried[a.key] = 1;
   /* Tom, 2026-11-16: "my talking points get synthesized off of each other
@@ -3401,6 +3577,17 @@ function drawToday(m) {
     qc.appendChild(ql);
     m.appendChild(qc);
   }
+  /* TODAY'S QUESTION (SPEAK 1.0.41): one everyday question, so stories come
+     out without being asked for. Claude keeps any story in it. */
+  const dd = dailyDone(), dq = dd ? null : dailyQ();
+  const qd = card('TODAY’S QUESTION', dd ? 'answered' : 'a minute or two');
+  const qrow = el('button', 'row mb-plate mb-press mb-tap' + (dd ? ' done' : ''));
+  qrow.style.setProperty('--c', 'var(--data-2)');
+  qrow.innerHTML = '<span class="ic">' + ICN(dd ? 'done' : 'play') + '</span><span class="tx"><span class="nm">' + esc(dd ? dd.q : dq.text) + '</span>' +
+    '<span class="sub">' + (dd ? 'Answered. It is in your bank.' : 'Answer it the way you would tell a friend.') + '</span></span>';
+  qrow.onclick = () => { if (dd) { const tk = takes().filter(x => x.key === dd.key)[0]; if (tk) showTake(tk); } else startTake(DQ, null, dq); };
+  qd.appendChild(qrow);
+  m.appendChild(qd);
   const wc = card('WARM-UP', w ? 'done' : 'about 3 min');
   const wrow = el('button', 'row mb-plate mb-press' + (w ? ' done' : ' now'));
   wrow.style.setProperty('--c', 'var(--accent)');
@@ -4094,7 +4281,9 @@ async function startTakeNow(d, warmStep, prompt) {
   T.src.connect(T.proc); T.proc.connect(T.mute); T.mute.connect(T.ac.destination);
   T.listener = wantAsr ? Listener(opt('lang', 'en-US')) : null;
   T.eye = { looks: [], base: null, calib: [] };
-  T.prompt = warmStep ? null : (prompt || promptFor(d.kind, d));
+  /* a story fix retells the story it came from */
+  const stFrom = !prompt && d && d.fix && d.skill === 'story' && T.origin && T.origin.p && T.origin.p.story && storiesLive().filter(s => s.key === T.origin.p.story)[0];
+  T.prompt = warmStep ? null : (prompt || (stFrom ? storyPrompt(stFrom) : promptFor(d.kind, d)));
   T.half = false; T.mid = null; T.penA = null; T.ph = null; T.phases = []; T.pm = null;
   T.beat = !!(d && d.beat && optOn('beat', 1));
   const screen = $('#take');
@@ -4143,10 +4332,15 @@ const MIND_FOR = {
   mouth: 'Use your whole mouth, both sides.',
   wordy: 'Say the point first, then stop.',
   unclear: 'One idea at a time: point, reason, example.',
+  'st-moment': 'Build to the moment it changed, then slow down there.',
+  'st-stakes': 'Say early what you wanted or feared.',
+  'st-scene': 'Start where you were, at that second.',
+  'st-end': 'End on the change, and stop.',
 };
 /* the reading each habit is judged on, so a drill that measures it moves it up */
 const MIND_METRIC = { 'um-pause': 'fpm', 'um-start': 'fpm', 'um-end': 'fpm', fillers: 'fpm', crutch: 'crutch', speedup: 'wpm', fast: 'wpm', slow: 'wpm',
-  'dead-air': 'longP', 'run-on': 'pauses', restarts: 'restarts', flat: 'pitch', mumble: 'crisp', eyes: 'eye', mouth: 'mouthEven', wordy: 'concision', unclear: 'coherence' };
+  'dead-air': 'longP', 'run-on': 'pauses', restarts: 'restarts', flat: 'pitch', mumble: 'crisp', eyes: 'eye', mouth: 'mouthEven', wordy: 'concision', unclear: 'coherence',
+  'st-moment': 'story', 'st-stakes': 'story', 'st-scene': 'story', 'st-end': 'story' };
 const mindOn = () => optOn('mindOn', 1);
 function mindBase() { const v = opt('mind', null); return Array.isArray(v) ? v.filter(x => String(x).trim()) : MIND_BASE.slice(); }
 function mindText(id) { const o = opt('mindTx', null) || {}; return String(o[id] || '').trim() || MIND_FOR[id] || ''; }
@@ -4163,6 +4357,7 @@ function mindRank(d) {
   }));
   const want = {};
   ((d && d.goals ? d.goals(targets()) : []) || []).forEach(g => { want[g.m] = 1; });
+  if (d && (d.skill === 'story' || d.kind === 'story')) want.story = 1;
   return Object.keys(sc).filter(id => recent[id])
     .map(id => ({ id: id, n: n[id], of: ts.length, score: sc[id] * (want[MIND_METRIC[id]] ? 1.5 : 1), drill: !!want[MIND_METRIC[id]] }))
     .sort((a, b) => b.score - a.score);
@@ -4453,7 +4648,7 @@ function finishTake(m, secs) {
   if (shR) take.sh = shR;
   take.key = saveTake(take); take.date = Day.today();
   if (!T.warm && !d.fix && !d.check) { try { Rec.setting(APP.id, 'remind', remindFrom(take)); } catch (e) {} }
-  if (asrOn && !T.warm && !d.fix) setTimeout(() => judgeTake(take), 400);
+  if (asrOn && !T.warm && (!d.fix || /^fix-st-/.test(d.id))) setTimeout(() => judgeTake(take), 400);
   if (d === AQ && T.prompt && T.prompt.ask) {
     const words = asrOn ? T.listener.out.chunks.join(' ').slice(0, 20000) : '';
     const q = askQueue().filter(x => x.key === T.prompt.ask)[0];
@@ -4619,6 +4814,14 @@ function showTake(t, html) {
           jbox.innerHTML = '';
           if (jg) {
             stat(jbox, 'Coherence', jg.coh + '/5', jg.cohWhy || ''); stat(jbox, 'Concision', jg.con + '/5', jg.conWhy || '');
+            if (jg.st) ST_PARTS.forEach(([k, nm]) => { if (jg.st[k]) stat(jbox, nm, jg.st[k] + '/5', jg.st[k + 'Why'] || '', jg.st[k] <= 2 ? 'miss' : jg.st[k] >= 4 ? 'met' : ''); });
+            const found = storiesLive().filter(s => s.from === x.key);
+            if (found.length) {
+              const fb2 = el('div', 'cnt mb-plate'); fb2.style.gridColumn = '1 / -1';
+              fb2.appendChild(el('h3', null, found.length === 1 ? 'A STORY IN THIS' : 'STORIES IN THIS'));
+              const fl = el('div', 'list'); found.forEach(s => fl.appendChild(storyRow(s))); fb2.appendChild(fl);
+              jbox.appendChild(fb2);
+            }
             if (jg.sum) {
               const sb = el('div', 'cnt mb-plate'); sb.style.gridColumn = '1 / -1';
               sb.appendChild(el('h3', null, 'SUMMARY'));
