@@ -478,13 +478,14 @@
        cue(w)   the moment: a NOTIFICATION, "If <if>", "Then <then>", and
                 the wish. QUESTS and ROOM pop it up with KEPT IT / NOT TODAY.
      Never says what a behaviour did to a number. */
+  const bare = t => String(t || '').trim().replace(/[.]+$/, '');
   const blank = () => ({ head: '', title: '', rank: '', etype: '', dur: '', desc: [], goals: [], rewards: [], penalty: [], lines: [], typedRewards: false });
   function woop(w) {
     const q = Object.assign(blank(), { kind: 'woop', head: 'QUEST', title: w.wish || 'A goal', dur: w.by ? 'By ' + w.by : '', goalHead: 'PROGRESS' });
     q.sections = [
       { label: 'OUTCOME', text: w.outcome || '' },
       { label: 'OBSTACLE', text: w.obstacle || '' },
-      { label: 'IF, THEN', text: w.if || w.then ? 'If ' + (w.if || 'the moment comes') + ', then ' + (w.then || 'the plan') + '.' : '' },
+      { label: 'IF, THEN', text: w.if || w.then ? 'If ' + (bare(w.if) || 'the moment comes') + ', then ' + (bare(w.then) || 'the plan') + '.' : '' },
     ];
     if (w.num && w.num.label) q.goals.push({ label: w.num.label, done: w.num.max != null && w.num.cur >= w.num.max,
       cur: w.num.max != null ? w.num.cur : null, max: w.num.max != null ? w.num.max : null, unit: w.num.unit || '' });
@@ -493,7 +494,7 @@
   }
   function cue(w) {
     const q = Object.assign(blank(), { kind: 'notice', head: 'NOTIFICATION' });
-    q.msgs = ['If ' + (w.if || 'the moment comes') + '.', 'Then ' + (w.then || 'the plan') + '.', w.wish || ''].filter(Boolean);
+    q.msgs = ['If ' + (bare(w.if) || 'the moment comes') + '.', 'Then ' + (bare(w.then) || 'the plan') + '.', w.wish || ''].filter(Boolean);
     return q;
   }
 
