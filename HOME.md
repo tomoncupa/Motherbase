@@ -801,3 +801,5 @@ and "N more in QUESTS". It does not follow the QUESTS filter. Shared helpers
 `dueOfRow`, `openTodo`, `nextOrder`, `taskRows` sit above `tickRow`. Tested in
 headless Chromium at 1920 and 390: contents, the project pick, a tick from
 NEXT TASK.
+
+**1.0.132** (Tom: "why they wide purple and ugly", picked A, B and C): the three cards draw ruled lines, not plates (`rowlist ruled qrows`), the colour only on the tick box, and are 3 wide. C, the card shrinking to its rows, was not built: it is the auto-size Tom turned off on 2026-11-16 ("the overall widget size should be manually set"); Fit to contents on the card menu does it once.
