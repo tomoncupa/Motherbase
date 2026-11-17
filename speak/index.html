@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.46, 2026-11-17">
+<meta name="mb-version" content="1.0.47, 2026-11-17">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -221,7 +221,6 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .mindta{width:100%;box-sizing:border-box;min-height:calc(var(--s-10) * 1.5);font:inherit;resize:vertical}
 .mindprev .mind{text-align:left;margin:0}
 #take .count{font-family:var(--font-display);font-size:var(--f-9);font-weight:var(--w-bold);text-align:center;color:var(--accent)}
-#take .say.lens{position:absolute;top:var(--s-3);left:0;right:0}
 #take .say{font-family:var(--font-display);font-size:var(--f-4);text-align:center;color:var(--text-2);letter-spacing:var(--track-cap)}
 #take .meters{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s-3);max-width:calc(var(--s-10) * 5);width:100%;margin:0 auto}
 #take .meter{padding:var(--s-3);border-radius:var(--radius-md);text-align:center}
@@ -4468,8 +4467,6 @@ async function startTakeNow(d, warmStep, prompt) {
   if (T.cam) faceEngine().catch(() => {});
   await countIn();
   if (!T.live) return;
-  if (T.cam) await lensLock();
-  if (!T.live) return;
   runTake();
 }
 /* ══════════════ before every take (SPEAK 1.0.40) ══════════════
@@ -4576,33 +4573,25 @@ function countIn() {
     setTimeout(tick, 1000);
   });
 }
-/* the lens zone, read on its own (SPEAK 1.0.46). Before, it was read during
-   the count, while the screen showed a big number and the reminders to read,
-   and before the face finder had finished loading: his only camera take
-   (16 Nov) came out 1% on the lens with a 30.6 s look away, which is the
-   zone missing or taken from the screen. Now the finder must be ready, the
-   screen shows nothing but LOOK AT THE LENS at its top edge, nearest the
-   camera, and the zone is the middle of 1.5 s of looks, so a glance does not
-   move it. No zone, no number: the take says eyes were not measured. */
-async function lensLock() {
-  const mid = $('#tkMid'); mid.innerHTML = '';
-  const say = el('div', 'say lens', engineState === 'ready' ? 'LOOK AT THE LENS' : 'STARTING THE EYE READER');
-  mid.appendChild(say);
-  let fl = null;
-  try { fl = await faceEngine(); } catch (e) { fl = null; }
-  if (!fl || !T.live) return;
-  say.textContent = 'LOOK AT THE LENS';
-  await new Promise(r => setTimeout(r, 400));
-  T.eye.calib = [];
-  const end = performance.now() + 1500;
-  while (T.live && performance.now() < end) {
-    await readEye(true);
-    await new Promise(r => setTimeout(r, 80));
-  }
-  const c = T.eye.calib;
-  if (c.length < 6) { T.eye.calib = []; return; }
-  const med = k => { const v = c.map(x => x[k]).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; };
-  T.eye.base = { gh: med('gh'), gv: med('gv'), yaw: med('yaw'), pitch: med('pitch') };
+/* the lens zone, from the take itself (SPEAK 1.0.47). Tom, 2026-11-17: "my
+   webcam is often folded up, and I don't have enough time to get it fully in
+   frame by the time I press speak ... in the first 10 seconds get the average
+   of where I'm looking". So nothing is read before the take. Every look keeps
+   its raw direction; once the face has been seen for 10 seconds the zone is
+   the middle (median) of those looks, so a glance away does not move it, and
+   every look from the start is judged against it, the first 10 seconds too.
+   A take shorter than that uses what it saw, if it saw 10 looks. 1.0.46 read
+   the zone during the count and then a 1.5 s lock; both are gone. */
+const ZONE_MS = 10000;
+function zoneFrom(looks) {
+  const c = looks.filter(x => x.raw);
+  if (c.length < 10) return null;
+  const med = k => { const v = c.map(x => x.raw[k]).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; };
+  return { gh: med('gh'), gv: med('gv'), yaw: med('yaw'), pitch: med('pitch') };
+}
+function judgeAll() {
+  const b = T.eye.base;
+  T.eye.looks.forEach(x => { x.on = x.raw ? onLens(x.raw, b) : (x.seen ? null : x.on); });
 }
 async function readEye(calib) {
   if (!T.live || !T.cam) return;
@@ -4610,10 +4599,13 @@ async function readEye(calib) {
   try { fl = await faceEngine(); } catch (e) { fl = null; }
   if (!fl || !T.live) return;
   const look = lookAt(fl, $('#cam'), performance.now());
-  if (calib) { if (look && !look.blink) T.eye.calib.push(look); return; }
-  const on = onLens(look, T.eye.base);
-  T.eye.looks.push({ t: performance.now(), on: on, seen: !!look, talk: T.ear.level() > 0.25,
-    mo: look && !look.blink ? { l: look.mL, r: look.mR, s: look.shift, gap: look.gap } : null });
+  const raw = look && !look.blink ? { gh: look.gh, gv: look.gv, yaw: look.yaw, pitch: look.pitch } : null;
+  T.eye.looks.push({ t: performance.now(), on: T.eye.base ? onLens(look, T.eye.base) : null, seen: !!look, raw: raw, talk: T.ear.level() > 0.25,
+    mo: raw ? { l: look.mL, r: look.mR, s: look.shift, gap: look.gap } : null });
+  if (!T.eye.base) {
+    const first = T.eye.looks.find(x => x.raw);
+    if (first && performance.now() - first.t >= ZONE_MS) { T.eye.base = zoneFrom(T.eye.looks); if (T.eye.base) judgeAll(); }
+  }
 }
 function runTake() {
   const d = T.d, mid = $('#tkMid'), meters = $('#tkMeters');
@@ -4691,7 +4683,7 @@ function runTake() {
         setMeter(mEye, mo ? Math.round(mo.even) + '%' : (engineState === 'failed' ? 'off' : '\u2026'), mo ? (mo.even >= targets().mouthEven ? 'in' : 'out') : 'off');
       } else if (T.cam) {
         const recent = T.eye.looks.slice(-10), on = recent.filter(x => x.on).length, seen = recent.filter(x => x.seen && x.on != null).length;
-        setMeter(mEye, seen ? Math.round(on / seen * 100) + '%' : (engineState === 'failed' ? 'off' : '…'), seen ? (on / seen >= 0.8 ? 'in' : 'out') : 'off');
+        setMeter(mEye, seen ? Math.round(on / seen * 100) + '%' : (engineState === 'failed' ? 'off' : T.eye.looks.some(x => x.raw) ? 'reading' : '…'), seen ? (on / seen >= 0.8 ? 'in' : 'out') : 'off');
       } else if (w) {
       } else if (d && d.live) {
         /* a fix drill counts its one fault live, and the meter flashes when it goes up */
@@ -4766,6 +4758,7 @@ function finishTake(m, secs) {
   const words = asrOn ? T.listener.out.words : 0;
   const ums = asrOn ? Math.max(tx.asrUms, m.held) : m.held;
   const fillers = ums + (asrOn ? tx.crutch : 0);
+  if (T.cam && !T.eye.base) { T.eye.base = zoneFrom(T.eye.looks); if (T.eye.base) judgeAll(); }
   const eyes = T.eye.looks.filter(x => x.seen && x.on != null);
   let eye = null, eyeAway = null;
   if (T.cam && T.eye.base && eyes.length >= 10) {
