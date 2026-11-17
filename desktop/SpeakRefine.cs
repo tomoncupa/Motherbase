@@ -86,7 +86,7 @@ static class Refine
        2026-11-16: "why was there no transcript?"). The page posts the take's
        recording as mbhear:{id, ext, b64}; this saves it and runs CLIP's own
        transcriber (faster-whisper, in CLIP's Python) on it, and posts back
-       {mb:'hear', id, text, chunks:[...]} or {.., error}. */
+       {mb:'hear', id, text, chunks:[...], words:[[word, start, end, sure]]} or {.., error}. */
     public static void Hear(string body, Action<string> log, Action<string> send)
     {
         Dictionary<string, object> m;
@@ -123,7 +123,8 @@ static class Refine
                 "engine.transcribe(video, 'fast', out_dir=out)\n" +
                 "with open(os.path.join(out, 'words.json'), encoding='utf-8') as f: d = json.load(f)\n" +
                 "segs = [s.get('text', '').strip() for s in d.get('segments') or [] if s.get('text', '').strip()]\n" +
-                "sys.stdout.write(json.dumps({'chunks': segs}))\n", new UTF8Encoding(false));
+                "ws = [[w.get('word', '').strip(), round(w.get('start') or 0, 2), round(w.get('end') or 0, 2), w.get('prob')] for s in d.get('segments') or [] for w in s.get('words') or [] if w.get('word', '').strip()]\n" +
+                "sys.stdout.write(json.dumps({'chunks': segs, 'words': ws[:3000]}))\n", new UTF8Encoding(false));
         }
         catch (Exception x) { res["error"] = "Could not save the recording to hear it: " + x.Message; return res; }
         var psi = new ProcessStartInfo(py, Join(new List<string> { script, tools, clip, outDir }))
@@ -158,6 +159,7 @@ static class Refine
         foreach (var c in chunks) list.Add(Convert.ToString(c));
         res["chunks"] = list;
         res["text"] = string.Join(" ", list);
+        if (r.ContainsKey("words") && r["words"] is System.Collections.IList) res["words"] = r["words"];
         return res;
     }
 

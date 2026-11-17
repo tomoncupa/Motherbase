@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.38, 2026-11-17">
+<meta name="mb-version" content="1.0.39, 2026-11-17">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -127,6 +127,24 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .player.none .pl{display:none}
 .player .pl{flex:0 0 auto}
 .player .tl{flex:1;min-width:0}
+.tl .bar i.wm{width:var(--s-1);margin-left:calc(var(--s-1) / -2);top:50%}
+.tl i.wm.um{background:var(--warn)}
+.tl i.wm.crutch{background:var(--danger)}
+.tl i.wm.drop{background:var(--accent)}
+.tl i.wm.blur{background:var(--text-muted)}
+.tl .leg i.wm{width:var(--s-2);height:var(--s-2);margin:0 var(--s-1) 0 0;position:static;top:auto}
+.wmk .acts{margin-top:var(--s-2)}
+.blurs{display:flex;flex-wrap:wrap;gap:var(--s-2);align-items:center;margin-top:var(--s-2)}
+.lean,.shbox{padding:var(--s-3);border-radius:var(--radius-md);margin-bottom:var(--s-3)}
+.lean p,.shbox p{margin:var(--s-1) 0}
+.shbox .leg,.shadow .leg{display:flex;gap:var(--s-4);flex-wrap:wrap;align-items:center;font-size:var(--f-1);color:var(--text-muted);margin-top:var(--s-1)}
+.lean .lrow{display:flex;gap:var(--s-3);align-items:center;justify-content:space-between;flex-wrap:wrap;padding:var(--s-2) 0}
+.lean .lrow span{min-width:0;flex:1 1 calc(var(--s-10) * 2)}
+.shcv{display:block;width:100%;height:calc(var(--s-10) * 1.5);margin-top:var(--s-2)}
+.shcv.full{height:calc(var(--s-10) * 2)}
+.leg i.them,.leg i.me{display:inline-block;width:var(--s-4);height:var(--border-width);vertical-align:middle;margin-right:var(--s-1)}
+.leg i.them{background:var(--text-muted)}
+.leg i.me{background:var(--accent)}
 .tl .hit{padding:var(--s-3) 0;cursor:pointer}
 .tl .bar i.head{width:var(--s-1);margin-left:calc(var(--s-1) / -2);background:var(--text-1);display:none}
 .player.on .tl .bar i.head{display:block}
@@ -748,6 +766,8 @@ const METRICS = {
   repeatOpen:{ name: 'Repeated openings', unit: '', fmt: v => Math.round(v), note: 'the most lines that started the same way, or a three-word run said again' },
   cover:   { name: 'Script said', unit: '%', fmt: v => Math.round(v), note: 'the script\u2019s words heard in order in the transcript' },
   ends:    { name: 'Endings landed', unit: '%', fmt: v => Math.round(v), note: 'the last sound of each word, heard in the transcript' },
+  clear:   { name: 'Clear words', unit: '%', fmt: v => Math.round(v), note: 'words the transcriber was sure of; a mumbled word comes out unsure' },
+  shadow:  { name: 'Pitch followed', unit: '%', fmt: v => Math.round(v), note: 'how closely your pitch line followed the clip\'s' },
   marks:   { name: 'Marks held', unit: '%', fmt: v => Math.round(v), note: 'pause and slow marks in the script, checked against the ear' },
   penGain: { name: 'Pen out', unit: '%', fmt: v => Math.round(v), note: 'crispness after the pen came out, against with it in' },
 };
@@ -1193,6 +1213,11 @@ const LIB = [
     goals: t => [{ m: 'marks', op: 'ge', v: 70 }],
     why: 'Radio and voiceover readers mark their scripts: the word to hit, where to pause, where to slow down. Reading the marks out loud is how a delivery gets rehearsed, not just the words.',
     how: 'Read your script as it scrolls with you. Hit the underlined words, stop at each bar, slow down on the dotted parts. Tap a line if the scroll falls behind.' },
+  { id: 'lib-shadow', skill: 'clear', name: 'Shadowing', style: 'read', kind: 'shadow', shadow: true,
+    get dur() { const m = shModel(); return m ? Math.ceil(m.dur) + 3 : 30; },
+    goals: t => [{ m: 'shadow', op: 'ge', v: 60 }],
+    why: 'Speaking along with a voice you want, a half step behind, is how actors and language teachers train a tune. Your pitch line is drawn against theirs, so you see where you went flat.',
+    how: 'Earphones in. The clip plays; speak its words along with it, half a step behind, copying the rises, the falls and the pauses.' },
 ];
 const FIXES = [
   { id: 'fix-pause-word', skill: 'clean', name: 'Pause, then the word', style: 'long', kind: 'topic', dur: 45, asr: true, live: 'held',
@@ -1613,6 +1638,294 @@ async function markScript(ta, btn) {
   ta.value = out; ta.dispatchEvent(new Event('input'));
   UI.toast('Marked. CANCEL keeps your script as it was.');
 }
+/* ══════════════ replay marks, leaning words, shadowing, clear words (SPEAK 1.0.39) ══════════════
+   Tom, 2026-11-17, "All": every pick from "is SPEAK the highest form it could
+   be". Four things a speaking coach does that the numbers alone did not:
+   play back every mistake, catch the words he leans on, give him a voice to
+   copy, and say which words came out unclear.
+   The word clock: SPEAK.exe's transcriber hands back each word with its start,
+   end and how sure it was (`tw` on the take, times in tenths of a second, sure
+   in hundredths). The marks need it, and the browser's own transcript has no
+   clock, so in Chrome they do not appear. */
+const normW = w => String(w || '').toLowerCase().replace(/[^a-z0-9']/g, '');
+/* the words of a take as [word, start s, end s, sure 0 to 1 or null] */
+const twOf = t => (Array.isArray(t && t.tw) ? t.tw : []).map(x => [x[0], x[1] / 10, x[2] / 10, x[3] == null ? null : x[3] / 100]);
+const twPack = ws => (Array.isArray(ws) ? ws : []).filter(x => Array.isArray(x) && x[0]).slice(0, 1200)
+  .map(x => [String(x[0]).trim().slice(0, 24), Math.floor((+x[1] || 0) * 10), Math.ceil((+x[2] || 0) * 10), x[3] == null ? null : Math.round(+x[3] * 100)]);
+/* A word the transcriber was less than half sure of. Whisper is a language
+   model as well as an ear, so a mumbled word usually still comes out as the
+   right word, only unsure. This is how sure it was, not a score of each
+   sound, and the screen says so. */
+const BLUR = 0.5;
+const countable = w => { const n = normW(w); return n.length >= 2 && FILLERS.indexOf(n) < 0; };
+function clearPct(tw) {
+  const xs = tw.filter(x => x[3] != null && countable(x[0]));
+  return xs.length >= 20 ? r1(xs.filter(x => x[3] >= BLUR).length / xs.length * 100) : null;
+}
+function unclearOf(t) {
+  return twOf(t).map((x, i) => ({ i: i, w: normW(x[0]), a: x[1], b: x[2], p: x[3] }))
+    .filter(x => x.p != null && x.p < BLUR && x.w.length >= 3 && FILLERS.indexOf(x.w) < 0)
+    .sort((x, y) => x.p - y.p).slice(0, 10).sort((x, y) => x.a - y.a);
+}
+/* every mistake the clock can place: ums, crutch phrases, endings dropped in
+   an endings drill, and unclear words */
+function wordMarks(t) {
+  const tw = twOf(t); if (!tw.length) return [];
+  const nw = tw.map(x => normW(x[0])), out = [], used = new Array(tw.length).fill(0);
+  const edge = i => i === 0 || i === tw.length - 1 || tw[i][1] - tw[i - 1][2] >= 0.25 || tw[i + 1][1] - tw[i][2] >= 0.25;
+  nw.forEach((w, i) => { if (FILLERS.indexOf(w) >= 0) { used[i] = 1; out.push({ kind: 'um', a: tw[i][1], b: tw[i][2], w: w }); } });
+  crutchList().map(p => p.toLowerCase().trim()).filter(Boolean).sort((a, b) => b.length - a.length).forEach(p => {
+    const pw = p.split(/\s+/).map(normW);
+    for (let i = 0; i + pw.length <= nw.length; i++) {
+      let ok = true;
+      for (let k = 0; k < pw.length; k++) if (nw[i + k] !== pw[k] || used[i + k]) { ok = false; break; }
+      if (!ok || (pw.length === 1 && AMBIGUOUS[p] && !edge(i))) continue;
+      for (let k = 0; k < pw.length; k++) used[i + k] = 1;
+      out.push({ kind: 'crutch', a: tw[i][1], b: tw[i + pw.length - 1][2], w: p });
+    }
+  });
+  const ew = t.endW || {};
+  Object.keys(ew).filter(k => ew[k] === 0).forEach(word => {
+    const as = normW(endDrop(word)); if (!as) return;
+    const i = nw.findIndex((x, j) => x === as && !used[j]);
+    if (i >= 0) { used[i] = 1; out.push({ kind: 'drop', a: tw[i][1], b: tw[i][2], w: word, as: as }); }
+  });
+  unclearOf(t).forEach(u => { if (!used[u.i]) out.push({ kind: 'blur', a: u.a, b: u.b, w: u.w, p: u.p }); });
+  return out.sort((x, y) => x.a - y.a);
+}
+const MARK_NAME = { um: 'um', crutch: 'crutch', drop: 'dropped ending', blur: 'unclear' };
+/* the marks laid on a player's strip, PLAY EVERY MISTAKE, and the least clear
+   words to tap. Redrawn when the transcript lands. */
+function playerMarks(t, P) {
+  const x = (t.key && Rec.get('take', t.date, t.key)) || t;
+  const ms = wordMarks(x);
+  P.bar.querySelectorAll('i.wm').forEach(n => n.remove());
+  ms.forEach(mk => { const s = el('i', 'wm ' + mk.kind); s.style.left = P.pct(mk.a); P.bar.appendChild(s); });
+  P.box.innerHTML = '';
+  if (!ms.length) return !!x.tw;
+  const kinds = Object.keys(MARK_NAME).filter(k => ms.some(m => m.kind === k));
+  P.box.appendChild(el('div', 'leg', kinds.map(k => '<span class="k"><i class="wm ' + k + '"></i>' + MARK_NAME[k] + ' ' + ms.filter(m => m.kind === k).length + '</span>').join('')));
+  const segs = [];
+  ms.forEach(m => { const a = Math.max(0, m.a - 0.7), b = m.b + 0.5, l = segs[segs.length - 1]; if (l && a <= l[1]) l[1] = Math.max(l[1], b); else segs.push([a, b]); });
+  const acts = el('div', 'acts');
+  const go = el('button', 'mb-btn mb-press mb-tap', ICN('play') + '<span>PLAY EVERY MISTAKE (' + segs.length + ')</span>');
+  go.onclick = () => P.reel(segs);
+  acts.appendChild(go); P.box.appendChild(acts);
+  const bl = ms.filter(m => m.kind === 'blur');
+  if (bl.length) {
+    const row = el('div', 'blurs');
+    row.appendChild(el('span', 'muted', 'Least clear, tap to hear:'));
+    bl.filter((m, i) => bl.findIndex(o => o.w === m.w) === i).slice(0, 6).forEach(m => { const b = el('button', 'mb-btn mb-press mb-tap', esc(m.w)); b.onclick = () => P.play(m.a - 0.8, m.b + 0.5); row.appendChild(b); });
+    P.box.appendChild(row);
+    P.box.appendChild(el('p', 'muted', 'Unclear means the transcriber was less than half sure of the word. It is a guide to where you mumbled, not a score of each sound.'));
+  }
+  const dr = ms.filter(m => m.kind === 'drop');
+  if (dr.length) P.box.appendChild(el('p', 'muted', dr.map(m => esc(m.w) + ' came out as ' + esc(m.as)).join(' · ')));
+  paintIcons(P.box);
+  return true;
+}
+
+/* ── the words he leans on ──
+   His crutch list is the phrases he already knows about. These are the ones
+   he does not: a word or phrase used again and again in one take, from a list
+   of the usual suspects plus any run of small words he repeats. Each one can
+   join the crutch list with a tap, and from then on it is counted. */
+const LEAN = ['basically', 'actually', 'literally', 'honestly', 'obviously', 'essentially', 'definitely', 'totally', 'seriously', 'really',
+  'super', 'stuff', 'things', 'whatever', 'anyway', 'right', 'okay', 'alright', 'yeah', 'like', 'just', 'very',
+  'you know', 'i mean', 'kind of', 'sort of', 'at the end of the day', 'to be honest', 'the thing is', 'in terms of', 'when it comes to',
+  'the reality is', 'for sure', 'and stuff', 'or something', 'i think', 'i feel like', 'you know what i mean', 'if that makes sense',
+  'at the same time', 'that being said', 'so yeah', 'like i said', 'and then', 'and so', 'you guys'];
+function leanOf(text) {
+  const w = wordsOf(text), n = w.length, c = {};
+  if (n < 20) return c;
+  const joined = ' ' + w.join(' ') + ' ';
+  const cnt = p => joined.split(' ' + p + ' ').length - 1;
+  LEAN.forEach(p => { const k = cnt(p); if (k) c[p] = k; });
+  for (let g = 2; g <= 3; g++) for (let i = 0; i + g <= n; i++) {
+    const ws = w.slice(i, i + g), k = ws.join(' ');
+    if (c[k] == null && ws.every(x => STOP.has(x) && FILLERS.indexOf(x) < 0)) { const m = cnt(k); if (m >= 3) c[k] = m; }
+  }
+  return c;
+}
+function leanList(t) {
+  if (!t.tx) return [];
+  const mine = crutchList().map(x => x.toLowerCase().trim());
+  const here = leanOf(t.tx), mins = Math.max(0.5, ((t.m || {}).spoken || t.dur || 60) / 60);
+  const since = Day.shift(Day.today(), -29), month = {};
+  takes().filter(x => x.tx && x.date >= since).forEach(x => { const c = leanOf(x.tx); Object.keys(c).forEach(k => { month[k] = (month[k] || 0) + c[k]; }); });
+  const keys = Object.keys(here).filter(k => mine.indexOf(k) < 0 && here[k] >= (k.indexOf(' ') < 0 ? 3 : 2) && here[k] / mins >= 1);
+  /* "the thing is" beside "the thing" is one habit, so the longer one stays */
+  return keys.filter(k => !keys.some(o => o !== k && o.length > k.length && (' ' + o + ' ').indexOf(' ' + k + ' ') >= 0 && here[o] >= here[k] - 1))
+    .sort((a, b) => here[b] - here[a]).slice(0, 5).map(k => ({ p: k, n: here[k], month: Math.max(month[k] || 0, here[k]) }));
+}
+function leanBox(t) {
+  const box = el('div', 'lean mb-plate');
+  box.style.display = 'none';
+  let tries = 0;
+  const fill = () => {
+    if (!box.isConnected && tries > 2) return;
+    tries++;
+    const x = (t.key && Rec.get('take', t.date, t.key)) || t;
+    if (!x.tx) { if (window.MB_HEAR && tries < 200) setTimeout(fill, 1500); return; }
+    const ls = leanList(Object.assign({ key: t.key, date: t.date }, x));
+    box.innerHTML = '';
+    box.style.display = ls.length ? '' : 'none';
+    if (!ls.length) return;
+    box.appendChild(el('h3', null, 'WORDS YOU LEANED ON'));
+    box.appendChild(el('p', 'muted', 'Not on your crutch list yet. Add one and it is counted from your next take.'));
+    ls.forEach(l => {
+      const row = el('div', 'lrow');
+      row.appendChild(el('span', null, '<b>“' + esc(l.p) + '”</b> ' + l.n + ' times here, ' + l.month + ' in the last 30 days'));
+      const add = el('button', 'mb-btn mb-press mb-tap', 'ADD TO CRUTCH LIST');
+      add.onclick = () => { const c = crutchList(); if (c.map(y => y.toLowerCase()).indexOf(l.p) < 0) Rec.setting(APP.id, 'crutch', c.concat([l.p])); UI.toast('“' + esc(l.p) + '” is on your crutch list.'); fill(); };
+      row.appendChild(add); box.appendChild(row);
+    });
+  };
+  setTimeout(fill, 0);
+  return box;
+}
+
+/* ── shadowing ──
+   Speaking along with a speaker you want to sound like, a half step behind
+   them, is how actors and language teachers train a voice's tune. He picks a
+   clip (a reel, a podcast, his own best take), SPEAK reads its pitch line,
+   plays it into his earphones and draws his line against it as he speaks,
+   then scores how closely his line followed theirs. The clip is one `smodel`
+   row, padded past 64KB like a recording so it stays on this device; the
+   take keeps both pitch lines, small, so the result reads anywhere. */
+const SH_STEP = 0.1, SH_MAX = 90;
+const shModels = () => Rec.all('smodel').filter(r => r.payload && r.payload.data && !r.deleted).map(r => Object.assign({ key: r.key }, r.payload)).sort((a, b) => (b.at || 0) - (a.at || 0));
+function shModel() { const k = opt('shadow', ''), all = shModels(); return all.filter(m => m.key === k)[0] || all[0] || null; }
+/* a pitch line: the middle pitch of each tenth of a second, in semitones over 100Hz, null when unvoiced */
+function binTrack(frames, e0, secs) {
+  const n = Math.max(0, Math.floor(secs / SH_STEP)), out = new Array(n).fill(null), per = Math.round(SH_STEP / 0.01), i00 = Math.round(e0 / 0.01);
+  for (let b = 0; b < n; b++) {
+    const st = [];
+    for (let i = i00 + b * per; i < i00 + (b + 1) * per && i < frames.length; i++) { if (i < 0) continue; const f = frames[i].f0; if (f > 0) st.push(12 * Math.log2(f / 100)); }
+    if (st.length) { st.sort((x, y) => x - y); out[b] = r1(st[st.length >> 1]); }
+  }
+  return out;
+}
+const medOf = xs => { const v = xs.filter(x => x != null).sort((a, b) => a - b); return v.length ? v[v.length >> 1] : 0; };
+const spreadOf = xs => { const v = xs.filter(x => x != null).sort((a, b) => a - b); return v.length > 10 ? r1(v[Math.floor(v.length * 0.9)] - v[Math.floor(v.length * 0.1)]) : null; };
+/* the best match of his line to theirs, him 0 to 1.5 seconds behind */
+function shMatch(them, me) {
+  let best = null;
+  for (let L = 0; L <= 15; L++) {
+    const xs = [], ys = [];
+    them.forEach((v, i) => { const u = me[i + L]; if (v != null && u != null) { xs.push(v); ys.push(u); } });
+    if (xs.length < 30) continue;
+    const mx = xs.reduce((s, v) => s + v, 0) / xs.length, my = ys.reduce((s, v) => s + v, 0) / ys.length;
+    let sxy = 0, sxx = 0, syy = 0;
+    xs.forEach((v, i) => { sxy += (v - mx) * (ys[i] - my); sxx += (v - mx) * (v - mx); syy += (ys[i] - my) * (ys[i] - my); });
+    const r = sxy / Math.sqrt(sxx * syy + 1e-9);
+    if (!best || r > best.r) best = { r: r, lag: L, pairs: xs.length };
+  }
+  return best;
+}
+/* a picked file to a clip: its pitch line read by the same ear as his voice */
+function shFromBuffer(ab, name, mime, data) {
+  const dur = Math.min(SH_MAX, ab.duration), ear = Ear(ab.sampleRate), ch = ab.getChannelData(0), end = Math.floor(dur * ab.sampleRate);
+  for (let i = 0; i < end; i += 4096) ear.feed(ch.slice(i, Math.min(end, i + 4096)));
+  const f0 = binTrack(ear.frames, 0, dur);
+  if (f0.filter(x => x != null).length < 30) return null;
+  const key = 's' + Date.now(), row = { name: String(name || 'Clip').replace(/\.[^.]+$/, '').slice(0, 60), mime: mime || 'audio/mpeg', dur: r1(dur), f0: f0, at: Date.now(), data: data };
+  if (data.length < 66000) row.pad = ' '.repeat(66000 - data.length);
+  Rec.set('smodel', null, key, row);
+  Rec.setting(APP.id, 'shadow', key);
+  return Object.assign({ key: key }, row);
+}
+function pickShadow(after) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'audio/*,video/*';
+  inp.onchange = () => {
+    const f = inp.files && inp.files[0]; if (!f) return;
+    if (f.size > 25e6) { UI.toast('Pick a clip under 25 MB. Trim it to the part you want first.', { bad: true }); return; }
+    UI.toast('Reading the clip’s voice…');
+    const fr = new FileReader();
+    fr.onload = () => {
+      const data = String(fr.result || '');
+      f.arrayBuffer().then(buf => {
+        const AC = window.AudioContext || window.webkitAudioContext, ac = new AC();
+        return ac.decodeAudioData(buf.slice(0)).then(ab => { try { ac.close(); } catch (e) {} return ab; });
+      }).then(ab => {
+        const md = shFromBuffer(ab, f.name, f.type, data);
+        if (!md) { UI.toast('No clear voice found in that clip.', { bad: true }); return; }
+        UI.toast('Clip ready: ' + esc(md.name) + '.');
+        if (after) after(md);
+      }).catch(() => UI.toast('That file would not open as sound.', { bad: true }));
+    };
+    fr.readAsDataURL(f);
+  };
+  inp.click();
+}
+function shadowEl(p) {
+  const box = el('div', 'prompt shadow');
+  const md = shModels().filter(m => m.key === p.key)[0] || shModel();
+  if (!md) { box.innerHTML = '<div class="muted">No clip picked.</div>'; return box; }
+  box.innerHTML = '<div class="muted">Speak along with ' + esc(md.name) + ', half a step behind. Earphones in.</div>';
+  const cv = document.createElement('canvas'); cv.className = 'shcv'; box.appendChild(cv);
+  box.appendChild(el('div', 'leg', '<span class="k"><i class="them"></i>' + esc(md.name) + '</span><span class="k"><i class="me"></i>you</span>'));
+  const audio = new Audio(); audio.preload = 'auto'; audio.src = clipUrl(md);
+  const sh = T.sh = { md: md, audio: audio, cv: cv, started: 0, e0: 0 };
+  audio.onended = () => setTimeout(() => { if (T.live && T.sh === sh) stopTake(false); }, 1500);
+  return box;
+}
+function shDraw(cv, them, me, lag, from, span) {
+  const w = Math.max(200, cv.clientWidth || 500), h = Math.max(80, cv.clientHeight || 120), dpr = window.devicePixelRatio || 1;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const cs = getComputedStyle(cv), col = k => cs.getPropertyValue(k).trim();
+  const n = Math.round(span / SH_STEP), i0 = Math.round(from / SH_STEP);
+  const line = (xs, off, mid, c, lw) => {
+    g.strokeStyle = c; g.lineWidth = lw; g.lineJoin = g.lineCap = 'round'; g.beginPath();
+    let down = false;
+    for (let k = 0; k < n; k++) {
+      const v = xs[i0 + k + off];
+      if (v == null) { down = false; continue; }
+      const x = k / Math.max(1, n - 1) * w, y = clamp(h / 2 - (v - mid) / 16 * h, 2, h - 2);
+      if (down) g.lineTo(x, y); else g.moveTo(x, y);
+      down = true;
+    }
+    g.stroke();
+  };
+  g.strokeStyle = col('--border'); g.lineWidth = 1; g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
+  line(them, 0, medOf(them), col('--text-muted'), 3);
+  line(me, lag, medOf(me), col('--accent'), 2);
+}
+/* each tenth of a second while the take runs: start the clip on the first
+   tick, then draw the four seconds around now, three behind and one ahead */
+function shadowTick() {
+  const sh = T.sh; if (!sh || !sh.cv.isConnected) return;
+  if (!sh.started) { sh.started = 1; sh.e0 = T.ear.seconds(); sh.audio.play().catch(() => UI.toast('The clip would not play.', { bad: true })); return; }
+  const now = T.ear.seconds() - sh.e0, from = Math.max(0, now - 3);
+  const me = new Array(Math.round(from / SH_STEP)).fill(null).concat(binTrack(T.ear.frames, sh.e0 + from, now - from + 0.2));
+  shDraw(sh.cv, sh.md.f0, me, 0, from, 4);
+}
+function shadowGrade(sh) {
+  if (!sh || !sh.started) return null;
+  const secs = Math.min(sh.md.dur, SH_MAX, T.ear.seconds() - sh.e0);
+  if (secs < 5) return null;
+  const them = sh.md.f0.slice(0, Math.floor(secs / SH_STEP)), me = binTrack(T.ear.frames, sh.e0, secs + 1.6);
+  const bm = shMatch(them, me);
+  return { key: sh.md.key, name: sh.md.name, them: them, me: me, lag: bm ? bm.lag : 0, pct: bm ? Math.round(Math.max(0, bm.r) * 100) : null,
+    pairs: bm ? bm.pairs : 0, sThem: spreadOf(them), sMe: spreadOf(me), leak: !!(bm && bm.lag <= 1 && bm.r > 0.92) };
+}
+function shadowBox(t) {
+  const s = t.sh, box = el('div', 'shbox mb-plate');
+  box.appendChild(el('h3', null, 'YOUR PITCH AGAINST ' + esc(String(s.name || 'the clip').toUpperCase())));
+  if (s.pct == null) { box.appendChild(el('p', 'muted', 'Not enough of your voice was heard alongside theirs to compare. Speak through the whole clip.')); return box; }
+  box.appendChild(el('p', 'what', 'Your pitch followed theirs ' + s.pct + '%. You ran ' + r1(s.lag * SH_STEP) + ' s behind.'));
+  if (s.sThem != null && s.sMe != null) box.appendChild(el('p', null, 'Your voice moved ' + s.sMe + ' semitones; theirs moved ' + s.sThem + '.' +
+    (s.sMe < s.sThem - 1.5 ? ' Go bigger on the rises and falls.' : '')));
+  if (s.leak) box.appendChild(el('p', 'muted', 'The match is suspiciously close, which usually means the microphone heard the clip itself. Use earphones, then trust the number.'));
+  const cv = document.createElement('canvas'); cv.className = 'shcv full'; box.appendChild(cv);
+  box.appendChild(el('div', 'leg', '<span class="k"><i class="them"></i>' + esc(s.name || 'the clip') + '</span><span class="k"><i class="me"></i>you, moved back ' + r1(s.lag * SH_STEP) + ' s</span>'));
+  let n = 0;
+  const draw = () => { if (cv.isConnected && cv.clientWidth) shDraw(cv, s.them, s.me, s.lag, 0, s.them.length * SH_STEP); else if (n++ < 40) requestAnimationFrame(draw); };
+  requestAnimationFrame(draw);
+  return box;
+}
 const MENU_GROUPS = [
   ['CRUTCH PHRASES AND FILLERS', d => d.skill === 'clean'],
   ['KEEP IT MOVING', d => d.skill === 'flow'],
@@ -1715,6 +2028,7 @@ function clipPlayer(t) {
   const tl = t.ev ? timeline(t) : el('div', 'tl', '<div class="bar"></div>');
   const bar = tl.querySelector('.bar'), hit = el('div', 'hit'), head = el('i', 'head');
   tl.insertBefore(hit, bar); hit.appendChild(bar); bar.appendChild(head);
+  const mbox = el('div', 'wmk'); tl.appendChild(mbox);
   wrap.appendChild(btn); wrap.appendChild(tl);
   const isVid = !!(t.vid || (row && /^video/.test(row.mime || '')));
   const audio = isVid ? document.createElement('video') : new Audio(); audio.preload = 'auto';
@@ -1729,13 +2043,23 @@ function clipPlayer(t) {
   };
   const face = on => { btn.innerHTML = ICN(on ? 'stop' : 'play'); btn.setAttribute('aria-label', on ? 'Pause' : 'Play the take'); paintIcons(btn); };
   audio.onplay = () => { wrap.classList.add('on'); face(1); cancelAnimationFrame(raf); tick(); };
-  audio.onpause = audio.onended = () => { face(0); cancelAnimationFrame(raf); };
-  const play = (from, to) => src.then(s => {
+  audio.onpause = audio.onended = () => {
+    face(0); cancelAnimationFrame(raf);
+    if (reel && stopAt != null && audio.currentTime >= stopAt - 0.1) setTimeout(() => { if (reel && reel.length) play0.apply(null, reel.shift()); else reel = null; }, 400);
+    else reel = null;
+  };
+  let reel = null;
+  const play0 = (from, to) => src.then(s => {
     if (!s) return;
     stopAt = to == null ? null : Math.min(end, to);
     try { audio.currentTime = clamp(from, 0, end); } catch (e) {}
     audio.play().catch(() => UI.toast('The recording would not play.', { bad: true }));
   });
+  const play = (from, to) => { reel = null; return play0(from, to); };
+  const P = { bar: bar, box: mbox, pct: pct, play: play, reel: segs => { reel = segs.slice(1); if (segs.length) play0(segs[0][0], segs[0][1]); } };
+  let mt = 0;
+  const marksNow = () => { if (playerMarks(t, P) || mt++ > 300 || (mt > 3 && !wrap.isConnected) || !window.MB_HEAR) return; setTimeout(marksNow, 2000); };
+  setTimeout(marksNow, 0);
   if (isVid) audio.onclick = () => btn.click();
   btn.onclick = () => { if (audio.paused) play(audio.currentTime >= end - 0.3 ? 0 : audio.currentTime, null); else audio.pause(); };
   hit.onclick = e => { const r = hit.getBoundingClientRect(); play((e.clientX - r.left) / Math.max(1, r.width) * end, null); };
@@ -1962,6 +2286,7 @@ function promptFor(kind, d) {
   if (kind === 'stress') return { kind: 'bullets', items: pick(STRESS_LINES, 4) };
   if (kind === 'ends') return { kind: 'ends', items: endPick(10) };
   if (kind === 'endlines') { const x = endLinesPick(4); return { kind: 'endlines', lines: x.lines, items: x.items }; }
+  if (kind === 'shadow') { const md = shModel(); return { kind: 'shadow', key: md ? md.key : '', text: md ? md.name : '' }; }
   if (kind === 'prompter') { const sc = curScript(); return sc ? { kind: 'script', key: sc.key, title: sc.title, text: sc.text, cue: 'full' } : { kind: 'script', key: '', title: 'A sample, marked', text: PROMPT_SAMPLE, cue: 'full' }; }
   if (kind === 'prep') return { kind: 'frame', text: promptFor('topic').text, frame: ['Point', 'Reason', 'Example', 'Point again'] };
   if (kind === 'three') return { kind: 'frame', text: promptFor('topic').text, frame: ['First', 'Second', 'Third'] };
@@ -1973,6 +2298,7 @@ function promptFor(kind, d) {
 function promptEl(p) {
   const box = el('div', 'prompt' + (p.kind === 'read' || (p.kind === 'script' && p.cue !== 'none') ? ' read mb-scroll' : ''));
   if (p.kind === 'script' && p.cue === 'full') return prompterEl(p);
+  if (p.kind === 'shadow') return shadowEl(p);
   if (p.kind === 'ends') box.innerHTML = '<div class="muted">Land the underlined ending</div><div class="endw">' + p.items.map(w => '<span>' + endWord(w) + '</span>').join('') + '</div>';
   else if (p.kind === 'endlines') box.innerHTML = '<div class="muted">Land every underlined ending</div>' + p.lines.map(l => '<div class="endl">' + l.split(/(\{[^}]+\})/).map(x => /^\{/.test(x) ? endWord(x.slice(1, -1)) : esc(x)).join('') + '</div>').join('');
   else if (p.kind === 'bullets') box.innerHTML = '<ul>' + p.items.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>';
@@ -2025,6 +2351,7 @@ function saveTake(t) {
    and DOCTRINE law 5 says do not offer what does not apply. */
 function blocked(d) {
   if (d.script && !curScript()) return 'a script';
+  if (d.shadow && !shModel()) return 'a clip';
   if (d.needsAsr && !asrOn()) return 'the transcript';
   if (d.cam && !camOn()) return 'the camera';
   return '';
@@ -2609,7 +2936,9 @@ function hearTake(t, blob) {
       const text = r.chunks.join(' ').trim(), sc = scan(r.chunks), x = Rec.get('take', t.date, t.key) || t;
       const words = wordsOf(text).length, m = Object.assign({}, x.m || {}, { words: words, crutch: sc.crutch, repeats: Math.max((x.m || {}).repeats || 0, sc.repeats) });
       if (m.spoken) m.wpm = Math.round(words / (m.spoken / 60));
-      Rec.patch('take', t.date, t.key, { tx: text.slice(0, 4000), asr: 1, asrBy: 'pc', hits: sc.hits, m: m });
+      const tw = twPack(r.words);
+      if (tw.length) m.clear = clearPct(twOf({ tw: tw }));
+      Rec.patch('take', t.date, t.key, Object.assign({ tx: text.slice(0, 4000), asr: 1, asrBy: 'pc', hits: sc.hits, m: m }, tw.length ? { tw: tw } : {}));
       endsApply(t, text);
       if (Rec.has('answer', t.date, t.key)) Rec.patch('answer', t.date, t.key, { text: text.slice(0, 20000), words: words });
       setTimeout(() => judgeTake(), 300); setTimeout(sortFree, 600);
@@ -3647,6 +3976,7 @@ function openDrill(d) {
         '<b>Why</b><span>' + esc(d.why) + '</span>' +
         '<b>How</b><span>' + esc(d.how) + '</span>' +
         (d.script && curScript() ? '<b>Script</b><span>' + esc(scriptLine(d)) + '</span>' : '') +
+        (d.shadow && shModel() ? '<b>Clip</b><span>' + esc(shModel().name + ', ' + mmss(shModel().dur)) + '</span>' : '') +
         '<b>Time</b><span>' + (winOf(d) ? mmss(winOf(d)[0]) + ' to ' + mmss(winOf(d)[1]) + ', lights on' : mmss(durOf(d))) + (d.cam && camOn() ? ', camera on' : '') +
           (d.asr && asrOn() ? ', transcript on' : '') + (d.beat && optOn('beat', 1) ? ', beat on' : '') + '</span>' +
         (last ? '<b>Last</b><span>' + esc(lastLine(d, last)) + '</span>' : '') +
@@ -3655,7 +3985,14 @@ function openDrill(d) {
       b.appendChild(camRow());
       /* A drill nothing can measure says so, and the switch it wants is right
          here rather than three taps away in Settings (DOCTRINE law 6). */
-      if (need === 'a script') {
+      if (d.shadow) {
+        if (need) b.appendChild(el('p', 'muted', 'Pick a clip of a speaker you want to sound like: a reel, a podcast, or your own best take, under 90 seconds.'));
+        const acts = el('div', 'acts');
+        const pk = el('button', 'mb-btn' + (need ? ' go' : '') + ' mb-press mb-tap', need ? 'Pick a clip' : 'Change the clip');
+        pk.onclick = () => pickShadow(() => { h.close(); openDrill(d); });
+        acts.appendChild(pk);
+        b.appendChild(acts);
+      } else if (need === 'a script') {
         b.appendChild(el('p', 'muted', 'This one rehearses your script, and there is none yet.'));
         const acts = el('div', 'acts');
         const w = el('button', 'mb-btn go mb-press mb-tap', 'Write a script');
@@ -3811,7 +4148,7 @@ function runTake() {
     mid.appendChild(el('div', 'say', T.warm.name.toUpperCase()));
     if (T.warm.kind === 'twister') mid.appendChild(promptEl({ kind: 'twister', items: pick(TWISTERS, 3) }));
     else mid.appendChild(el('p', 'muted', T.warm.how));
-  } else { T.pm = null; mid.appendChild(promptEl(T.prompt)); }
+  } else { T.pm = null; T.sh = null; mid.appendChild(promptEl(T.prompt)); }
   /* the eye reading taken during the count becomes the lens zone */
   if (T.cam && T.eye.calib.length) {
     const c = T.eye.calib, avg = k => c.reduce((s, x) => s + x[k], 0) / c.length;
@@ -3868,6 +4205,7 @@ function runTake() {
     }
     if (s >= dur) { stopTake(false); return; }
     if (T.pm && T.pm.box.isConnected && s - (T.pm.lastS || 0) >= 0.5) { T.pm.lastS = s; prompterFollow(s); }
+    if (T.sh) shadowTick();
     if (Math.round(s * 10) % 10 === 0) {
       const m = T.ear.summary({ from: Math.max(T.from, T.ear.seconds() - 10) });
       if (T.warm) {
@@ -3930,6 +4268,7 @@ function startBeat() {
   }, 40);
 }
 function stopTake(cancel) {
+  if (T.sh) try { T.sh.audio.pause(); } catch (e) {}
   if (!T.live) return;
   T.live = false;
   clearInterval(T.timer); clearInterval(T.eyeTimer); clearInterval(T.beatTimer); clearInterval(T.eyeTick);
@@ -3994,6 +4333,8 @@ function finishTake(m, secs) {
   let endR = null, mkR = null;
   if (d.endings && asrOn && T.prompt && T.prompt.items) { endR = endScore(T.prompt.items, T.listener.text()); out.ends = endR.pct; }
   if (T.pm) { mkR = marksGrade(T.pm, ev.pz); if (mkR && mkR.pct != null) out.marks = mkR.pct; }
+  const shR = T.sh ? shadowGrade(T.sh) : null;
+  out.shadow = shR ? shR.pct : null;
   if (d.halves && T.mid != null) {
     const m2 = T.ear.summary({ from: T.mid });
     if (m2) { out.crisp = ref ? m2.crisp / ref * 100 : null; out.penGain = T.penA ? r1(m2.crisp / T.penA * 100) : null; }
@@ -4027,6 +4368,7 @@ function finishTake(m, secs) {
   if (T.prompt && T.prompt.kind === 'script' && T.prompt.key) take.script = T.prompt.key;
   if (endR) take.endW = endR.w;
   if (mkR) { take.mk = mkR; if (T.pm.taps) take.mkTaps = T.pm.taps; }
+  if (shR) take.sh = shR;
   take.key = saveTake(take); take.date = Day.today();
   if (!T.warm && !d.fix && !d.check) { try { Rec.setting(APP.id, 'remind', remindFrom(take)); } catch (e) {} }
   if (asrOn && !T.warm && !d.fix) setTimeout(() => judgeTake(take), 400);
@@ -4158,6 +4500,8 @@ function showTake(t, html) {
       if (d && !d.fix && t.drill !== 'warm') b.appendChild(doNext(t, d, h));
       if (d && d.endings) b.appendChild(endsBox(t));
       if (t.mk) b.appendChild(marksBox(t));
+      if (t.sh) b.appendChild(shadowBox(t));
+      if (d && d.asr) b.appendChild(leanBox(t));
       if (d) b.appendChild(cb = coachBox(t, d, h));
       if (d) {
         const gs = el('div', 'stats');
