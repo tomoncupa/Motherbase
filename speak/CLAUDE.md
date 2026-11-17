@@ -255,6 +255,10 @@ REFINE INTO CONTENT makes a `draft` row only when pressed; versions capped at 12
 
 FREE SPEAK (`FS`) has no goals, stops at 15 minutes, and saves an `answer` with `src: 'free'`. In SPEAK.exe `sortFree` files each one (subject, title) and makes up to three jumping off points as `topic` rows `kind: 'jump'`, keyed the same on every device, of kinds link, ask, thread, push and gap, drawn from the banks (`bankPool`, never Skool). WHAT NEXT ends each free speak's sheet. (HISTORY.md: FREE SPEAK and jumping off points, added 2026-11-16 (SPEAK 1.0.20))
 
+## Alice's questions, 2026-11-17 (SPEAK 1.0.44)
+
+OUTER HEAVEN's Alice writes one newsletter question a night as a `topic` jump (`how: 'alice'`, key `alice-<date>`, `from: 'Alice: newsletter question'`) through the inbox; FREE SPEAK lists it as "From Alice: newsletter question", and taking it is any other jump (answer `how: 'alice'`, no parent). The inbox lets in only `topic` rows with `how: 'alice'`, `kind: 'jump'` and an `alice-` key, stores them undated and merges them, so `used` survives the same file next night. Tested in headless Chromium through `tools/backup.html` and the sheet; no real take was spoken on one.
+
 ## From your posts and drafts made, added 2026-11-16 (SPEAK 1.0.25)
 
 `postspeech` rows are read as takes of `post-story` and `post-reel` for the coach, FOCUS and FROM YOUR POSTS, never in drills, steps or PROGRESS. `draftmade` marks a draft done (`doneBy: 'post'`) and undoes that if the row goes; a MADE IT press stays. (HISTORY.md: From your posts and drafts made, added 2026-11-16 (SPEAK 1.0.25))

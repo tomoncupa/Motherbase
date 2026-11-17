@@ -104,11 +104,21 @@
      taken go back in MB_BACKUP.took and Backup.exe moves those files to
      done/. First user: OUTER HEAVEN's knowledge job, `kpiece` rows for
      ARC's knowledge banks. */
-  var INBOX_TYPES = { kpiece: 1, postspeech: 1, draftmade: 1, pnum: 1, wrun: 1, ask: 1 };
+  var INBOX_TYPES = { kpiece: 1, postspeech: 1, draftmade: 1, pnum: 1, wrun: 1, ask: 1, topic: 1 };
+  /* Alice's nightly question (2026-11-17) is a SPEAK jumping off point. Only
+     a `topic` with how 'alice' and a key starting alice- comes in, so the PC
+     can never write over his own prompts. SPEAK's topics are undated, so the
+     row is too, and it is merged, so SPEAK's `used` survives tomorrow's file. */
+  function inboxOk(r, before) {
+    if (r.type !== 'topic') return true;
+    if (!/^alice-/.test(r.key)) return false;
+    if (r.payload) return r.payload.how === 'alice' && r.payload.kind === 'jump' && typeof r.payload.text === 'string';
+    return !!before && before.how === 'alice';
+  }
   /* A type merged field by field, never replaced (2026-11-17): ROOM's KEPT IT
      on the wallpaper is a `wrun` with only `kept`, and the phone's run-through
      that morning wrote `ran` on the same row. */
-  var MERGE_TYPES = { wrun: 1, ask: 1 };
+  var MERGE_TYPES = { wrun: 1, ask: 1, topic: 1 };
   /* An answer from OUTER HEAVEN's QUESTIONS tab (2026-11-17) is an `ask` row
      keyed by its `Ask:` note, merged so a SPEAK `said` stays; the note is
      ticked too, as SPEAK's own answer does, so the Todoist sync closes the
@@ -127,7 +137,10 @@
       if (!bag || bag.kind !== 'motherbase-inbox') { bad.push(f.name); return; }
       (bag.rows || []).forEach(function (r) {
         if (!r || !INBOX_TYPES[r.type] || !r.key || !r.payload) return;
+        if (r.type === 'topic') r = { type: 'topic', date: null, key: r.key, payload: r.payload };
         var before = Rec.get(r.type, r.date || null, r.key);
+        if (!inboxOk(r, before)) return;
+        if (r.type === 'topic' && !before && !r.payload.at) r.payload = Object.assign({ at: Date.now() }, r.payload);
         if (MERGE_TYPES[r.type]) {
           var same = before && Object.keys(r.payload).every(function (k) { return JSON.stringify(before[k]) === JSON.stringify(r.payload[k]); });
           if (!same) { Rec.patch(r.type, r.date || null, r.key, r.payload); put++; }
@@ -138,7 +151,10 @@
       });
       (bag.gone || []).forEach(function (r) {
         if (!r || !INBOX_TYPES[r.type] || !r.key) return;
-        if (Rec.get(r.type, r.date || null, r.key)) { Rec.del(r.type, r.date || null, r.key); del++; }
+        if (r.type === 'topic') r = { type: 'topic', date: null, key: r.key };
+        var was = Rec.get(r.type, r.date || null, r.key);
+        if (!inboxOk(r, was)) return;
+        if (was) { Rec.del(r.type, r.date || null, r.key); del++; }
       });
       /* A data cleanup Claude built from a backup (2026-11-16, Tom: "clean up
          my data"). Only from a file named train-cleanup-*.json, only TRAIN's
