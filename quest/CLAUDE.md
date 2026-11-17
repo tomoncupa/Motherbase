@@ -469,3 +469,11 @@ under "Plan for it", saved by merge. The rule is `shared/goals.js`, WOOP.
   revenue today writes a `pnum` row (QUESTS and OUTER HEAVEN both write it).
 - **The cue time is set in HOME's Plan the day**; ROOM's wallpaper shows the
   cards. Tested in headless Chromium at 1280 and 390 by clicking, demo goals.
+- **As NOTICE windows** (Tom, 2026-11-17: "Both, we can expand NOTICE to be
+  able to accommodate WOOP. Notifications can be pop ups"; 1.0.40): Run
+  through shows the goal as a NOTICE quest (`Notice.woop(Goals.card(a))`,
+  Block style, no made-up rewards) with SAVE PICTURE (share sheet, else a
+  download) and RAN IT. At the planned moment, with QUESTS open and visible, a
+  NOTICE notification pops up (`Notice.cue`, `cueCheck` every 30 s and on
+  coming back) with NOT TODAY / KEPT IT; once per goal a day on that page,
+  never closes itself.
