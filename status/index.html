@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.116, 2026-11-17">
+<meta name="mb-version" content="1.0.117, 2026-11-17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -24,6 +24,7 @@
 <script src="../shared/dose.js"></script>
 <script src="../shared/grade.js"></script>
 <script src="../shared/chapter.js"></script>
+<script src="../shared/flow.js"></script>
 <script src="../shared/chart.js"></script>
 <script src="../shared/mobile.js"></script>
 <script src="../shared/sound.js"></script>
@@ -1064,6 +1065,18 @@ body.deskmini .deskdoing {
 }
 body.deskmini .deskdoing:focus { border-color: var(--accent); }
 .deskempty { font-size: var(--f-1); color: var(--text-muted); white-space: nowrap; align-self: center; }
+/* FLOW (1.0.117): where he is in a BLOCK flow, a chip under the box; pressed,
+   the strip shows every way out until one is picked or Back. */
+.deskflow { display: flex; align-items: center; gap: var(--s-1); flex: 0 1 auto; min-width: 0; height: var(--s-5);
+  padding: 0 var(--s-2); background: none; border: var(--border-width, 1px) solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text-2); font-size: var(--f-1); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.deskflow i, .deskway i { flex: none; width: var(--s-2); height: var(--s-2); border-radius: var(--radius-sm); background: var(--k); }
+.deskflowpick { display: flex; flex-wrap: wrap; align-content: flex-start; gap: var(--s-2); padding: var(--s-2); overflow: auto; max-height: 100%; }
+.deskflowpick .k { width: 100%; font-size: var(--f-1); color: var(--text-muted); }
+.deskway { display: flex; align-items: center; gap: var(--s-2); min-height: var(--tap); padding: 0 var(--s-3);
+  background: var(--surface-1); border: var(--border-width, 1px) solid var(--border-strong); border-radius: var(--radius-sm);
+  color: var(--text-1); font-size: var(--f-2); cursor: pointer; }
+.deskway.sug { border-color: var(--accent); }
 
 /* the small icons under the box. Drawn small, pressed at 44 (mb-tap). */
 .deskfoot { display: flex; align-items: flex-start; gap: var(--s-2); min-width: 0; margin-top: var(--s-1); }
@@ -9824,10 +9837,44 @@ function deskSheetWatch() {
 }
 
 var deskDoing = '';      /* the widget's half-typed "what are you doing" */
+var deskFlowOpen = false; /* the strip is showing a flow's ways out */
+
+/* the flow BLOCK has open, else the first. Rules: shared/flow.js */
+function deskFlowId() {
+  if (!window.Flow) return null;
+  const o = Rec.setting('block', 'flowOpen') || {}, all = Flow.list();
+  return (all.find(f => f.id === o.fid) || all[0] || {}).id || null;
+}
+function deskFlowPick(bar, id) {
+  const h = Flow.here(id), kv = k => 'var(' + ((Flow.KINDS[k] || {}).token || '--border') + ')';
+  const box = el('div', 'deskflowpick');
+  box.appendChild(el('div', 'k', h && h.box ? 'At ' + esc(h.box.name) + '. Next:' : 'Start the flow at:'));
+  const sug = Flow.suggest(id);
+  const go = (b, a) => {
+    deskFlowOpen = false;
+    const un = Flow.reach(id, b.id, a ? a.id : null);
+    deskBar();
+    if (un && window.UI) UI.undo((b.kind === 'g' ? 'Ticked ' : 'At ') + esc(b.name), () => { un(); deskBar(); });
+  };
+  const ways = h && h.box ? h.ways.map(w => [w.to, w]) : (h && h.start ? [[h.start, null]] : []);
+  ways.forEach(([b, a]) => {
+    const isSug = a && sug && sug.arrow.id === a.id;
+    const btn = el('button', 'deskway' + (isSug ? ' sug' : ''), '<i style="--k:' + kv(b.kind) + '"></i>' + esc(b.name) + (a && a.label ? ' · ' + esc(a.label) : ''));
+    if (isSug) btn.title = 'Slept ' + Flow.hours(sug.hours);
+    btn.onclick = () => go(b, a);
+    box.appendChild(btn);
+  });
+  const back = el('button', 'deskway', 'Back');
+  back.onclick = () => { deskFlowOpen = false; deskBar(); };
+  box.appendChild(back);
+  bar.appendChild(box);
+}
 function deskBar() {
   const bar = document.getElementById('deskbar');
   if (!bar) return;
   bar.innerHTML = '';
+  const flowId = deskFlowId();
+  if (deskFlowOpen && flowId) return deskFlowPick(bar, flowId);
 
   /* One strip: the box and the icons under it on the left, the time, then the
      status check. See `.deskrow` for the why. */
@@ -9940,6 +9987,15 @@ function deskBar() {
     chips.appendChild(c);
   });
   if (chips.children.length) foot.appendChild(chips);
+  if (flowId) {
+    const h = Flow.here(flowId), fk = h && h.box ? h.box : h && h.start;
+    if (fk) {
+      const fc = el('button', 'deskflow mb-tap', '<i style="--k:var(' + ((Flow.KINDS[fk.kind] || {}).token || '--border') + ')"></i>' + (h.box ? esc(fk.name) : 'Start ' + esc(fk.name)));
+      fc.title = (h.box ? 'At ' + fk.name + ' in your flow. ' : '') + 'Pick what comes next';
+      fc.onclick = () => { deskFlowOpen = true; deskBar(); };
+      foot.appendChild(fc);
+    }
+  }
 
   const time = el('div', 'desktime');
   row.appendChild(time);

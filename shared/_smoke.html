@@ -14,6 +14,7 @@
 <script src="grade.js"></script>
 <script src="chapter.js"></script>
 <script src="goals.js"></script>
+<script src="flow.js"></script>
 <script src="muscles.js"></script>
 <script src="mobile.js"></script>
 <script src="sound.js"></script>
@@ -1437,6 +1438,58 @@ async function run() {
     return open === 'Move to tomorrow,Move to a day,Link it,Cancel it' && done === 'Link it,Cancel it' &&
       J.menuItems({ kind: 'entry' }).length === 0;
   })());
+  /* ---- a flow: a day planned as branches (BLOCK's Flow tab, 2026-11-17) ----
+     shared/flow.js is where he is, what comes next and when, for BLOCK,
+     HOME's FLOW card and STATUS's widget. Through a stand-in store. */
+  const flowRun = (fn) => {
+    const realR = window.Rec, realJ = window.Journal, rows = {}, id = (ty, d, k) => ty + '|' + (d || '') + '|' + k;
+    window.Rec = { appId: 'smoke', setting: () => null,
+      set: (ty, d, k, p) => { rows[id(ty, d, k)] = { type: ty, date: d || null, key: k, payload: JSON.parse(JSON.stringify(p)) }; },
+      get: (ty, d, k) => { const r = rows[id(ty, d, k)]; return r ? JSON.parse(JSON.stringify(r.payload)) : null; },
+      del: (ty, d, k) => { delete rows[id(ty, d, k)]; },
+      patch: (ty, d, k, c) => { const r = rows[id(ty, d, k)]; if (r) Object.assign(r.payload, c); },
+      all: (ty, o) => Object.values(rows).filter(r => r.type === ty && (!o || o.date == null || r.date === o.date)).map(r => ({ key: r.key, date: r.date, payload: JSON.parse(JSON.stringify(r.payload)) })) };
+    window.Journal = { add: (d, kind, text, ex) => { const k = 'j' + Object.keys(rows).length; window.Rec.set('note', d, k, Object.assign({ kind: kind, text: text }, ex)); return k; }, publishNotes: () => {} };
+    try { return fn(rows); } finally { window.Rec = realR; window.Journal = realJ; }
+  };
+  const flowMake = () => {
+    const f = Flow.make('Low day'), b = {};
+    [['alarm', 't'], ['late', 'r'], ['bad', 'r'], ['teeth', 'g'], ['salt', 'g'], ['caf', 'g'], ['games', 'r']].forEach(x => { b[x[0]] = Flow.addBox(f, { name: x[0], kind: x[1] }); });
+    const a = { ign: Flow.addArrow(f, b.alarm, b.late, { label: 'Ignore' }), lb: Flow.addArrow(f, b.late, b.bad), bt: Flow.addArrow(f, b.bad, b.teeth, { gap: 0, sleep: 'short' }),
+      ts: Flow.addArrow(f, b.teeth, b.salt, { gap: 0 }), sc: Flow.addArrow(f, b.salt, b.caf, { gap: 75 }), bg: Flow.addArrow(f, b.bad, b.games) };
+    return { f: f, b: b, a: a };
+  };
+  ok('flow: loaded', !!window.Flow && typeof Flow.reach === 'function' && Flow.TYPES.join() === 'flow,fbox,farrow,fwalk');
+  ok('flow: a pick moves him on, ticks a green box, writes a STATUS entry, and undo takes all three back', flowRun(rows => {
+    const x = flowMake(), t0 = Date.now() - 60e3, day = Day.of(t0);
+    Flow.reach(x.f, x.b.alarm, null, t0); Flow.reach(x.f, x.b.late, x.a.ign, t0 + 1);
+    Flow.reach(x.f, x.b.bad, x.a.lb, t0 + 2); const un = Flow.reach(x.f, x.b.teeth, x.a.bt, t0 + 3);
+    const h = Flow.here(x.f, t0 + 4);
+    const ticked = !!Rec.get('tick', day, 'teeth') && !Rec.get('tick', day, 'late');
+    const notes = Rec.all('note').map(r => r.payload.text);
+    un();
+    const back = Flow.here(x.f, t0 + 5);
+    return h.box.id === x.b.teeth && h.ways.length === 1 && ticked && notes.indexOf('late (Ignore)') > -1 &&
+      back.box.id === x.b.bad && !Rec.get('tick', day, 'teeth') && Rec.all('note').length === 3;
+  }));
+  ok('flow: a gap times the boxes ahead from the moment he reached this one', flowRun(() => {
+    const x = flowMake(), t0 = Date.now() - 60e3;
+    Flow.reach(x.f, x.b.teeth, null, t0);
+    const tm = Flow.times(x.f, t0 + 1);
+    return tm[x.b.salt] === t0 && tm[x.b.caf] === t0 + 75 * 60e3;
+  }));
+  ok('flow: short sleep picks its arrow, a red box with no way back is named, and the floor is met only when every floor box is reached', flowRun(() => {
+    const x = flowMake(), t0 = Date.now() - 60e3, day = Day.of(t0);
+    Rec.set('ev', day, 'sleep', { e: [{ t: 1, v: 5 }] });
+    Flow.reach(x.f, x.b.bad, null, t0);
+    const sug = Flow.suggest(x.f, t0 + 1);
+    const nw = Flow.noWayBack(x.f);
+    Flow.patchBox(x.f, x.b.teeth, { floor: 1 }); Flow.patchBox(x.f, x.b.salt, { floor: 1 });
+    Flow.reach(x.f, x.b.teeth, x.a.bt, t0 + 2);
+    const half = Flow.floorMet(day);
+    Flow.reach(x.f, x.b.salt, x.a.ts, t0 + 3);
+    return sug && sug.arrow.id === x.a.bt && sug.short && nw.length === 1 && nw[0] === x.b.games && !half && Flow.floorMet(day);
+  }));
   /* ---- moving a todo to a day you name ----
      One level under "it only goes to tomorrow": tomorrow was a shortcut for a
      date, so the thing to check is that ANY date lands in `due`, which is the

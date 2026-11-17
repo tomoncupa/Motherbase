@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.135, 2026-11-17">
+<meta name="mb-version" content="1.0.136, 2026-11-17">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -52,6 +52,7 @@ html.wmode #cardframes, html.wmode #over:empty { display: none; }
 <script src="shared/dose.js"></script>
 <script src="shared/grade.js"></script>
 <script src="shared/chapter.js"></script>
+<script src="shared/flow.js"></script>
 <script src="shared/goals.js"></script>
 <script src="shared/measure.js"></script>
 <script src="shared/chart.js"></script>
@@ -569,6 +570,18 @@ body.dragging #cardframes{z-index:0}
 .row .d .rhdots i.on{background:var(--success);border-color:var(--success)}
 .row .d .rhst{margin-left:var(--s-2);color:var(--text-2)}
 .rhempty{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s-2)}
+/* FLOW: where he is in a BLOCK flow and every way out (1.0.136) */
+.flnow{display:flex;flex-direction:column;gap:var(--s-1);margin-bottom:var(--s-2)}
+.flnow .k{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted)}
+.flnow b{font-family:var(--font-display);font-size:var(--f-4);color:var(--text-1);font-weight:600;overflow-wrap:anywhere}
+.flway{display:flex;align-items:center;gap:var(--s-2);width:100%;min-height:var(--tap);padding:0 var(--s-3);text-align:left;cursor:pointer;
+  background:var(--surface-1);border:var(--border-width,1px) solid var(--line);border-radius:var(--radius-sm);color:var(--text-1);font:inherit}
+.flway.sug{border-color:var(--acc)}
+.flway i{flex:0 0 auto;width:var(--s-3);height:var(--s-3);border-radius:var(--radius-sm);background:var(--k)}
+.flway .l{color:var(--text-muted);font-size:var(--f-1)}
+.flway .r{margin-left:auto;color:var(--text-muted);font-size:var(--f-1);white-space:nowrap}
+.flway .s{color:var(--acc);font-size:var(--f-1);white-space:nowrap}
+.flnext{margin-top:var(--s-2);color:var(--text-muted);font-size:var(--f-1)}
 /* MEALS: what a meal was is the point of the row, so not the faintest text */
 .row .d.kc{color:var(--dim);font-variant-numeric:tabular-nums}
 .row.done{opacity:.5}
@@ -4831,6 +4844,62 @@ const WIDGETS = {
     },
   },
 
+  /* ── FLOW: BLOCK's day planned as branches (Tom, 2026-11-17). Every rule is
+     shared/flow.js, the same file BLOCK's Flow tab and STATUS's widget follow. */
+  flow: {
+    nm: 'FLOW', w: 4, h: 4, app: 'block', to: ['block', 'flow'],
+    fid() {
+      if (!window.Flow) return null;
+      const o = Rec.setting('block', 'flowOpen') || {}, all = Flow.list();
+      return (all.find(f => f.id === o.fid) || all[0] || {}).id || null;
+    },
+    sub: () => {
+      const id = WIDGETS.flow.fid(); if (!id) return 'none set up';
+      const h = Flow.here(id);
+      return h && h.box ? 'at ' + h.box.name : 'not started';
+    },
+    draw(body) {
+      const id = WIDGETS.flow.fid();
+      if (!id) {
+        const e = el('div', 'empty rhempty', 'No flows.');
+        const add = el('button', 'mb-btn go mb-press mb-tap', 'MAKE ONE');
+        add.onclick = ev => { ev.stopPropagation(); goTo(['block', 'flow']); };
+        e.appendChild(add); body.appendChild(e); return;
+      }
+      const h = Flow.here(id), kv = k => 'var(' + ((Flow.KINDS[k] || {}).token || '--line') + ')';
+      const take = (b, a) => {
+        const un = Flow.reach(id, b.id, a ? a.id : null);
+        drawHome();
+        if (un && window.UI) UI.undo((b.kind === 'g' ? 'Ticked ' : 'At ') + esc(b.name), () => { un(); drawHome(); });
+      };
+      const way = (b, words, right, sug, fn) => {
+        const r = el('button', 'flway' + (sug ? ' sug' : ''), '<i style="--k:' + kv(b.kind) + '"></i>' + esc(b.name) +
+          (words ? ' <span class="l">' + esc(words) + '</span>' : '') + (sug ? ' <span class="s">' + sug + '</span>' : '') + (right ? '<span class="r">' + right + '</span>' : ''));
+        r.type = 'button';
+        r.onclick = ev => { ev.stopPropagation(); fn(); };
+        return r;
+      };
+      const list = el('div', 'rowlist');
+      if (!h || !h.box) {
+        const st = h && h.start;
+        const top = el('div', 'flnow', '<span class="k">' + (h && h.walk && h.walk.over ? 'Reached the end' : 'Not started') + '</span>');
+        body.appendChild(top);
+        if (st) list.appendChild(way(st, 'Start here', st.at ? Flow.clock(Date.parse(LifeOS.day() + 'T' + st.at)) : '', '', () => take(st, null)));
+        body.appendChild(list);
+        return;
+      }
+      body.appendChild(el('div', 'flnow', '<span class="k">You are at</span><b>' + esc(h.box.name) + '</b>'));
+      const sug = Flow.suggest(id), times = Flow.times(id);
+      h.ways.forEach(w => {
+        const words = w.label || (w.gap != null ? (w.gap === 0 ? 'Immediately' : w.gap + ' min') : '');
+        const isSug = sug && sug.arrow.id === w.id;
+        list.appendChild(way(w.to, words, times[w.b] ? Flow.clock(times[w.b]) : '', isSug ? 'Slept ' + Flow.hours(sug.hours) : '', () => take(w.to, w)));
+      });
+      if (!h.ways.length) list.appendChild(el('div', 'empty', 'No way out of this box.'));
+      body.appendChild(list);
+    },
+  },
+
   /* ── STATUS ── */
   /* any measure STATUS keeps, picked from the widget's own menu, so mood,
      energy, steps or water each get a chart the way WEIGHT and SLEEP do */
@@ -8582,6 +8651,7 @@ const ABOUT = {
   projects: 'Open todos for each project.',
   brief: 'The morning brief from your PC, and its todos.',
   rhythms: 'BLOCK’s Every blocks and Habits: owed, due, coming up and this period’s count, tickable.',
+  flow: 'Where you are in a BLOCK flow, and one tap for each way out.',
   measure: 'Any measure you track in STATUS, charted.',
   halflife: 'How much of a dose you write in STATUS is still in you, by its half-life.',
   toweigh: 'Today’s ELEMENT doses: AM powders you can change and tick, and the night drink worked out from your food.',

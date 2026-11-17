@@ -114,6 +114,10 @@ Settings size, STATUS.exe only, 2026-11-16: the whole screen was "a bit inconven
 
 1.0.106, 2026-11-16: the status check is back to how it was before 1.0.104. Tom: "don't change the old regular status check". 1.0.104 reverted whole (68b3628): no side-by-side questions on a wide screen.
 
+## 1.0.117, 2026-11-17: the flow chip on the widget
+
+From BLOCK's Flow tab (Tom picked the widget too). With a flow set up, a chip under the box names the box he is at (or Start <box>); pressing it turns the strip into one button per way out plus Back, and a pick is `Flow.reach` with Undo, which also writes the day's entry, so the last line shows it. The strip never grows. `shared/flow.js` holds every rule. Driven in headless Chromium at 440 x 119 with `?desktop=1`: chip, ways, pick, entry on the last line. Not seen in STATUS.exe.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)

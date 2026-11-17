@@ -840,3 +840,7 @@ once per widget instead of copying widgets:
 - The kernel's `Rec.on` now skips a change made only of `device` rows. No
   card draws them (DATA's device list is drawn when DATA opens). An empty
   change list still refreshes, since it means anything may have changed.
+
+## 1.0.136, 2026-11-17: FLOW
+
+A card for BLOCK's Flow tab (Tom picked "the box you're on and what comes next on the home screen and the STATUS desktop widget"). Where he is in the flow BLOCK has open (`block.flowOpen`, else the first), one button per way out with its time and the sleep suggestion, Undo on a pick; not started shows Start at its first box; no flow shows MAKE ONE, which opens BLOCK on Flow (`show: 'flow'`). Every rule is `shared/flow.js`, loaded here. Driven in headless Chromium: drawn at Wake up bad with both ways out.

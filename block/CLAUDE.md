@@ -51,6 +51,19 @@ Tom asked for both after all. Rules that stand:
 - Everything on the Schedule page reads at `--f-1` or more: one `#sched` rule raises the shared classes (weekbar, day columns, section heads, hints) there only. The Day and Summary views still carry 9 to 11.5px labels.
 - No em dashes in the Schedule page's text or tooltips, nor in the Day, Schedule, Summary and + Day tab tips.
 
+## 1.0.30, 2026-11-17: the Flow tab
+
+Tom: "prepare for when we wake up not the best versions of ourselves ... accommodate for our lowest common factor", from his 2020 chart. He picked: its own tab; red boxes pickable; picks written to STATUS; arrow gaps set times; and all six suggestions. Rules that stand:
+
+- **Every rule is `shared/flow.js`** (rows `flow`, `fbox`, `farrow`, `fwalk`; see the root data model). BLOCK draws and edits; HOME's FLOW card and STATUS's widget follow the same file. Change a rule there, never in an app.
+- **Plan / Today.** Plan: drag a box (snaps to 24px), click a box or an arrow's chip to change it in the side panel, Arrow to... then click the target, right-click either for its menu, Delete or Backspace removes the picked one with Undo. Today: where he is, every way out as a button, times ahead, the floor, and the paths taken in the last 30 days with each day's STATUS grade letter. Any box can be "I am here now".
+- **A pick** writes the step, ticks a green box under the slug of its name (so a box named like a block ticks that block), and writes a STATUS entry "Name (arrow words)" at that minute unless This flow's switch is off (`block.flowEntries` 0). Facts are dated the moment of the pick; the walk is dated the day it began and stays open 20 hours after its last step.
+- **Sleep picks an arrow:** an arrow marked short sleep or enough sleep is suggested from that day's STATUS `sleep` reading against the flow's `short` hours (6). Suggested, never taken for him.
+- **The floor** (boxes marked Part of the floor): reach every one on a day and BLOCK's streak counts that day (`streak()` asks `Flow.floorMet`). HOME's STREAKS card does not know this yet.
+- **No way back:** a red box from which no green box can be reached is flagged on the canvas and in the side panel.
+- **Start from your 2020 chart** seeds his chart read off the picture; the floor on Brush teeth and Salt drink is a guess and is his to change.
+- The bin and the footer are hidden on Flow (a view change).
+
 ## Needs from the home screen
 
 The new chapter: `HOME.md`, Needs from BLOCK (2026-11-16), asks STREAKS and EVERY & HABITS to count from `Chapter.from('block')`. HOME 1.0.75 copied `rhPeriod`, `rhPer` and `act` ticking into its EVERY & HABITS card (`rhAnyState`, `rhTickH`). Change both when habit maths changes.
