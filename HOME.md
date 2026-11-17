@@ -830,3 +830,13 @@ once per widget instead of copying widgets:
   suite's own frames (`LEAD`).
 - Tested in headless Chromium from another origin: one card drawn, header
   hidden, background clear, a keyed sticky saved and `mbTyping` sent.
+
+## A device's status note no longer rebuilds the board (2026-11-17, 1.0.135)
+
+- Found in the session "Graphics redraw glitch": each device saves its own
+  `device` row (`shared/report.js`) every few seconds, and live sync pulls in
+  every other device's. Each save reached `LifeOS.on`, and HOME rebuilt every
+  card. Charts stopped flashing in that session; the rebuild itself was left.
+- The kernel's `Rec.on` now skips a change made only of `device` rows. No
+  card draws them (DATA's device list is drawn when DATA opens). An empty
+  change list still refreshes, since it means anything may have changed.
