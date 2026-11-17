@@ -233,3 +233,17 @@ Medium on vendor benchmarks and Duolingo secondary claims. Low on any guide
 figure with no method, which is most of the per-style WPM table. Set here with
 no source at all: the live band, the crispness 85%, the pitch spread 6 and 10
 semitones, the eye bands.
+
+## Measured models, 2026-11-17
+Measured by Claude with CLIP's transcriber (faster-whisper, word times) on 4 minutes of each video, and by a research pass from YouTube captions. Words a minute over the whole stretch; "talking" leaves out pauses of 250 ms or more. Edited videos (jump cuts) read high, because the cuts take the pauses out.
+
+| Speaker | Video | wpm | talking | sound share | fillers/min |
+|---|---|---|---|---|---|
+| Jocko Willink | "GOOD" IdTMDpizis8 (set piece, music) | 117 | 244 | 48% | 0 |
+| Dan Koe | K8K09g9XR4s | 211 | 226 | 93% | 0.2 |
+| Dan Koe | iX5CgAwxAtc | 188 | 222 | 85% | 0 |
+| Alex Hormozi | aFoMYz_jWcs | 222 | 254 | 87% | 1.2 |
+| Faizan Asif | LPrgVUrlRCM (interview, two voices) | 209 | 244 | 86% | 0.2 |
+| From captions: Chris Williamson 164-171, Ryan Holiday 184-197, Sean Nalewanyj 213, Jeff Nippard 215, Leila Hormozi 248, Iman Gadzhi 233, Jocko with a guest 180, GaryVee 157-169 (a bad model for other reasons) | | | | | |
+
+What it says: every model but Jocko's set piece is faster than the old 160 to 190 band. Their clarity comes from clean, finished sentences, not slow speech. Jocko's weight comes from silence (half of "GOOD" is pauses), not slow words: inside a phrase he runs at 244.
