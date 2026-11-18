@@ -121,7 +121,7 @@ class Menu : Form
 
         Text = TITLE;
         StartPosition = FormStartPosition.Manual;
-        BackColor = Color.FromArgb(11, 14, 20);
+        BackColor = Color.FromArgb(0x08, 0x0B, 0x10);   // Block #080B10, the same as the bar and the page (was #0B0E14)
         Icon = AppIcon();
         MinimumSize = new Size(720, 480);
         Restore();
