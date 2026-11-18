@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.53, 2026-11-18">
+<meta name="mb-version" content="1.0.54, 2026-11-18">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1532,7 +1532,7 @@ function coach(t) {
     else add('fillers', 'fpm', sev, r1(m.fpm) + ' fillers a minute, against ' + lim + '.', 'Close your lips when one is coming and let the silence run.', 'fix-fillers', held);
   }
   if (m.crutch) {
-    const hits = Object.entries(t.hits || {}).filter(([w]) => FILLERS.indexOf(w) < 0).sort((x, y) => y[1] - x[1]);
+    const hits = crHits(t, 1).sort((x, y) => y[1] - x[1]);
     const top = hits[0];
     add('crutch', 'crutch', m.crutch / 3 * 0.8, top ? '"' + top[0] + '" ' + top[1] + (top[1] === 1 ? ' time' : ' times') + (m.crutch > top[1] ? ', ' + m.crutch + ' crutch phrases in all.' : '.') : m.crutch + ' crutch phrases.',
       'End the sentence where the phrase would go.', 'fix-crutch', (ev && ev.cx || []).map(c => [c[0], 1.5]));
@@ -3308,7 +3308,13 @@ function doNext(t, d, h) {
   box.appendChild(el('h3', null, 'DO THIS NEXT'));
   const say = el('p'), acts = el('div', 'acts');
   box.appendChild(say); box.appendChild(acts);
-  const btn = (label, go, fn) => { const b = el('button', 'mb-btn mb-press mb-tap' + (go ? ' go' : ''), '<span>' + label + '</span>'); b.onclick = fn; acts.appendChild(b); return b; };
+  /* every button says what pressing it does (Tom, 2026-11-18: "I don't know
+     what land the ending or send to write as a raw seed will actually do") */
+  const btn = (label, go, fn, note) => { const b = el('button', 'mb-btn mb-press mb-tap' + (go ? ' go' : ''), '<span>' + label + '</span>'); b.onclick = fn;
+    if (!note) { acts.appendChild(b); return b; }
+    const w = el('div'); w.style.flexBasis = '100%'; w.appendChild(b);
+    const n = el('p', 'muted', esc(note)); n.style.margin = 'var(--s-1) 0 var(--s-2)'; w.appendChild(n); acts.appendChild(w); return b; };
+  const drillNote = fx => 'A ' + mmss(durOf(fx)) + ' drill on new words, to build the habit. It does not change this take. ' + (fx.how || '');
   const fill = () => {
     const x = takes().filter(y => y.key === t.key)[0] || t, jg = x.judge, wk = coach(x)[0];
     const rb = rubricOf(d, x), words = !rb || d.asr || rb.has('coherence') || rb.has('story') || rb.has('crutch') || rb.has('cover');
@@ -3316,31 +3322,31 @@ function doNext(t, d, h) {
     if (!x.tx && words && window.MB_HEAR && (HEAR.busy[x.key] || hasClip(x))) {
       say.innerHTML = '<b>Get the transcript first.</b> Without your words, crutch phrases, coherence and concision cannot be judged, and nothing reaches your bank.';
       if (HEAR.busy[x.key]) btn('WRITING IT ON THIS PC...', false, () => {}).disabled = true;
-      else btn('WRITE THE TRANSCRIPT', true, () => { const row = Rec.get('tclip', x.date, x.key); if (row) fetch(clipUrl(row)).then(r => r.blob()).then(bl => { hearTake(x, bl); fill(); }); });
+      else btn('WRITE THE TRANSCRIPT', true, () => { const row = Rec.get('tclip', x.date, x.key); if (row) fetch(clipUrl(row)).then(r => r.blob()).then(bl => { hearTake(x, bl); fill(); }); }, 'Turns this recording into words on this PC. Nothing leaves the machine.');
       return false;
     }
     const strong = jg && jg.coh >= 4 && jg.con >= 4, why = contentCheck(x);
     const next = rb && !d.fix ? DRILLS.filter(y => y.skill === d.skill && y.step === d.step + 1)[0] : null;
     if (rb && x.pass && next) {
       say.innerHTML = '<b>Met. Next step: ' + esc(next.name) + '.</b> ' + esc(next.why || '');
-      btn(next.name.toUpperCase(), true, () => { if (h) h.close(); openDrill(next); });
+      btn(next.name.toUpperCase(), true, () => { if (h) h.close(); openDrill(next); }, 'Opens the next step of this skill. ' + (next.how || ''));
     } else if (rb && !wk) {
       say.innerHTML = x.pass ? '<b>Met.</b> Go again to make it hold, or pick the next drill on TODAY.' : '<b>Not met yet.</b> Go again with the same goal.';
-      btn('GO AGAIN', true, () => { if (h) h.close(); startTake(d); });
+      btn('GO AGAIN', true, () => { if (h) h.close(); startTake(d); }, 'Starts this drill again with the same goal.');
     } else if (x.tx && (!rb || rb.has('coherence') || rb.has('story')) && (strong || why)) {
       say.innerHTML = '<b>This is content. Refine it while it is fresh.</b> ' + esc(strong ? 'It held together and stayed tight (coherence ' + jg.coh + ', concision ' + jg.con + ' of 5).' : 'It has ' + why.join(' and ') + '.');
-      btn('REFINE INTO CONTENT', true, () => { if (h) h.close(); openRefine(x); });
+      btn('REFINE INTO CONTENT', true, () => { if (h) h.close(); openRefine(x); }, 'Opens this take\u2019s words as a draft post. Claude tightens it on the PC, you edit it, and every version is kept.');
     } else if (wk && drillById(wk.fix)) {
       const fx = drillById(wk.fix);
       say.innerHTML = '<b>Fix the weakest thing now: ' + esc(FAULT[wk.id] || wk.id) + '.</b> ' + esc(wk.what) + ' Do ' + esc(fx.name) + ', ' + mmss(durOf(fx)) + ', then go again.';
-      btn(fx.name.toUpperCase(), true, () => { if (h) h.close(); fixFrom = x; openDrill(fx); });
+      btn(fx.name.toUpperCase(), true, () => { if (h) h.close(); fixFrom = x; openDrill(fx); }, drillNote(fx));
     } else {
       say.innerHTML = '<b>Nothing stood out. Go longer.</b> Two minutes on a harder topic, no stopping.';
-      btn('DON\u2019T STOP', true, () => { if (h) h.close(); openDrill(drillById('lib-nostop')); });
+      btn('DON\u2019T STOP', true, () => { if (h) h.close(); openDrill(drillById('lib-nostop')); }, drillNote(drillById('lib-nostop')));
     }
     if (x.tx) {
       const sent = !!x.seed;
-      const sb = btn(sent ? 'SENT TO WRITE' : 'SEND TO WRITE AS A RAW SEED', false, () => { Rec.patch('take', x.date, x.key, { seed: 1, seedAt: Date.now() }); sb.disabled = true; sb.innerHTML = '<span>SENT TO WRITE</span>'; UI.toast('In WRITE\u2019s Inbox after the next nightly backup.'); });
+      const sb = btn(sent ? 'SENT TO WRITE' : 'SEND TO WRITE', false, () => { Rec.patch('take', x.date, x.key, { seed: 1, seedAt: Date.now() }); sb.disabled = true; sb.innerHTML = '<span>SENT TO WRITE</span>'; UI.toast('In WRITE\u2019s Inbox after the next nightly backup.'); }, 'Puts this take\u2019s words in the Inbox of WRITE, in OUTER HEAVEN, as a starting point for a post. Nothing is posted.');
       sb.disabled = sent;
     }
     return !!x.tx || !window.MB_HEAR;
@@ -3708,6 +3714,38 @@ const SORT = { busy: false, tried: {} };
    and his Right or Wrong mark on the fault says whether the reading held. A
    take made away from the PC is read the next time SPEAK.exe is open. */
 const JUDGE = { busy: false, tried: {} };
+/* Crutch or just how he talks (SPEAK 1.0.54). Tom, 2026-11-18: "Sometimes
+   also I just have my speech patterns. They're not necessarily crutches."
+   The research splits um and uh (filled pauses, always counted) from
+   discourse markers such as "you know", "I mean" and "like", which do real
+   jobs: inviting the listener to fill in, correcting, quoting, rough numbers
+   (Fox Tree & Schrock 2002; Liu & Fox Tree). So Claude in SPEAK.exe reads
+   every counted use in context (`judge.cr`, asked in `judgeTake`), and only
+   the uses that did no job stay counted. The count before is kept as
+   `m.crutchRaw`; the goals and the pass are worked out again, like endings. */
+function crHits(t, onlyFiller) {
+  const cr = (t.judge && t.judge.cr) || null;
+  return Object.entries(t.hits || {}).filter(([w]) => FILLERS.indexOf(w) < 0)
+    .map(([w, n]) => [w, onlyFiller && cr && cr[w] ? Math.min(n, cr[w].filler) : n]).filter(e => e[1] > 0);
+}
+function crutchApply(t, cr) {
+  const x = Rec.get('take', t.date, t.key) || t, m = x.m || {}, hits = x.hits || {}, keep = {};
+  let job = 0;
+  Object.keys(cr).forEach(w0 => {
+    const w = String(w0).toLowerCase(), had = hits[w]; if (!had) return;
+    const j = clamp(Math.round(+cr[w0].job || 0), 0, had);
+    keep[w] = { job: j, filler: had - j, why: String(cr[w0].why || '').slice(0, 200) }; job += j;
+  });
+  if (!Object.keys(keep).length) return;
+  const raw = m.crutchRaw != null ? m.crutchRaw : m.crutch;
+  if (raw == null) return;
+  const was = m.crutch || 0, now = Math.max(0, raw - job), minutes = Math.max(0.1, (m.spoken || 0) / 60);
+  const fillers = Math.max(0, (m.fillers || 0) - (was - now));
+  const mm = Object.assign({}, m, { crutch: now, crutchRaw: raw, fillers: fillers, fpm: fillers / minutes, f100: m.words >= 10 ? fillers / m.words * 100 : m.f100 });
+  const goals = (x.goals || []).map(g => mm[g.m] != null && ['crutch', 'fpm', 'f100'].indexOf(g.m) >= 0 ? Object.assign({}, g, { got: mm[g.m], ok: OPS[g.op](mm[g.m], g.v) }) : g);
+  const jg = Object.assign({}, (Rec.get('take', t.date, t.key) || {}).judge || {}, { cr: keep });
+  Rec.patch('take', t.date, t.key, { m: mm, goals: goals, pass: goals.length && goals.every(g => g.ok) ? 1 : 0, judge: jg });
+}
 async function judgeTake(t) {
   if (!REF.on || JUDGE.busy) return;
   const x = t || takes().filter(y => y.tx && !y.judge && !JUDGE.tried[y.key] && y.drill !== 'warm' && (!isFix(y.drill) || /^fix-st-/.test(y.drill)) && wordsOf(y.tx).length >= 40).pop();
@@ -3722,6 +3760,7 @@ async function judgeTake(t) {
     (x.p && x.p.story ? '' : '"stories": up to 2 stories from his own life that he told or touched on, each {"title": under 8 words, "moment": the five-second moment where something changed in him, one sentence, "line": a first line he could open it with, inside the scene}; [] when there is none. A story happened to him at a time and a place and changed how he thinks or feels; an opinion, advice or a habit is not one. ' +
       (storyKnown().length ? 'Leave out any story already in this list, even told differently: ' + storyKnown().join(' | ') + '. ' : '')) +
     (isStoryTake(x) ? '"st": this take was a story; grade it on Matthew Dicks\'s rules, each 1 to 5 with a one-line why quoting his words: {"moment": is there one clear moment where something changed in him, and does the story build to it, "momentWhy", "stakes": does he say early what he wanted or feared, "stakesWhy", "scene": does it open inside a place and a moment rather than with background or "so this one time", "sceneWhy", "end": does it end on the change rather than trail off or add a moral after it, "endWhy"}. ' : '') +
+    (crHits(x).length ? '"cr": these words were counted as crutch phrases: ' + crHits(x).map(([w, n]) => '"' + w + '" ' + n + 'x').join(', ') + '. For each, read every use in context and say how many did a job and how many did not: {"word": {"job": n, "filler": n, "why": one line quoting one use}}. A use does a job when it quotes someone ("he was like"), gives a rough number ("like five sets"), contrasts ("actually, the opposite"), means type of ("a kind of row"), corrects or clarifies what he just said ("I mean"), or signposts a turn once. It is a filler when taking it out loses nothing, when it fills time while he thinks, or when it asks the listener to agree ("right?", "you know?"). ' : '') +
     (x.prompt ? '\n\nThe prompt: ' + x.prompt : '') + '\n\nTHE TRANSCRIPT:\n' + x.tx);
   JUDGE.busy = false;
   let o = null;
@@ -3729,6 +3768,7 @@ async function judgeTake(t) {
   const n = v => { v = Math.round(+v); return v >= 1 && v <= 5 ? v : null; };
   if (o && n(o.coh) && n(o.con)) Rec.patch('take', x.date, x.key, { judge: { coh: n(o.coh), cohWhy: String(o.cohWhy || '').slice(0, 300), con: n(o.con), conWhy: String(o.conWhy || '').slice(0, 300), point: String(o.point || '').slice(0, 300), sum: String(o.sum || '').slice(0, 1200), at: Date.now() } });
   if (o && o.sum && Rec.has('answer', x.date, x.key)) Rec.patch('answer', x.date, x.key, { sum: String(o.sum).slice(0, 1200) });
+  if (o && o.cr && typeof o.cr === 'object' && n(o.coh)) crutchApply(x, o.cr);
   if (o && o.st && typeof o.st === 'object' && isStoryTake(x)) {
     const st = {}; ST_PARTS.forEach(([k]) => { const v = n(o.st[k]); if (v) { st[k] = v; st[k + 'Why'] = String(o.st[k + 'Why'] || '').slice(0, 300); } });
     if (Object.keys(st).length) Rec.patch('take', x.date, x.key, { judge: Object.assign({}, (Rec.get('take', x.date, x.key) || {}).judge || {}, { st: st }) });
@@ -5233,7 +5273,12 @@ function gate(t, d, wrap, fresh) {
   if (!fresh || t.guess) return inner;
   const box = el('div'), g = el('div', 'cnt mb-plate'), out = el('div');
   g.appendChild(el('h3', null, 'BEFORE YOU LOOK'));
-  g.appendChild(el('p', 'muted', (rubricOf(d, t) || {}).ask || 'How clean was that take?'));
+  /* what the three words mean, from realOf (Tom, 2026-11-18: "what does a
+     take being clean mean?") */
+  const rbq = rubricOf(d, t);
+  g.appendChild(el('p', null, esc((rbq || {}).ask || 'How clean was that take?')));
+  g.appendChild(el('p', 'muted', 'Clean: nothing went past its line. OK: one or two things did. Messy: three or more.' +
+    (rbq ? ' Only what this drill grades counts.' : ' Every number counts: fillers, pace, pauses, crispness, eyes, mouth, and Claude\u2019s read of the words.')));
   const row = el('div'); row.style.display = 'flex'; row.style.flexWrap = 'wrap'; row.style.gap = 'var(--s-2)';
   [[3, 'CLEAN'], [2, 'OK'], [1, 'MESSY']].forEach(([v, nm]) => {
     const bt = el('button', 'mb-btn mb-press mb-tap', '<span>' + nm + '</span>');
@@ -5304,6 +5349,14 @@ function showTake(t, html, fresh) {
           if (jg) {
             if (graded('coherence') || graded('concision')) { stat(jbox, 'Coherence', jg.coh + '/5', jg.cohWhy || ''); stat(jbox, 'Concision', jg.con + '/5', jg.conWhy || ''); }
             if (jg.st && graded('story')) ST_PARTS.forEach(([k, nm]) => { if (jg.st[k]) stat(jbox, nm, jg.st[k] + '/5', jg.st[k + 'Why'] || '', jg.st[k] <= 2 ? 'miss' : jg.st[k] >= 4 ? 'met' : ''); });
+            const pat = Object.entries(jg.cr || {}).filter(([, v]) => v.job > 0);
+            if (pat.length) {
+              const pb = el('div', 'cnt mb-plate'); pb.style.gridColumn = '1 / -1';
+              pb.appendChild(el('h3', null, 'HOW YOU TALK, NOT COUNTED'));
+              pb.appendChild(el('p', 'muted', 'These uses did a job, so they are not crutches. Only the ones that filled time or asked you to be agreed with are counted.'));
+              pat.forEach(([w, v]) => pb.appendChild(el('p', null, '<b>\u201c' + esc(w) + '\u201d</b> ' + v.job + ' of ' + (v.job + v.filler) + ' did a job. ' + esc(v.why || ''))));
+              jbox.appendChild(pb);
+            }
             const found = storiesLive().filter(s => s.from === x.key);
             if (found.length) {
               const fb2 = el('div', 'cnt mb-plate'); fb2.style.gridColumn = '1 / -1';

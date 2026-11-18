@@ -406,9 +406,8 @@ class Speak : Form
         }
     }
 
-    /* ── the widget's sizes ── Big keeps the same top left corner where it
-       fits, and moves just enough to stay on the screen where it does not.
-       Back to small, it goes back where it was. */
+    /* ── the widget's sizes ── Big sits in the middle of the screen it is
+       on. Back to small, it goes back where it was. */
     Point home;
     void Grow(Size to)
     {
@@ -420,8 +419,11 @@ class Speak : Form
             bigAs = to;
             var wa = Screen.FromControl(this).WorkingArea;
             Size want = SizeFromClientSize(new Size(Math.Min(to.Width, wa.Width - 40), Math.Min(to.Height, wa.Height - 60)));
-            int x = Math.Max(wa.Left, Math.Min(Left, wa.Right - want.Width));
-            int y = Math.Max(wa.Top, Math.Min(Top, wa.Bottom - want.Height));
+            /* a take opens in the middle of the screen (Tom, 2026-11-18: "the
+               starting buttons can be in the lower right side, but once I
+               press it, show up in the middle") */
+            int x = wa.Left + (wa.Width - want.Width) / 2;
+            int y = wa.Top + (wa.Height - want.Height) / 2;
             big = true;
             Bounds = new Rectangle(x, y, want.Width, want.Height);
             if (!Visible) Show();
