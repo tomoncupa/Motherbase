@@ -228,7 +228,9 @@ class Speak : Form
     Size bigAs = Size.Empty;
     bool big;
     readonly bool mini;
-    readonly WebView2 web;
+    WebView2 web;
+    int tries;
+    bool broken;
     readonly string pageUrl;
 
     static bool UseFolder() { return File.Exists(Path.Combine(App.Dir, "use-folder-copy.txt")); }
@@ -247,12 +249,39 @@ class Speak : Form
         string page = Path.Combine(Path.GetFullPath(Path.Combine(App.Dir, "..")), "speak", "index.html");
         string q = mini ? "?widget=1&boot=0" : "?boot=0";
         pageUrl = UseFolder() ? new Uri(page).AbsoluteUri + q : Hosted.Url + "speak/index.html" + q;   /* no fresh=1: the kept copy opens at once (2026-11-16, see StatusApp.cs) */
+        Build();
+        if (mini) Deactivate += (s, e) => { if (App.On("miniAway") && !big && Visible) Hide(); };
+    }
+
+    /* the web engine. STATUS, the Main Menu and the nightly backup share its
+       data folder, and when two of them start at the same moment (sign-in)
+       the engine can refuse one. That used to be a dialog, "The web engine
+       would not start", and a blank SPEAK (Tom, 2026-11-18: "sometimes the
+       web service stops it from opening"). Now a refusal is tried again on
+       its own, 1, 2, 4, 8, 8 and 8 seconds later, with a fresh control each
+       time; after that the tray says so and opening SPEAK tries again. */
+    void Build()
+    {
+        if (web != null) { try { Controls.Remove(web); web.Dispose(); } catch { } }
         web = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = BackColor };
         web.CreationProperties = new CoreWebView2CreationProperties { UserDataFolder = Path.Combine(App.Dir, "data") };
         web.CoreWebView2InitializationCompleted += Started;
         Controls.Add(web);
         web.EnsureCoreWebView2Async(null);
-        if (mini) Deactivate += (s, e) => { if (App.On("miniAway") && !big && Visible) Hide(); };
+    }
+    void Retry()
+    {
+        if (IsDisposed) return;
+        int[] wait = { 1000, 2000, 4000, 8000, 8000, 8000 };
+        if (tries >= wait.Length)
+        {
+            broken = true;
+            try { App.Tray.ShowBalloonTip(8000, App.TITLE, "The web engine would not start. Open SPEAK from here to try again.", ToolTipIcon.Warning); } catch { }
+            return;
+        }
+        var t = new System.Windows.Forms.Timer { Interval = wait[tries++] };
+        t.Tick += (s, e) => { t.Stop(); t.Dispose(); if (!IsDisposed) Build(); };
+        t.Start();
     }
 
     /* the settings that change how this window sits */
@@ -269,6 +298,7 @@ class Speak : Form
     }
     public void Bring()
     {
+        if (broken) { broken = false; tries = 0; Build(); }
         if (!Visible) Show();
         if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
         Activate();
@@ -323,7 +353,8 @@ class Speak : Form
     {
         if (!e.IsSuccess)
         {
-            MessageBox.Show("The web engine would not start.\n\n" + (e.InitializationException == null ? "" : e.InitializationException.Message), App.TITLE);
+            App.Log((mini ? "mini" : "full") + ": web engine refused (try " + (tries + 1) + "): " + (e.InitializationException == null ? "" : e.InitializationException.Message));
+            Retry();
             return;
         }
         App.Log((mini ? "mini" : "full") + ": web engine started, opening " + pageUrl);
