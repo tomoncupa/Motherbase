@@ -17,6 +17,7 @@
 <script src="goals.js"></script>
 <script src="flow.js"></script>
 <script src="muscles.js"></script>
+<script src="muscle-key.js"></script>
 <script src="mobile.js"></script>
 <script src="sound.js"></script>
 <script src="ui.js"></script>
@@ -1131,6 +1132,31 @@ async function run() {
     E1RM.calc(100, 5) === 112.5 && E1RM.calc(100, 5, 2) === 120 && E1RM.calc(100, 20) === E1RM.calc(100, 12) &&
     E1RM.calc(100, 40) === 144 && E1RM.calc(0, 5) === 0 && E1RM.calc(100, 0) === 0 && E1RM.calc(100, 5, null) === 112.5 &&
     Math.abs(E1RM.weightFor(E1RM.calc(100, 5), 5) - 100) < 1e-9);
+  /* muscle-key.js: one key over every muscle list (decision D3). The home
+     body map reads its parts from it, so the map below is the one HOME
+     carried by hand until 2026-11-18: the same muscles must light the same
+     parts. */
+  ok('muscle key: the master list: 27 in order, same headings, every home part and Automagic group a real one, no AnaTOMy id in two muscles', (() => {
+    if (!window.MuscleKey || !window.Muscles) return false;
+    const K = MuscleKey.LIST, seen = {};
+    if (K.map(m => m.name).join('|') !== Muscles.LIST.join('|')) return false;
+    return K.every(m => m.region === Muscles.REGION[m.name] &&
+      (m.home === null || MuscleKey.HOME_PARTS.indexOf(m.home) >= 0) &&
+      (m.automagic === null || MuscleKey.AUTOMAGIC.indexOf(m.automagic) >= 0) &&
+      (m.fma === null || (Number.isInteger(m.fma) && m.fma > 0)) &&
+      m.anatomy.concat(m.mesh.map(x => 'mesh:' + x)).every(x => !seen[x] && (seen[x] = 1)));
+  })());
+  ok('muscle key: the HOME body map is the one it carried by hand, part for part', (() => {
+    if (!window.MuscleKey) return false;
+    const was = { 'Upper Chest': 'chest', 'Lower Chest': 'chest', Lats: 'lats', 'Upper Back': 'traps',
+      'Upper Traps': 'traps', 'Lower Traps': 'traps', 'Lower Back': 'lowback', 'Front Delts': 'delts',
+      'Side Delts': 'delts', 'Rear Delts': 'delts', 'Rotator Cuff': 'delts', Biceps: 'biceps', Triceps: 'triceps',
+      'Forearm Flex.': 'forearms', 'Forearm Ext.': 'forearms', Abs: 'core', Obliques: 'core', Serratus: 'core',
+      Quads: 'quads', Hamstrings: 'hams', Glutes: 'glutes', Adductors: 'glutes', Calves: 'calves', Tibialis: 'calves' };
+    const now = MuscleKey.homeMap(), big = MuscleKey.HOME_BIG;
+    return JSON.stringify(Object.keys(now).sort().map(k => [k, now[k]])) === JSON.stringify(Object.keys(was).sort().map(k => [k, was[k]])) &&
+      Object.keys(big).sort().join() === 'chest,glutes,hams,lats,lowback,quads' && MuscleKey.get('Forearm Flexors').name === 'Forearm Flex.';
+  })());
   /* muscles.js: the master list. One level under the symptom: a specific
      name must land on its own rule before a general one swallows it, so
      these are the pairs that went wrong once (2026-11-16). */
