@@ -321,7 +321,7 @@ const CARD_CSS = `
 .flc-col{display:flex;flex-direction:column;min-width:0}
 .flc-zone{display:flex;align-items:flex-end;justify-content:center;min-height:var(--s-8,64px);padding:var(--s-5,24px) 0 var(--s-2,8px)}
 .flc-zone2{display:flex;align-items:center;justify-content:center;min-height:var(--s-7,48px);padding:var(--s-2,8px) 0}
-.flc-tag{position:relative;z-index:2;max-width:100%;padding:var(--s-1,4px) var(--s-2,8px);border:1px solid var(--border-strong,GrayText);
+.flc-tag{position:relative;z-index:2;width:100%;padding:var(--s-1,4px) var(--s-2,8px);border:1px solid var(--border-strong,GrayText);
   border-radius:var(--radius-sm,4px);background:var(--bg,Canvas);color:var(--text-2,CanvasText);font-size:var(--f-1,12px);line-height:1.3;
   text-align:center;overflow-wrap:anywhere}
 .flc-mid{min-height:var(--s-9,96px);padding:var(--s-3,12px);font-size:var(--f-3,16px);font-weight:var(--w-body,500);line-height:1.25}
@@ -454,6 +454,14 @@ function paint(host, fid, st, o) {
     mb.type = 'button'; mb.onclick = () => { st.page = (st.page + 1) % pages; paint(host, fid, st, o); rise(host); };
     pg.appendChild(mb); stage.appendChild(pg);
   }
+  /* one height per row, the tallest's, so the paths read as one design
+     (Tom, 2026-11-18: "uniform in design") */
+  ['.flc-zone', '.flc-mid', '.flc-zone2', '.flc-sm'].forEach(q => {
+    const els = [...row.querySelectorAll(q)];
+    if (els.length < 2) return;
+    const hmax = Math.max(...els.map(e => e.offsetHeight));
+    if (hmax) els.forEach(e => { e.style.minHeight = hmax + 'px'; });
+  });
   const draw = () => wires(stage, svg, top, row, !o.quiet);
   if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(draw); else draw();
   o.quiet = false;
@@ -566,7 +574,7 @@ function arrive(host, fid, st, o) {
 }
 
 g.Flow = {
-  VERSION: '0.2.1', card: card, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
+  VERSION: '0.2.2', card: card, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
   list: list, get: get, boxes: boxes, arrows: arrows, box: box, arrow: arrow, outOf: outOf,
   make: make, patchFlow: patchFlow, delFlow: delFlow,
   addBox: addBox, patchBox: patchBox, delBox: delBox,

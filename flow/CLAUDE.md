@@ -22,7 +22,7 @@ bullets as well." Nothing to do with STATUS's desktop widget.
   rise in and the lines draw. Travelling only looks; I'M HERE reaches every
   block on the way, each by its arrow (ticks, STATUS entries, one Undo);
   BACK TO NOW returns. Not started: START HERE on the start box.
-- **The card's layout (0.2.1, Tom 2026-11-18: "up to three different pathways", "more space between the blocks", "text on the lines themselves"):** up to three ways out side by side across the full width, never a sideways scroll; more than three page through MORE WAYS, with last night's sleep's way first. Under each, the one block after it (and "+N more after" when it branches). Every arrow's words sit in a tag on its line, between the two blocks it joins.
+- **The card's layout (0.2.1, Tom 2026-11-18: "up to three different pathways", "more space between the blocks", "text on the lines themselves"):** up to three ways out side by side across the full width, never a sideways scroll; more than three page through MORE WAYS, with last night's sleep's way first. Under each, the one block after it (and "+N more after" when it branches). Every arrow's words sit in a tag on its line, between the two blocks it joins. Uniform (0.2.2, Tom: "uniform in design"): every block, gap and tag in a row takes the tallest one's height, tags are the full width of their path, and a single path sits straight under the top block, full width.
 - **Which flow:** its own `flow.fid` setting when picked from the name
   button (shown only with two or more flows), else the one BLOCK has open.
 - **Notes for today** is STATUS's `day` row, `note` (the words LOG shows as

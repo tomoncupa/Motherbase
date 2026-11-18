@@ -74,6 +74,10 @@ Tom: "I don't like how curvy the layout is. Match super closer the image I gave 
 - His proportions: box 144 x 72, columns 192 apart, rows 108 apart, snapping to 12px. "No way back" is the words only, no outline.
 - "Start from your 2020 chart" (and "Add your 2020 chart" in the flow menu) is the whole picture now, 39 boxes, read off the image; no fixed times, floor on Brush Teeth and Salt Drink (a guess).
 
+## 1.0.32, 2026-11-18: every box on the Flow chart is one size
+
+Tom: "uniform in design". Each draw sets every box to the tallest box's height, so lines meet every box at the same points.
+
 ## Needs from the home screen
 
 The new chapter: `HOME.md`, Needs from BLOCK (2026-11-16), asks STREAKS and EVERY & HABITS to count from `Chapter.from('block')`. HOME 1.0.75 copied `rhPeriod`, `rhPer` and `act` ticking into its EVERY & HABITS card (`rhAnyState`, `rhTickH`). Change both when habit maths changes.
