@@ -78,6 +78,10 @@ Tom: "I don't like how curvy the layout is. Match super closer the image I gave 
 
 Tom: "uniform in design". Each draw sets every box to the tallest box's height, so lines meet every box at the same points.
 
+## 1.0.33, 2026-11-18: words fit the Flow chart's boxes
+
+Every box is 144 x 72 again and its words shrink to fit on whole words (`Flow.fit`, 15px down to 12); only a box that cannot hold them grows, and every box then takes the tallest height.
+
 ## Needs from the home screen
 
 The new chapter: `HOME.md`, Needs from BLOCK (2026-11-16), asks STREAKS and EVERY & HABITS to count from `Chapter.from('block')`. HOME 1.0.75 copied `rhPeriod`, `rhPer` and `act` ticking into its EVERY & HABITS card (`rhAnyState`, `rhTickH`). Change both when habit maths changes.

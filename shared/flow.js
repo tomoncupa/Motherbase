@@ -307,8 +307,13 @@ const CARD_CSS = `
 .flc-stage{position:relative;display:flex;flex-direction:column;gap:var(--s-4,16px);min-width:0}
 .flc-b{position:relative;border:0;font:inherit;background:var(--k);color:var(--ink);border-radius:var(--radius-sm,4px);
   display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer;
-  -webkit-user-select:none;user-select:none;overflow-wrap:anywhere}
-.flc-top{min-height:var(--s-9,96px);padding:var(--s-4,16px);cursor:default}
+  -webkit-user-select:none;user-select:none;overflow:hidden;overflow-wrap:normal;word-break:normal;line-height:1.2}
+.flc-b.grow{aspect-ratio:auto!important;overflow:visible;overflow-wrap:anywhere}
+.flc-top{aspect-ratio:2.618/1;padding:var(--s-3,12px);cursor:default;overflow:visible}
+.flc-top .in{display:flex;flex-direction:column;align-items:center;max-width:100%}
+.flc-notes{display:flex;flex-direction:column;gap:var(--s-1,4px);margin-top:var(--s-2,8px);font-family:var(--font-body,inherit);
+  font-size:var(--f-1,12px);font-weight:var(--w-body,500);line-height:1.3;opacity:.9;max-width:100%}
+.flc-note{display:block}
 .flc-top .n{font-family:var(--font-display,inherit);font-size:var(--f-5,20px);font-weight:var(--w-bold,700);line-height:1.2}
 .flc-top .s{font-size:var(--f-1,12px);margin-top:var(--s-1,4px);opacity:.85}
 .flc-top.now{box-shadow:0 0 0 3px var(--surface-1,Canvas),0 0 0 5px var(--accent,Highlight)}
@@ -324,8 +329,9 @@ const CARD_CSS = `
 .flc-tag{position:relative;z-index:2;width:100%;padding:var(--s-1,4px) var(--s-2,8px);border:1px solid var(--border-strong,GrayText);
   border-radius:var(--radius-sm,4px);background:var(--bg,Canvas);color:var(--text-2,CanvasText);font-size:var(--f-1,12px);line-height:1.3;
   text-align:center;overflow-wrap:anywhere}
-.flc-mid{min-height:var(--s-9,96px);padding:var(--s-3,12px);font-size:var(--f-3,16px);font-weight:var(--w-body,500);line-height:1.25}
-.flc-sm{min-height:var(--s-8,64px);padding:var(--s-2,8px);font-size:var(--f-2,14px);line-height:1.25;opacity:.85}
+.flc-mid{aspect-ratio:1.618/1;padding:var(--s-2,8px);font-weight:var(--w-body,500)}
+.flc-sm{aspect-ratio:1.618/1;padding:var(--s-2,8px);opacity:.85}
+.flc-row.one{grid-template-columns:minmax(0,62%);justify-content:center}
 .flc-pager{display:flex;justify-content:center}
 .flc-more,.flc-say{font-size:var(--f-1,12px);color:var(--text-muted,GrayText);text-align:center;margin-top:var(--s-1,4px)}
 .flc-wires{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:0}
@@ -365,6 +371,40 @@ function openFlow() {
   return (all.find(f => f.id === o.fid) || all[0] || {}).id || null;
 }
 
+const fits = el => el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1;
+/** the largest size, max down to min, at which the words fit the block on
+    whole words. Answers the size; a block that cannot hold them at min is
+    left at min for the caller to let grow. */
+function fit(el, max, min) {
+  el.classList.remove('grow'); el.style.minHeight = '';
+  for (let f = max; f >= min; f--) { el.style.fontSize = f + 'px'; if (fits(el)) return f; }
+  el.style.fontSize = min + 'px';
+  return min;
+}
+/* the top block: its name shrinks, its notes stay readable */
+function fitTop(top) {
+  const n = top.querySelector('.n'), inn = top.querySelector('.in');
+  top.classList.remove('grow');
+  const cs = getComputedStyle(top), room = top.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  for (let f = 30; f >= 14; f--) { n.style.fontSize = f + 'px'; if (inn.offsetHeight <= room + 1 && inn.scrollWidth <= inn.clientWidth + 1) return; }
+  top.classList.add('grow');
+}
+/** a line written where he is: a STATUS bullet, kept on the step he is on
+    so the block he is at shows it (Tom, 2026-11-18). */
+function note(fid, text, kind, now) {
+  now = now || Date.now();
+  const day = D().of(now);
+  if (!g.Journal || !g.Journal.add || !String(text || '').trim()) return null;
+  const key = g.Journal.add(day, kind || 'entry', String(text).trim(), {}, 'flow');
+  const w = fid ? active(fid, now) : null;
+  if (w && w.steps.length) {
+    const steps = w.steps.slice(), i = steps.length - 1;
+    steps[i] = Object.assign({}, steps[i], { n: (steps[i].n || []).concat({ k: key, d: day }) });
+    R().set('fwalk', w.date, fid, { steps: steps });
+  }
+  return { key: key, day: day, kept: !!(w && w.steps.length) };
+}
+
 function card(host, o) {
   cardCss();
   o = o || {};
@@ -398,8 +438,11 @@ function paint(host, fid, st, o) {
   host.appendChild(stage);
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'flc-wires');
   stage.appendChild(svg);
+  const wk = now ? active(fid) : null, last = wk && wk.steps[wk.steps.length - 1];
+  const lines = (last && last.n || []).map(x => R().get('note', x.d, x.k)).filter(x => x && x.text).slice(-3);
   const top = E('div', 'flc-b flc-top' + (now ? ' now' : ''),
-    '<span class="n">' + X(v.name) + '</span><span class="s">' + (now ? 'You are here' : !started && !st.trail.length ? 'Not started' : 'Looking ahead') + '</span>');
+    '<span class="in"><span class="n">' + X(v.name) + '</span><span class="s">' + (now ? 'You are here' : !started && !st.trail.length ? 'Not started' : 'Looking ahead') + '</span>' +
+    (lines.length ? '<span class="flc-notes">' + lines.map(x => '<span class="flc-note">' + X(x.text) + '</span>').join('') + '</span>' : '') + '</span>');
   top.style.setProperty('--k', kvar(v.kind)); top.style.setProperty('--ink', ink(v.kind));
   top.dataset.top = '1';
   stage.appendChild(top);
@@ -422,6 +465,7 @@ function paint(host, fid, st, o) {
   const shown = ways.slice(st.page * 3, st.page * 3 + 3);
   const row = E('div', 'flc-row');
   row.style.setProperty('--n', Math.max(1, shown.length));
+  row.classList.toggle('one', shown.length === 1);
   if (!ways.length) row.appendChild(E('div', 'flc-say', 'Nothing comes after this block.'));
   const tag = words => words ? E('span', 'flc-tag', X(words)) : null;
   shown.forEach(w => {
@@ -431,6 +475,7 @@ function paint(host, fid, st, o) {
     if (sug && sug.arrow.id === w.id) z1.appendChild(Object.assign(E('span', 'flc-tag', 'Slept ' + hours(sug.hours)), { style: 'border-color:var(--accent);color:var(--accent);margin-left:var(--s-1)' }));
     col.appendChild(z1);
     const b = bs[w.b], m = E('button', 'flc-b flc-mid', X(b.name));
+    m.title = b.name;
     m.type = 'button'; m.style.setProperty('--k', kvar(b.kind)); m.style.setProperty('--ink', ink(b.kind));
     m.onclick = () => travel(host, fid, st, o, [w.b], m);
     col.appendChild(m);
@@ -454,14 +499,29 @@ function paint(host, fid, st, o) {
     mb.type = 'button'; mb.onclick = () => { st.page = (st.page + 1) % pages; paint(host, fid, st, o); rise(host); };
     pg.appendChild(mb); stage.appendChild(pg);
   }
-  /* one height per row, the tallest's, so the paths read as one design
-     (Tom, 2026-11-18: "uniform in design") */
-  ['.flc-zone', '.flc-mid', '.flc-zone2', '.flc-sm'].forEach(q => {
-    const els = [...row.querySelectorAll(q)];
-    if (els.length < 2) return;
-    const hmax = Math.max(...els.map(e => e.offsetHeight));
-    if (hmax) els.forEach(e => { e.style.minHeight = hmax + 'px'; });
-  });
+  /* The words fit their block (Tom, 2026-11-18: "make the words fit into
+     the blocks ... proportion and beauty"). Blocks keep the golden ratio;
+     each row takes the one size its longest name fits at, on whole words. */
+  const fitAll = () => {
+    fitTop(top);
+    [['.flc-mid', 20], ['.flc-sm', 16]].forEach(([q, max]) => {
+      const els = [...row.querySelectorAll(q)];
+      if (!els.length) return;
+      const f = Math.min(...els.map(e => fit(e, max, 12)));
+      els.forEach(e => { e.style.fontSize = f + 'px'; e.classList.toggle('grow', !fits(e)); });
+      if (els.some(e => e.classList.contains('grow'))) { els.forEach(e => e.classList.add('grow')); const hm = Math.max(...els.map(e => e.offsetHeight)); els.forEach(e => { e.style.minHeight = hm + 'px'; }); }
+    });
+    /* one height per row of tags, so the paths read as one design */
+    ['.flc-zone', '.flc-zone2'].forEach(q => {
+      const els = [...row.querySelectorAll(q)];
+      els.forEach(e => { e.style.minHeight = ''; });
+      if (els.length < 2) return;
+      const hmax = Math.max(...els.map(e => e.offsetHeight));
+      if (hmax) els.forEach(e => { e.style.minHeight = hmax + 'px'; });
+    });
+  };
+  fitAll();
+  if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => { if (host.contains(top)) { fitAll(); wires(stage, svg, top, row, false); } });
   const draw = () => wires(stage, svg, top, row, !o.quiet);
   if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(draw); else draw();
   o.quiet = false;
@@ -574,7 +634,7 @@ function arrive(host, fid, st, o) {
 }
 
 g.Flow = {
-  VERSION: '0.2.2', card: card, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
+  VERSION: '0.3.0', card: card, fit: fit, note: note, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
   list: list, get: get, boxes: boxes, arrows: arrows, box: box, arrow: arrow, outOf: outOf,
   make: make, patchFlow: patchFlow, delFlow: delFlow,
   addBox: addBox, patchBox: patchBox, delBox: delBox,
