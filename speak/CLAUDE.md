@@ -327,6 +327,10 @@ Tom: "can it also guide me towards being a better storyteller", then "A B C", an
 - **Fix drills** `fix-st-moment`, `fix-st-stakes`, `fix-st-scene`, `fix-st-end` retell the story they came from, and unlike other fixes are judged again.
 - Tested in headless Chromium at 1280 and 390 with a fake Claude: a story found in a free speak, a telling judged, the coach and reminders naming `st-stakes`, both sheets, BANK, a live TODAY'S QUESTION take on the fake microphone, no sideways scroll, no page errors. Not tested with his voice or real Claude; how well Claude spots his stories is unknown.
 
+## Camera off, live transcript, mixed order, 2026-11-18 (SPEAK 1.0.51, 1.0.52)
+
+CAMERA OFF on the take's top bar (`camBtn`) darkens the video track, drops that take's eyes and mouth and sets `speak.cam` 0; the drill sheet's Camera switch is `speak.cam` too, never `camAll`. In SPEAK.exe the transcript is written while he talks (`liveHearStart`, `mblive:`, `Refine.Live`): pieces cut at quiet moments every 25 s, the last piece at STOP, the whole take the old way if the live run fails. Learned steps (met on 3 days) come after unlearned ones in a date-seeded order (`mixLearned`). (HISTORY.md: Camera off and listening while he talks; Mixed order once learned)
+
 ## Needs from the foundation
 
 - A device-only row type: one `Rec` would keep and back up but live sync
