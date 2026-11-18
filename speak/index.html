@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.54, 2026-11-18">
+<meta name="mb-version" content="1.0.55, 2026-11-18">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1441,6 +1441,10 @@ const storyKnown = () => storiesAll().filter(s => s.title).slice(0, 60).map(s =>
 const STSCAN = { busy: false, tried: {} };
 async function storyScan() {
   if (!REF.on || STSCAN.busy) return;
+  /* five pieces a day at most, so the back catalogue is read slowly rather
+     than all in one sitting (SPEAK 1.0.55) */
+  const today = Day.today(), nToday = storiesAll().filter(s => s.scan && String(s.at ? Day.of(new Date(s.at)) : '') === today).length;
+  if (nToday >= 5) return;
   const done = {}; storiesAll().forEach(s => { if (s.scan) done[s.from] = 1; });
   const k = Rec.all('kpiece').filter(r => r.payload && (r.payload.src === 'ramble' || r.payload.src === 'post') && !done[r.key] && !STSCAN.tried[r.key] && wordsOf(r.payload.text || '').length >= 40)
     .sort((a, b) => String(b.payload.born || b.date || '').localeCompare(String(a.payload.born || a.date || '')))[0];
@@ -1451,7 +1455,7 @@ async function storyScan() {
     'Reply with one JSON object and nothing else: {"stories": up to 2, each {"title": under 8 words, "moment": the five-second moment where something changed in him, one sentence, "line": a first line he could open it with, inside the scene}}; {"stories": []} when there is none. ' +
     'A story happened to him at a time and a place and changed how he thinks or feels; an opinion, advice or a habit is not one.' +
     (known.length ? ' Leave out any story already in this list, even told differently: ' + known.join(' | ') + '.' : '') +
-    '\n\nTHE PIECE' + (kp.title ? ' (' + kp.title + ')' : '') + ':\n' + String(kp.text).slice(0, 6000));
+    '\n\nTHE PIECE' + (kp.title ? ' (' + kp.title + ')' : '') + ':\n' + String(kp.text).slice(0, 6000), 'haiku');
   STSCAN.busy = false;
   let o = null;
   try { const mm = String(r && r.text || '').match(/\{[\s\S]*\}/); o = mm ? JSON.parse(mm[0]) : null; } catch (e) { o = null; }
@@ -1878,7 +1882,7 @@ async function markScript(ta, btn) {
   btn.disabled = true; btn.querySelector('span').textContent = 'MARKING…';
   const r = await askRefine('Add delivery marks to this script for a direct, authoritative creator talking to camera, somewhere between Alex Hormozi and Jocko Willink. ' +
     'Use only these marks: *word* around the one word in a sentence that carries the meaning (one per sentence at most), / for a short pause, // before or after the line that matters most (two or three in the whole script), _words_ around a phrase to slow down on (one or two in the whole script). ' +
-    'Do not change, add or remove any word, and keep every line break. Reply with the marked script only, nothing before or after it.\n\nTHE SCRIPT:\n' + stripMarks(was));
+    'Do not change, add or remove any word, and keep every line break. Reply with the marked script only, nothing before or after it.\n\nTHE SCRIPT:\n' + stripMarks(was), 'sonnet');
   btn.disabled = false; btn.querySelector('span').textContent = 'MARK IT FOR ME';
   const out = String(r && r.text || '').trim();
   if (!out) { UI.toast(esc((r && r.error) || 'Claude did not answer.'), { bad: true }); return; }
@@ -3386,11 +3390,16 @@ try {
     if (d && d.mb === 'refine' && REF.wait[d.id]) { const f = REF.wait[d.id]; delete REF.wait[d.id]; f(d); }
   });
 } catch (e) {}
-function askRefine(prompt) {
+/* Each Claude job names the cheapest model that does it well (SPEAK 1.0.55,
+   Tom: "How can we optimize speak to minimize Claude usage?"): `haiku` for
+   background reading and filing, `sonnet` for judging a take or marking a
+   script; refining his words into content names none, so it runs on his
+   default model. SPEAK.exe accepts only those two names. */
+function askRefine(prompt, model) {
   return new Promise(res => {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     REF.wait[id] = res;
-    try { window.chrome.webview.postMessage('mbrefine:' + JSON.stringify({ id: id, prompt: prompt })); }
+    try { window.chrome.webview.postMessage('mbrefine:' + JSON.stringify(Object.assign({ id: id, prompt: prompt }, model ? { model: model } : {}))); }
     catch (e) { delete REF.wait[id]; res({ error: 'This window cannot reach Claude.' }); }
   });
 }
@@ -3750,6 +3759,10 @@ async function judgeTake(t) {
   if (!REF.on || JUDGE.busy) return;
   const x = t || takes().filter(y => y.tx && !y.judge && !JUDGE.tried[y.key] && y.drill !== 'warm' && (!isFix(y.drill) || /^fix-st-/.test(y.drill)) && wordsOf(y.tx).length >= 40).pop();
   if (!x || x.judge || JUDGE.tried[x.key] || !x.tx || wordsOf(x.tx).length < 40) { if (t) setTimeout(() => judgeTake(), 2000); return; }
+  /* a drill that grades nothing in the words (pace, clear, eyes, flow,
+     devices, script) is not sent at all: its rubric would hide the answer */
+  const rbj = rubricOf(drillById(x.drill), x);
+  if (rbj && !rbj.has('coherence') && !rbj.has('story') && !(rbj.has('crutch') && crHits(x).length)) { JUDGE.tried[x.key] = 1; setTimeout(() => judgeTake(), 500); return; }
   JUDGE.busy = true; JUDGE.tried[x.key] = 1;
   const r = await askRefine('Grade one spoken practice take by Tom, a fitness coach training to speak on camera like a direct, authoritative creator. ' +
     'Reply with one JSON object and nothing else: {"coh": 1 to 5, "cohWhy": one line, "con": 1 to 5, "conWhy": one line, "point": his main point in one sentence of his own words}. ' +
@@ -3761,7 +3774,7 @@ async function judgeTake(t) {
       (storyKnown().length ? 'Leave out any story already in this list, even told differently: ' + storyKnown().join(' | ') + '. ' : '')) +
     (isStoryTake(x) ? '"st": this take was a story; grade it on Matthew Dicks\'s rules, each 1 to 5 with a one-line why quoting his words: {"moment": is there one clear moment where something changed in him, and does the story build to it, "momentWhy", "stakes": does he say early what he wanted or feared, "stakesWhy", "scene": does it open inside a place and a moment rather than with background or "so this one time", "sceneWhy", "end": does it end on the change rather than trail off or add a moral after it, "endWhy"}. ' : '') +
     (crHits(x).length ? '"cr": these words were counted as crutch phrases: ' + crHits(x).map(([w, n]) => '"' + w + '" ' + n + 'x').join(', ') + '. For each, read every use in context and say how many did a job and how many did not: {"word": {"job": n, "filler": n, "why": one line quoting one use}}. A use does a job when it quotes someone ("he was like"), gives a rough number ("like five sets"), contrasts ("actually, the opposite"), means type of ("a kind of row"), corrects or clarifies what he just said ("I mean"), or signposts a turn once. It is a filler when taking it out loses nothing, when it fills time while he thinks, or when it asks the listener to agree ("right?", "you know?"). ' : '') +
-    (x.prompt ? '\n\nThe prompt: ' + x.prompt : '') + '\n\nTHE TRANSCRIPT:\n' + x.tx);
+    (x.prompt ? '\n\nThe prompt: ' + x.prompt : '') + '\n\nTHE TRANSCRIPT:\n' + x.tx, 'sonnet');
   JUDGE.busy = false;
   let o = null;
   try { const mm = String(r && r.text || '').match(/\{[\s\S]*\}/); o = mm ? JSON.parse(mm[0]) : null; } catch (e) { o = null; }
@@ -3831,7 +3844,7 @@ async function sortFree() {
     '\n\nTHE RAMBLE:\n' + a.text +
     (near.length ? '\n\nPIECES FROM HIS KNOWLEDGE BANKS (earlier rambles, posts he published, answers; id | kind | date | title | words). A connection may join this ramble to any of them:\n' +
       near.map(x => x.key + ' | ' + x.kind + ' | ' + (x.date || '') + ' | ' + x.title + ' | ' + String(x.text).slice(0, 400)).join('\n') : '') +
-    (gaps.length ? '\n\nTOPICS HIS BANKS HAVE NOTHING ON YET: ' + gaps.join(', ') : ''));
+    (gaps.length ? '\n\nTOPICS HIS BANKS HAVE NOTHING ON YET: ' + gaps.join(', ') : ''), 'haiku');
   SORT.busy = false;
   let o = null;
   try { const mm = String(r && r.text || '').match(/\{[\s\S]*\}/); o = mm ? JSON.parse(mm[0]) : null; } catch (e) { o = null; }
@@ -4497,7 +4510,7 @@ async function planClaude(day, base) {
     '"drills": [{"id": an id from the list, "why": one plain sentence under 20 words}] three of them}. Dry and plain, no encouragement.' +
     (base.no && base.no.length ? '\n\nFaults he marked wrong, ignore them: ' + base.no.map(x => FAULT[x] || x).join(', ') : '') +
     '\n\nTODAY\'S TAKES (' + ts.length + '):\n' + ts.map(planLine).join('\n') +
-    '\n\nDRILLS TO PICK FROM (id | name | what it works on | goal):\n' + cand.map(d => d.id + ' | ' + d.name + ' | ' + skillOf(d).name + ' | ' + (d.goals(targets()).map(goalText).join(', ') || 'a count')).join('\n'));
+    '\n\nDRILLS TO PICK FROM (id | name | what it works on | goal):\n' + cand.map(d => d.id + ' | ' + d.name + ' | ' + skillOf(d).name + ' | ' + (d.goals(targets()).map(goalText).join(', ') || 'a count')).join('\n'), 'haiku');
   let o = null;
   try { const mm = String(r && r.text || '').match(/\{[\s\S]*\}/); o = mm ? JSON.parse(mm[0]) : null; } catch (e) { o = null; }
   if (!o || !Array.isArray(o.drills)) return null;

@@ -31,10 +31,15 @@ static class Refine
         string id = Convert.ToString(m.ContainsKey("id") ? m["id"] : "");
         string prompt = Convert.ToString(m.ContainsKey("prompt") ? m["prompt"] : "");
         if (id == "" || prompt.Trim() == "") return;
-        new Thread(() => send(json.Serialize(Run(id, prompt, log)))) { IsBackground = true }.Start();
+        /* the page names the model per job (SPEAK 1.0.55, Tom: "How can we
+           optimize speak to minimize Claude usage?"): only these aliases, so
+           nothing the page sends can become another argument */
+        string model = Convert.ToString(m.ContainsKey("model") ? m["model"] : "");
+        if (model != "haiku" && model != "sonnet") model = "";
+        new Thread(() => send(json.Serialize(Run(id, prompt, log, model)))) { IsBackground = true }.Start();
     }
 
-    static Dictionary<string, object> Run(string id, string prompt, Action<string> log)
+    static Dictionary<string, object> Run(string id, string prompt, Action<string> log, string model)
     {
         var res = new Dictionary<string, object> { { "mb", "refine" }, { "id", id } };
         string exe = Exe();
@@ -47,6 +52,7 @@ static class Refine
             "-p", "--strict-mcp-config", "--output-format", "json", "--tools", "",
             "--append-system-prompt-file", sys,
         };
+        if (model != "") { args.Add("--model"); args.Add(model); }
         var psi = new ProcessStartInfo(exe, Join(args))
         {
             UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = room,
