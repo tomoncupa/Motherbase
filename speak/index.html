@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.50, 2026-11-18">
+<meta name="mb-version" content="1.0.51, 2026-11-18">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -313,6 +313,7 @@ body.widget #wid{flex:1;display:flex;flex-direction:column;justify-content:cente
   <div class="top">
     <span class="nm" id="tkName"></span>
     <span class="clock" id="tkClock">0:00</span>
+    <button class="mb-btn mb-press mb-tap" id="tkCam"></button>
     <button class="mb-btn mb-press mb-tap" id="tkStop" aria-label="Stop" data-icon="stop"></button>
   </div>
   <video id="cam" muted playsinline></video>
@@ -3356,6 +3357,62 @@ function hearTake(t, blob) {
     const d = String(fr.result || ''), i = d.indexOf(';base64,');
     if (i < 0) { delete HEAR.busy[t.key]; return; }
     const ext = /mp4/.test(blob.type || '') ? 'mp4' : 'webm';
+    hearWait(t);
+    try { window.chrome.webview.postMessage('mbhear:' + JSON.stringify({ id: t.key, ext: ext, b64: d.slice(i + 8) })); }
+    catch (e) { delete HEAR.wait[t.key]; delete HEAR.busy[t.key]; }
+  };
+  fr.readAsDataURL(blob);
+}
+/* Listening while he talks (Tom, 2026-11-18: "why can't it start
+   transcription in parallel with while I'm talking?"). The transcriber is
+   started with the take, so the speech model loads during the count, and
+   every 25 seconds or so the new part of the recording goes over and is
+   written while he keeps talking. Each piece is cut at the quietest moment
+   in its last five seconds, so a cut lands between words. At STOP only the
+   last piece is left to write. SPEAK.exe falls back to writing the whole
+   take if the live run fails (desktop/SpeakRefine.cs, mblive:) */
+const LH_EVERY = 25;
+function lhPost(o) { try { window.chrome.webview.postMessage('mblive:' + JSON.stringify(o)); return true; } catch (e) { return false; } }
+function lhSend(lh, extra, done) {
+  const fresh = (lh.parts || []).slice(lh.sentN);
+  lh.sentN += fresh.length;
+  const blob = new Blob(fresh, { type: lh.mime || 'audio/webm' });
+  const fr = new FileReader();
+  fr.onload = () => {
+    const d = String(fr.result || ''), i = d.indexOf(';base64,');
+    lhPost(Object.assign({ lid: lh.id, b64: i < 0 ? '' : d.slice(i + 8) }, extra));
+    if (done) done();
+  };
+  fr.readAsDataURL(blob);
+}
+function liveHearStart() {
+  const lh = { id: 'lh' + Date.now(), sentN: 0, cut: 0, mime: T.mime || (T.rec && T.rec.mimeType) || '', parts: T.parts };
+  lh.ext = /mp4/.test(lh.mime) ? 'mp4' : 'webm';
+  if (!lhPost({ op: 'start', lid: lh.id, ext: lh.ext })) return;
+  T.lh = lh;
+  T.lhTimer = setInterval(() => {
+    if (!T.live || !T.recT0 || T.lh !== lh) return;
+    const now = (performance.now() - T.recT0) / 1000;
+    if (now - lh.cut < LH_EVERY + 1.5) return;
+    let at = null, lo = Infinity;
+    T.lvl.forEach(v => { if (v[0] >= now - 6.5 && v[0] <= now - 1.5 && v[1] < lo) { lo = v[1]; at = v[0]; } });
+    if (at == null || at <= lh.cut + 5) return;
+    T.lvl = T.lvl.filter(v => v[0] >= at);
+    const from = lh.cut; lh.cut = at;
+    lhSend(lh, { op: 'part', from: from, to: at });
+  }, 1000);
+}
+function liveHearEnd(t, lh) {
+  if (!t || !t.key || HEAR.busy[t.key]) return;
+  HEAR.busy[t.key] = 1;
+  hearWait(t);
+  lhSend(lh, { op: 'end', id: t.key, from: lh.cut });
+}
+function liveHearDrop() {
+  clearInterval(T.lhTimer);
+  if (T.lh) { lhPost({ op: 'drop', lid: T.lh.id }); T.lh = null; }
+}
+function hearWait(t) {
     HEAR.wait[t.key] = r => {
       delete HEAR.busy[t.key];
       if (!r || !r.chunks || !r.chunks.length) { if (r && r.error) UI.toast(esc(r.error)); return; }
@@ -3372,10 +3429,6 @@ function hearTake(t, blob) {
       if (Rec.has('answer', t.date, t.key)) Rec.patch('answer', t.date, t.key, { text: text.slice(0, 20000), words: words });
       setTimeout(() => judgeTake(), 300); setTimeout(sortFree, 600);
     };
-    try { window.chrome.webview.postMessage('mbhear:' + JSON.stringify({ id: t.key, ext: ext, b64: d.slice(i + 8) })); }
-    catch (e) { delete HEAR.wait[t.key]; delete HEAR.busy[t.key]; }
-  };
-  fr.readAsDataURL(blob);
 }
 /* the plate at the foot of a take: why it may be content, and the way in */
 function contentBox(t, h) {
@@ -3734,8 +3787,40 @@ function card(title, right) {
 }
 /* the camera, one switch, on by default (Tom 2026-11-16: "Not all my takes
    will have camera on, so let me disable it but have it on by default") */
+/* one switch for the camera, the same as Settings' Camera. It used to be
+   "on every take", which left the EYES drills and CHECK THE COACH opening
+   the camera anyway (Tom, 2026-11-18: "a button that lets me disable the
+   camera") */
 function camRow() {
-  return UI.row('Camera', 'Eyes and mouth are measured when it is on', UI.toggle(optOn('camAll', 1), on => Rec.setting(APP.id, 'camAll', on ? 1 : 0)));
+  return UI.row('Camera', 'Eyes and mouth are measured when it is on', UI.toggle(camOn(), on => Rec.setting(APP.id, 'cam', on ? 1 : 0)));
+}
+/* the take's own camera button. Off mid-take: the picture goes dark, the
+   eyes and mouth are not counted for this take, the sound goes on, and every
+   take after starts with no camera until it is turned back on */
+function camBtn() {
+  const b = $('#tkCam');
+  const draw = () => {
+    b.innerHTML = ICN('camera') + '<span>' + (T.cam ? 'CAMERA OFF' : 'CAMERA ON') + '</span>';
+    b.setAttribute('aria-label', T.cam ? 'Turn the camera off' : 'Turn the camera on');
+    paintIcons(b);
+  };
+  b.onclick = () => {
+    if (T.cam) {
+      T.cam = false;
+      try { T.stream.getVideoTracks().forEach(t => { t.enabled = false; }); } catch (e) {}
+      T.eye.looks = []; T.eye.base = null;
+      $('#cam').classList.remove('on');
+      const me = $('#mEye'); if (me && !(T.d && (T.d.live || winOf(T.d)))) { me.querySelector('.k').textContent = 'camera'; setMeter(me, 'off', 'off'); }
+      Rec.setting(APP.id, 'cam', 0);
+      UI.toast('Camera off. This take counts your voice only.');
+    } else {
+      Rec.setting(APP.id, 'cam', 1);
+      UI.toast('Camera on from the next take.');
+      b.hidden = true; return;
+    }
+    draw();
+  };
+  draw();
 }
 /* today's takes, newest first, each opening its sheet. Each row wears its
    drill's colour; CLEAR takes rows off this list (hid: 1) and keeps the
@@ -4527,6 +4612,7 @@ async function startTakeNow(d, warmStep, prompt) {
     const rec = new MediaRecorder(new MediaStream(vid ? stream.getTracks() : stream.getAudioTracks()), o), parts = [];
     T.vid = vid;
     rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
+    T.parts = parts; T.mime = mime;
     T.clipP = new Promise(res => { rec.onstop = () => res(parts.length ? new Blob(parts, { type: rec.mimeType || mime || 'audio/webm' }) : null); });
     T.rec = rec;
   } catch (e) { T.rec = null; T.clipP = null; }
@@ -4536,7 +4622,13 @@ async function startTakeNow(d, warmStep, prompt) {
   T.ear = Ear(T.ac.sampleRate);
   T.src = T.ac.createMediaStreamSource(stream);
   T.proc = T.ac.createScriptProcessor(1024, 1, 1);
-  T.proc.onaudioprocess = e => { if (T.live) T.ear.feed(e.inputBuffer.getChannelData(0).slice()); };
+  T.lvl = [];
+  T.proc.onaudioprocess = e => {
+    if (!T.live) return;
+    const x = e.inputBuffer.getChannelData(0).slice();
+    T.ear.feed(x);
+    if (T.recT0) { let q = 0; for (let i = 0; i < x.length; i += 4) q += x[i] * x[i]; T.lvl.push([(performance.now() - T.recT0) / 1000, q]); }
+  };
   T.mute = T.ac.createGain(); T.mute.gain.value = 0;
   T.src.connect(T.proc); T.proc.connect(T.mute); T.mute.connect(T.ac.destination);
   T.listener = wantAsr ? Listener(opt('lang', 'en-US')) : null;
@@ -4553,6 +4645,7 @@ async function startTakeNow(d, warmStep, prompt) {
   screen.classList.add('on');
   T.release = Mobile.trap(() => stopTake(true));
   $('#tkStop').onclick = () => stopTake(false);
+  $('#tkCam').hidden = false; camBtn();
   Mobile.feedback('open');
   /* the face finder, started now so it is warm by the count */
   if (T.cam) faceEngine().catch(() => {});
@@ -4721,7 +4814,9 @@ function runTake() {
   if (d && d.noStop) { stop.disabled = true; stop.innerHTML = '<span>KEEP GOING</span>'; }
   paintIcons($('#take'));
   T.t0 = performance.now(); T.from = T.ear.seconds();
-  if (T.rec) try { T.rec.start(1000); } catch (e) { T.rec = null; T.clipP = null; }
+  T.recT0 = 0; T.lh = null;
+  if (T.rec) try { T.rec.start(1000); T.recT0 = performance.now(); } catch (e) { T.rec = null; T.clipP = null; }
+  if (T.rec && window.MB_HEAR && !T.warm && d && !d.check) liveHearStart();
   if (T.listener) T.listener.start();
   Sfx.play('start');
   if (T.beat) startBeat();
@@ -4834,9 +4929,10 @@ function stopTake(cancel) {
   if (T.release) { const r = T.release; T.release = null; r(); }
   $('#take').classList.remove('on'); $('#cam').classList.remove('on');
   const secs = (performance.now() - (T.t0 || performance.now())) / 1000;
-  if (cancel || !T.calibrated || secs < 3) { Mobile.feedback('close'); return; }
+  clearInterval(T.lhTimer);
+  if (cancel || !T.calibrated || secs < 3) { liveHearDrop(); Mobile.feedback('close'); return; }
   const m = T.ear.summary({ from: T.from });
-  if (!m) { UI.toast('Nothing heard.', { bad: true }); return; }
+  if (!m) { liveHearDrop(); UI.toast('Nothing heard.', { bad: true }); return; }
   /* the ASR's last chunk can land a moment after stop */
   T.finishing = true;
   setTimeout(() => finishTake(m, secs), 600);
@@ -4946,7 +5042,11 @@ function finishTake(m, secs) {
     if (fr) setTimeout(sortFree, 500);
   }
   if (T.clipP) { take.clipP = T.clipP; T.clipP.then(b => saveClip(take, b)); }
-  if (!asrOn && T.clipP && window.MB_HEAR && !T.warm && !d.check) { const cp = T.clipP; cp.then(b => { if (b) hearTake(take, b); }); }
+  if (!asrOn && T.clipP && window.MB_HEAR && !T.warm && !d.check) {
+    const cp = T.clipP, lh = T.lh;
+    cp.then(b => { if (lh) liveHearEnd(take, lh); else if (b) hearTake(take, b); });
+  } else liveHearDrop();
+  T.lh = null;
   Mobile.feedback(pass ? 'complete' : 'done');
   showTake(take, tx && tx.html, true);
 }

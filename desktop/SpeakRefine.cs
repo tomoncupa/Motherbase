@@ -110,11 +110,22 @@ static class Refine
         string safe = new string(Array.FindAll(id.ToCharArray(), ch => char.IsLetterOrDigit(ch) || ch == '-'));
         if (safe == "") safe = "take";
         string clip = Path.Combine(room, safe + "." + (ext == "mp4" ? "mp4" : "webm"));
-        string outDir = Path.Combine(room, safe);
+        try { File.WriteAllBytes(clip, Convert.FromBase64String(b64)); }
+        catch (Exception x) { res["error"] = "Could not save the recording to hear it: " + x.Message; return res; }
+        return HearFile(id, clip, log);
+    }
+
+    /* runs CLIP's transcriber on one saved recording, then deletes it */
+    static Dictionary<string, object> HearFile(string id, string clip, Action<string> log)
+    {
+        var res = new Dictionary<string, object> { { "mb", "hear" }, { "id", id } };
+        string tools = Tools(), py = Path.Combine(tools, "venv", "Scripts", "python.exe");
+        if (!File.Exists(py)) { res["error"] = "CLIP's transcriber is not on this PC, so no transcript."; return res; }
+        string room = Path.GetDirectoryName(clip);
+        string outDir = Path.Combine(room, Path.GetFileNameWithoutExtension(clip));
         string script = Path.Combine(room, "hear.py");
         try
         {
-            File.WriteAllBytes(clip, Convert.FromBase64String(b64));
             File.WriteAllText(script,
                 "import sys, os, json\n" +
                 "tools, video, out = sys.argv[1], sys.argv[2], sys.argv[3]\n" +
@@ -145,23 +156,172 @@ static class Refine
         }
         catch (Exception x) { errText = x.Message; }
         try { File.Delete(clip); } catch { }
+        if (!Parse(outText, res))
+        {
+            log("hear: failed: " + (errText.Length > 400 ? errText.Substring(errText.Length - 400) : errText));
+            res["error"] = "The transcriber did not finish this one.";
+        }
+        return res;
+    }
+
+    static string Tools() { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "CLIP", "tools"); }
+    static string Room()
+    {
+        string r = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Motherbase", "hear");
+        Directory.CreateDirectory(r);
+        return r;
+    }
+
+    /* the transcriber's last {"chunks": .., "words": ..} line, into res */
+    static bool Parse(string outText, Dictionary<string, object> res)
+    {
         int brace = outText.LastIndexOf("{\"chunks\"");
         Dictionary<string, object> r = null;
         if (brace >= 0) try { r = json.DeserializeObject(outText.Substring(brace)) as Dictionary<string, object>; } catch { }
         var chunks = r != null && r.ContainsKey("chunks") ? r["chunks"] as System.Collections.IList : null;
-        if (chunks == null)
-        {
-            log("hear: failed: " + (errText.Length > 400 ? errText.Substring(errText.Length - 400) : errText));
-            res["error"] = "The transcriber did not finish this one.";
-            return res;
-        }
+        if (chunks == null || chunks.Count == 0) return false;
         var list = new List<string>();
         foreach (var c in chunks) list.Add(Convert.ToString(c));
         res["chunks"] = list;
         res["text"] = string.Join(" ", list);
         if (r.ContainsKey("words") && r["words"] is System.Collections.IList) res["words"] = r["words"];
-        return res;
+        return true;
     }
+
+    /* ── listening while he talks (SPEAK 1.0.51) ──
+       Tom, 2026-11-18: "why can't it start transcription in parallel with
+       while I'm talking?" The page posts mblive:{op:'start', lid, ext} as the
+       take starts, which starts CLIP's Python with the speech model loading
+       at once. Every 25 seconds or so {op:'part', lid, b64, from, to} adds the
+       new piece of the recording to one file here and asks for the sound
+       between from and to (seconds) to be written while he keeps talking.
+       {op:'end', lid, id, b64, from} adds the last piece, writes it, and posts
+       {mb:'hear', id, ..} exactly as Hear does. If the live run failed, the
+       whole file is written the old way. {op:'drop'} ends a cancelled take. */
+    class LiveRun
+    {
+        public Process P; public string File;
+        public StringBuilder Out = new StringBuilder(), Err = new StringBuilder();
+        public ManualResetEvent Done = new ManualResetEvent(false);
+    }
+    static readonly Dictionary<string, LiveRun> lives = new Dictionary<string, LiveRun>();
+
+    public static void Live(string body, Action<string> log, Action<string> send)
+    {
+        Dictionary<string, object> m;
+        try { m = json.DeserializeObject(body) as Dictionary<string, object>; } catch { return; }
+        if (m == null) return;
+        Func<string, string> S = k => Convert.ToString(m.ContainsKey(k) ? m[k] : "");
+        string op = S("op");
+        string safe = new string(Array.FindAll(S("lid").ToCharArray(), ch => char.IsLetterOrDigit(ch)));
+        if (safe == "") return;
+        LiveRun run;
+        lock (lives) lives.TryGetValue(safe, out run);
+        if (op == "start")
+        {
+            if (run != null) return;
+            run = new LiveRun { File = Path.Combine(Room(), safe + "." + (S("ext") == "mp4" ? "mp4" : "webm")) };
+            try { File.WriteAllBytes(run.File, new byte[0]); } catch { return; }
+            string tools = Tools(), py = Path.Combine(tools, "venv", "Scripts", "python.exe");
+            string script = Path.Combine(Room(), "hearlive.py");
+            try
+            {
+                if (File.Exists(py))
+                {
+                    File.WriteAllText(script, LIVE_PY, new UTF8Encoding(false));
+                    var psi = new ProcessStartInfo(py, Join(new List<string> { script, tools }))
+                    {
+                        UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = tools,
+                        RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
+                        StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
+                    };
+                    var rp = run;
+                    rp.P = Process.Start(psi);
+                    rp.P.StandardInput.AutoFlush = true;
+                    rp.P.OutputDataReceived += (o, e) => { if (e.Data == null) rp.Done.Set(); else lock (rp.Out) rp.Out.AppendLine(e.Data); };
+                    rp.P.ErrorDataReceived += (o, e) => { if (e.Data != null) lock (rp.Err) { if (rp.Err.Length < 20000) rp.Err.AppendLine(e.Data); } };
+                    rp.P.BeginOutputReadLine(); rp.P.BeginErrorReadLine();
+                }
+            }
+            catch (Exception x) { log("hear live: could not start: " + x.Message); run.P = null; }
+            lock (lives) lives[safe] = run;
+            return;
+        }
+        if (run == null) return;
+        string b64 = S("b64");
+        if (b64 != "")
+            try { using (var f = new FileStream(run.File, FileMode.Append, FileAccess.Write)) { var b = Convert.FromBase64String(b64); f.Write(b, 0, b.Length); } }
+            catch (Exception x) { log("hear live: could not add to the recording: " + x.Message); }
+        Action<object> tell = o => { try { if (run.P != null && !run.P.HasExited) run.P.StandardInput.WriteLine(json.Serialize(o)); } catch { } };
+        if (op == "part")
+            tell(new Dictionary<string, object> { { "op", "part" }, { "path", run.File }, { "from", m["from"] }, { "to", m["to"] } });
+        else if (op == "drop")
+        {
+            lock (lives) lives.Remove(safe);
+            try { if (run.P != null && !run.P.HasExited) run.P.Kill(); } catch { }
+            try { File.Delete(run.File); } catch { }
+        }
+        else if (op == "end")
+        {
+            lock (lives) lives.Remove(safe);
+            string id = S("id");
+            tell(new Dictionary<string, object> { { "op", "end" }, { "path", run.File }, { "from", m["from"] } });
+            new Thread(() =>
+            {
+                var res = new Dictionary<string, object> { { "mb", "hear" }, { "id", id } };
+                bool ok = false;
+                if (run.P != null)
+                {
+                    try { run.P.StandardInput.Close(); } catch { }
+                    if (!run.Done.WaitOne(10 * 60 * 1000)) try { run.P.Kill(); } catch { }
+                    try { run.P.WaitForExit(5000); } catch { }
+                    string o; lock (run.Out) o = run.Out.ToString();
+                    ok = Parse(o, res);
+                    if (!ok) { string er; lock (run.Err) er = run.Err.ToString(); log("hear live: failed, writing the whole take: " + (er.Length > 400 ? er.Substring(er.Length - 400) : er)); }
+                }
+                if (ok) { try { File.Delete(run.File); } catch { } }
+                else res = HearFile(id, run.File, log);
+                send(json.Serialize(res));
+            }) { IsBackground = true }.Start();
+        }
+    }
+
+    /* the live transcriber: the model loads first, then each piece is written
+       as it arrives, its word times moved to where the piece starts */
+    const string LIVE_PY = @"import sys, os, json, subprocess, tempfile
+tools = sys.argv[1]
+sys.path.insert(0, tools)
+import engine, common
+model = engine.model_for('fast')
+prompt = 'Umm, so, uh, let me think, like, hmm. Okay, I, I mean, you know, erm, here is the thing.' if common.settings().get('transcribe_fillers', True) else None
+segs, words = [], []
+def hear(path, a, b):
+    fd, wav = tempfile.mkstemp(suffix='.wav')
+    os.close(fd)
+    try:
+        cmd = [common.FFMPEG, '-hide_banner', '-loglevel', 'error', '-y', '-i', path, '-ss', str(a)]
+        if b is not None: cmd += ['-t', str(max(0.1, b - a))]
+        cmd += ['-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', wav]
+        if subprocess.run(cmd, capture_output=True).returncode != 0: return
+        raw, info = model.transcribe(wav, language='en', word_timestamps=True, beam_size=model._clip_beam, vad_filter=True, initial_prompt=prompt)
+        for s in raw:
+            t = (s.text or '').strip()
+            if t: segs.append(t)
+            for w in s.words or []:
+                if (w.word or '').strip(): words.append([w.word.strip(), round(w.start + a, 2), round(w.end + a, 2), round(getattr(w, 'probability', 0) or 0, 3)])
+    finally:
+        try: os.remove(wav)
+        except OSError: pass
+for line in sys.stdin:
+    try: m = json.loads(line)
+    except ValueError: continue
+    if m.get('op') == 'part': hear(m['path'], float(m['from']), float(m['to']))
+    elif m.get('op') == 'end':
+        hear(m['path'], float(m['from']), None)
+        break
+sys.stdout.write(json.dumps({'chunks': segs, 'words': words[:3000]}) + '\n')
+sys.stdout.flush()
+";
 
     /* how Tom talks, and the brand rules, as they stand in tom-context today */
     static string System_()

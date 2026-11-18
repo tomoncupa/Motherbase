@@ -358,6 +358,7 @@ class Speak : Form
         if (m == null) return;
         if (m.StartsWith("mbsize:")) { if (!mini) return; if (m == "mbsize:big") Grow(BIG); else if (m == "mbsize:small") Grow(SMALL); else if (m == "mbsize:wide") Grow(WIDE); }
         else if (m.StartsWith("mbrefine:")) Refine.Ask(m.Substring(9), App.Log, s => BeginInvoke((Action)(() => Post(s))));
+        else if (m.StartsWith("mblive:")) Refine.Live(m.Substring(7), App.Log, s => BeginInvoke((Action)(() => Post(s))));
         else if (m.StartsWith("mbhear:")) Refine.Hear(m.Substring(7), App.Log, s => BeginInvoke((Action)(() => Post(s))));
         else if (m.StartsWith("mbset:"))
         {
