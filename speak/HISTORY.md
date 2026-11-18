@@ -585,3 +585,11 @@ SPEAK.exe; `desktop/README.md` has the program's side.
 ## Faster bands, speed is earned (1.0.48, 2026-11-18)
 - Tom picked raising the pace after the models were measured (RESEARCH.md, Measured models): Talking head and Live 175-205, Short-form 185-215. A band saved in TARGETS still wins (he had none).
 - His worry, "ensures I don't pick up bad habits along the way": new fault `rushed`, Speed costing clarity. Past the band's first 15 wpm, a take whose crispness, fillers, stammered starts or mouth evenness missed target is told to hold the low end until clean; it outranks every pace fault, and its pre-take reminder is "Clean first, fast second". [TESTED on made-up takes: 200 wpm at 70% crispness named rushed first; the same at 95% named nothing]
+
+## ASHA upgrades A-D (1.0.49, 2026-11-18)
+Tom picked all four from the ASHA Practice Portal read (RESEARCH.md).
+- A, fading: a drill met on 3 days before this take shows MET or NOT MET; the coach and numbers sit behind SHOW THE NUMBERS (`learnedDays`, `gate`). Mixing the drill order was not built.
+- B, clear words a minute (`cwpm`, `cwpmOf`): sure words less fillers and stammered starts, a minute; needs SPEAK.exe's word clock. Joins the `rushed` slips below 85% of the pace.
+- C, line ends (ear `fade`, `fadeShare`, `fadeAt`, `pauseCv`): a line is speech between 250 ms pauses, 0.8 s or more; its fade is the last 0.25 s under the rest in dB. Fault `fade` at 35%+ of lines, drills Land the ending (`fix-land`) and Fast with pauses (`fix-fastpause`); fading lines also count as a `rushed` slip.
+- D, guess first: a fresh take asks CLEAN, OK or MESSY before anything shows; `guess` and `real` (from the coach's faults: none clean, 1-2 OK, 3+ messy) go on the take, with the match rate over the last 20. Posts against practice was already the Posted column in YOUR VOICE.
+[TESTED headless Chromium: synthetic tone lines, 4 of 8 faded, read 50% and 10.5 dB; cwpm 157 on a worked case; guess hid the numbers, CLEAN revealed them and saved 3/3; three earlier met days put the numbers behind SHOW THE NUMBERS; no page errors. UNTESTED on his voice or inside SPEAK.exe]
