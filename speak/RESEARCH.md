@@ -48,6 +48,13 @@ ninety" asks for two held pauses of 0.8 to 2s.
 | TED talks | mean 163, two-thirds between 153 and 168 | [Six Minutes](https://sixminutes.dlugan.com/speaking-rate/) |
 | Podcast solo host | 150 to 165 | [wiredclip](https://wiredclip.com/average-words-per-minute-speaking/) |
 | edX lecture videos, 6.9 million sessions | 156 mean | [Guo et al 2014 via OSCQR](https://oscqr.suny.edu/how-long-should-instructional-videos-be/) |
+| American English telephone conversation, measured on large corpora (Yuan, Liberman & Cieri 2006): about 195 on average, speakers ranging roughly 111 to 291. Measured, not a guide figure, so higher than the guides, like Tauroza & Allison | about 195 (111 to 291) | Yuan, Liberman & Cieri, "Towards an integrated understanding of speaking rate in conversation", Interspeech 2006 (figures as given in the 2026-11-18 brief; the paper was not reopened that day) |
+
+**A reference for the Live and Talking-head bands (added 2026-11-18, not
+applied).** Natural conversation runs near 195 words a minute (Yuan, Liberman
+& Cieri 2006), inside the current Live and Talking-head bands of 175 to 205.
+The bands' numbers were not changed in this pass; this is the measured anchor
+for the next time they are reviewed.
 
 **Syllables.** English articulation rate 6.19 syllables a second in read speech
 with pauses excluded (Pellegrino, Coupé & Marsico 2011, [Language Log](https://languagelog.ldc.upenn.edu/nll/?p=22)); about 9 a second is the upper bound of hearing ([NSF PAR](https://par.nsf.gov/servlets/purl/10531499)); Tauroza & Allison call under 3.17 slow and over 5.33 fast; the cluttering literature puts average conversation at 4 to 5 and says over 5.3 may indicate cluttering ([toofastforwords](https://toofastforwords.com/symptoms-cluttering/main/speech-rate/)). **Syllables per word in adult conversational English: 1.4 to 1.5** ([Journal of Fluency Disorders](https://www.sciencedirect.com/science/article/abs/pii/S0094730X00000887)); written text 1.45 to 1.65 ([Teflpedia](https://teflpedia.com/Syllables_per_word)).
@@ -56,6 +63,11 @@ with pauses excluded (Pellegrino, Coupé & Marsico 2011, [Language Log](https://
 and the screen says "estimated from N syllables". 150 words a minute times 1.4
 is 3.5 syllables a second including pauses; the beat drill clicks at the middle
 of the band times 1.4.
+
+**Follow-up, not built (2026-11-18): syllables a second from the transcript.**
+Counting each transcript word's syllables with the CMU Pronouncing Dictionary
+would give a true syllables-a-second figure to set against the 4 to 5.3
+conversation range above, instead of words divided by 1.4. Left for later.
 
 ## 3. Filler words
 
@@ -74,6 +86,25 @@ erm, ah, hmm, mm always count. `right`, `like`, `so`, `okay`, `actually` count
 only at the edge of a transcript chunk or beside a joining word, which is where
 they are a crutch and not a word. The default crutch list is Toastmasters'
 crutch words plus the two Tom named.
+
+**One list for the suite (2026-11-18).** SPEAK, CLIP and OUTER HEAVEN's
+postspeech counted different words. They now read one list,
+`shared/fillers.json` (CLIP and OUTER HEAVEN keep checked copies): sounds um,
+uh, ah and hmm with their spellings, and the phrases you know what i mean, you
+know, right, like, basically, literally, actually, kind of, sort of, i mean,
+okay so, so yeah, you see. **Um and uh are counted apart** (er under uh, erm
+under um) because Clark & Fox Tree 2002 found they do different jobs: uh
+before a short delay, um before a longer one. His own crutch list in Settings
+still replaces the phrases.
+
+**Fillers per 100 words, beside per minute (2026-11-18).** A take with a
+transcript also shows fillers per 100 words, read against research bands
+rather than a target of his: **under 2 is clean** (Clark & Fox Tree 2002: uh
+plus um about 1.7 per 100 words in conversation), **2 to 6 is normal
+unscripted speech** (Bortfeld et al 2001: disfluencies about 2 to 6 per 100
+words across speakers and tasks), **over 6 stands out**. Per 100 words does
+not move with pace, so it is the fairer number when he speeds up; the per
+minute targets above are unchanged and still drive the drills.
 
 ## 4. Pauses
 

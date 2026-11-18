@@ -81,6 +81,7 @@ const PRECACHE = [
   'shared/skins.js',
   'shared/boot.js',
   'shared/skins.json',
+  'shared/fillers.json',
   'shared/chart.js',
   'shared/mobile.js',
   'shared/sound.js',

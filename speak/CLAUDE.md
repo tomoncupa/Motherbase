@@ -114,7 +114,8 @@ same counts as on the file.
 | Pauses, long pauses, held pauses | silences of 250ms or more; 1.5s or more; 0.8 to 2s | Thresholds from the literature, `RESEARCH.md` section 4 |
 | Held sounds | a voiced run over 300ms with pitch within 1.2 semitones and loudness within 8dB | A proxy for um and uh. A vowel drawn out on purpose counts too, and the screen says so |
 | Fillers a minute | crutch phrases from the transcript, plus the larger of the transcript's ums and the held sounds | Chrome's transcript drops most ums, which is why the held sounds stand in |
-| Crutch phrases | his list, whole-phrase matches in the transcript. `right`, `like`, `so`, `okay`, `actually` count only at the edge of a chunk or beside a joining word | Marked in the transcript so he can see each one |
+| Fillers per 100 words | the same fillers over the transcript's words, beside the per-minute figure; um and uh also shown apart | Read against research bands, not his targets: under 2 clean, 2 to 6 normal unscripted speech, over 6 stands out (`RESEARCH.md` section 3). Only with a transcript |
+| Crutch phrases | his list, whole-phrase matches in the transcript. The default list and the sounds are the suite's one list, `shared/fillers.json`, which CLIP and OUTER HEAVEN copy (2026-11-18). `right`, `like`, `so`, `okay`, `actually` count only at the edge of a chunk or beside a joining word | Marked in the transcript so he can see each one |
 | Stammered starts | three or more bursts of 40 to 150ms with gaps under 150ms | A proxy. Not measured against anyone who stutters |
 | Repeated words | the same word twice running in the transcript | Only where there is a transcript |
 | Crispness | first-difference energy over energy, a spectral-tilt proxy for the 2 to 4kHz band, as a percentage of today's warm-up reading | A proxy for articulation, never a clinical measure. Relative to his own over-articulated reading, so it does not depend on the microphone |
