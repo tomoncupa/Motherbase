@@ -304,11 +304,11 @@ const CARD_CSS = `
 .flc-crumb::after{content:'';position:absolute;left:0;right:0;top:50%;height:var(--tap,44px);transform:translateY(-50%)}
 .flc-crumb i{width:var(--s-2,8px);height:var(--s-2,8px);border-radius:var(--radius-sm,4px);background:var(--k)}
 .flc-sep{color:var(--text-muted,GrayText);font-size:var(--f-1,12px)}
-.flc-stage{position:relative;display:flex;flex-direction:column;gap:var(--s-3,12px);min-width:0}
+.flc-stage{position:relative;display:flex;flex-direction:column;gap:var(--s-4,16px);min-width:0}
 .flc-b{position:relative;border:0;font:inherit;background:var(--k);color:var(--ink);border-radius:var(--radius-sm,4px);
   display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer;
   -webkit-user-select:none;user-select:none;overflow-wrap:anywhere}
-.flc-top{min-height:calc(var(--s-8,64px) + var(--s-3,12px));padding:var(--s-3,12px);cursor:default}
+.flc-top{min-height:var(--s-9,96px);padding:var(--s-4,16px);cursor:default}
 .flc-top .n{font-family:var(--font-display,inherit);font-size:var(--f-5,20px);font-weight:var(--w-bold,700);line-height:1.2}
 .flc-top .s{font-size:var(--f-1,12px);margin-top:var(--s-1,4px);opacity:.85}
 .flc-top.now{box-shadow:0 0 0 3px var(--surface-1,Canvas),0 0 0 5px var(--accent,Highlight)}
@@ -317,14 +317,17 @@ const CARD_CSS = `
 @keyframes flc-pulse{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.06)}}
 .flc-acts{display:flex;gap:var(--s-2,8px);flex-wrap:wrap}
 .flc-acts .mb-btn{flex:1}
-.flc-row{display:flex;gap:var(--s-2,8px);overflow-x:auto;padding-bottom:var(--s-1,4px);scroll-snap-type:x mandatory;position:relative;z-index:1}
-.flc-col{flex:1 0 calc(var(--s-10,128px) - var(--s-2,8px));max-width:calc(var(--s-10,128px) * 1.6);display:flex;flex-direction:column;gap:var(--s-1,4px);scroll-snap-align:start}
-.flc-lab{align-self:center;min-height:calc(var(--f-1,12px) * 1.5);font-size:var(--f-1,12px);line-height:1.5;color:var(--text-2,CanvasText);
-  background:var(--surface-1,Canvas);padding:0 var(--s-1,4px);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
-.flc-mid{min-height:var(--s-8,64px);padding:var(--s-2,8px);font-size:var(--f-2,14px);font-weight:var(--w-body,500);line-height:1.25}
-.flc-l2{display:flex;flex-direction:column;gap:var(--s-1,4px);margin-top:var(--s-4,16px)}
-.flc-sm{min-height:var(--tap,44px);padding:var(--s-1,4px) var(--s-2,8px);font-size:var(--f-1,12px);line-height:1.2;opacity:.85}
-.flc-more,.flc-say{font-size:var(--f-1,12px);color:var(--text-muted,GrayText);text-align:center}
+.flc-row{display:grid;grid-template-columns:repeat(var(--n,3),minmax(0,1fr));gap:var(--s-4,16px);position:relative;z-index:1}
+.flc-col{display:flex;flex-direction:column;min-width:0}
+.flc-zone{display:flex;align-items:flex-end;justify-content:center;min-height:var(--s-8,64px);padding:var(--s-5,24px) 0 var(--s-2,8px)}
+.flc-zone2{display:flex;align-items:center;justify-content:center;min-height:var(--s-7,48px);padding:var(--s-2,8px) 0}
+.flc-tag{position:relative;z-index:2;max-width:100%;padding:var(--s-1,4px) var(--s-2,8px);border:1px solid var(--border-strong,GrayText);
+  border-radius:var(--radius-sm,4px);background:var(--bg,Canvas);color:var(--text-2,CanvasText);font-size:var(--f-1,12px);line-height:1.3;
+  text-align:center;overflow-wrap:anywhere}
+.flc-mid{min-height:var(--s-9,96px);padding:var(--s-3,12px);font-size:var(--f-3,16px);font-weight:var(--w-body,500);line-height:1.25}
+.flc-sm{min-height:var(--s-8,64px);padding:var(--s-2,8px);font-size:var(--f-2,14px);line-height:1.25;opacity:.85}
+.flc-pager{display:flex;justify-content:center}
+.flc-more,.flc-say{font-size:var(--f-1,12px);color:var(--text-muted,GrayText);text-align:center;margin-top:var(--s-1,4px)}
 .flc-wires{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:0}
 .flc-wires path{fill:none;stroke:var(--border-strong,GrayText);stroke-width:1.5}
 .flc-ghost{position:absolute;pointer-events:none;z-index:5;margin:0}
@@ -408,29 +411,49 @@ function paint(host, fid, st, o) {
     if (started) { const bk = E('button', 'mb-btn mb-press mb-tap', 'BACK TO NOW'); bk.type = 'button'; bk.onclick = () => backNow(host, fid, st, o); acts.appendChild(bk); }
     stage.appendChild(acts);
   }
+  /* up to three ways out across the card (Tom, 2026-11-18: "up to three
+     different pathways"); more than three page through MORE WAYS. Last
+     night's sleep puts its way first. */
+  let ways = all.filter(a => a.a === v.id && bs[a.b]);
+  const sug = now ? suggest(fid) : null;
+  if (sug) ways = [ways.find(w => w.id === sug.arrow.id)].concat(ways.filter(w => w.id !== sug.arrow.id)).filter(Boolean);
+  const pages = Math.ceil(ways.length / 3) || 1;
+  st.page = (st.page || 0) % pages;
+  const shown = ways.slice(st.page * 3, st.page * 3 + 3);
   const row = E('div', 'flc-row');
-  const ways = all.filter(a => a.a === v.id && bs[a.b]);
+  row.style.setProperty('--n', Math.max(1, shown.length));
   if (!ways.length) row.appendChild(E('div', 'flc-say', 'Nothing comes after this block.'));
-  ways.forEach(w => {
+  const tag = words => words ? E('span', 'flc-tag', X(words)) : null;
+  shown.forEach(w => {
     const col = E('div', 'flc-col');
-    col.appendChild(E('span', 'flc-lab', X(w.label || gapWords(w.gap))));
+    const z1 = E('div', 'flc-zone'), t1 = tag(w.label || gapWords(w.gap));
+    if (t1) z1.appendChild(t1);
+    if (sug && sug.arrow.id === w.id) z1.appendChild(Object.assign(E('span', 'flc-tag', 'Slept ' + hours(sug.hours)), { style: 'border-color:var(--accent);color:var(--accent);margin-left:var(--s-1)' }));
+    col.appendChild(z1);
     const b = bs[w.b], m = E('button', 'flc-b flc-mid', X(b.name));
     m.type = 'button'; m.style.setProperty('--k', kvar(b.kind)); m.style.setProperty('--ink', ink(b.kind));
     m.onclick = () => travel(host, fid, st, o, [w.b], m);
     col.appendChild(m);
-    const l2 = E('div', 'flc-l2'), next = all.filter(a => a.a === w.b && bs[a.b]);
-    next.slice(0, 3).forEach(n => {
-      const c = bs[n.b], s = E('button', 'flc-b flc-sm', X(c.name));
-      s.type = 'button'; s.style.setProperty('--k', kvar(c.kind)); s.style.setProperty('--ink', ink(c.kind)); s.title = c.name;
-      s.onclick = () => travel(host, fid, st, o, [w.b, n.b], s);
-      l2.appendChild(s);
-    });
-    if (next.length > 3) l2.appendChild(E('div', 'flc-more', '+' + (next.length - 3) + ' more'));
-    col.appendChild(l2);
+    const next = all.filter(a => a.a === w.b && bs[a.b]);
+    if (next.length) {
+      const n = next[0], c = bs[n.b];
+      const z2 = E('div', 'flc-zone2'), t2 = tag(n.label || gapWords(n.gap));
+      if (t2) z2.appendChild(t2);
+      col.appendChild(z2);
+      const sm = E('button', 'flc-b flc-sm', X(c.name));
+      sm.type = 'button'; sm.style.setProperty('--k', kvar(c.kind)); sm.style.setProperty('--ink', ink(c.kind));
+      sm.onclick = () => travel(host, fid, st, o, [w.b, n.b], sm);
+      col.appendChild(sm);
+      if (next.length > 1) col.appendChild(E('div', 'flc-more', '+' + (next.length - 1) + ' more after ' + X(String(b.name).split(',')[0])));
+    }
     row.appendChild(col);
   });
-  row.addEventListener('scroll', () => wires(stage, svg, top, row, false), { passive: true });
   stage.appendChild(row);
+  if (pages > 1) {
+    const pg = E('div', 'flc-pager'), mb = E('button', 'mb-btn mb-press mb-tap', 'MORE WAYS (' + (ways.length - shown.length) + ')');
+    mb.type = 'button'; mb.onclick = () => { st.page = (st.page + 1) % pages; paint(host, fid, st, o); rise(host); };
+    pg.appendChild(mb); stage.appendChild(pg);
+  }
   const draw = () => wires(stage, svg, top, row, !o.quiet);
   if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(draw); else draw();
   o.quiet = false;
@@ -445,14 +468,18 @@ function wires(stage, svg, top, row, grow) {
   const t = R2(top), d = [];
   /* below the I'M HERE row when it is showing, so no line runs between the buttons */
   const acts = stage.querySelector('.flc-acts'), y0 = acts ? R2(acts).y + R2(acts).h : t.y + t.h;
-  row.querySelectorAll('.flc-mid').forEach(k => {
-    const r = R2(k), cx = r.x + r.w / 2;
-    if (r.x + r.w < 0 || r.x > o.width) return;
-    const lab = k.previousElementSibling, my = lab ? R2(lab).y - 6 : r.y - 12;
-    d.push('M' + (t.x + t.w / 2) + ',' + y0 + ' L' + (t.x + t.w / 2) + ',' + my + ' L' + cx + ',' + my + ' L' + cx + ',' + (r.y - 1));
-    const first = k.parentElement.querySelector('.flc-sm');
-    if (first) { const f = R2(first); d.push('M' + cx + ',' + (r.y + r.h) + ' L' + cx + ',' + (f.y - 1)); }
-  });
+  const mids = [...row.querySelectorAll('.flc-mid')];
+  if (mids.length) {
+    const busY = R2(row).y + 12, xs = mids.map(k => { const r = R2(k); return r.x + r.w / 2; }).concat(t.x + t.w / 2);
+    d.push('M' + (t.x + t.w / 2) + ',' + y0 + ' L' + (t.x + t.w / 2) + ',' + busY);
+    d.push('M' + Math.min(...xs) + ',' + busY + ' L' + Math.max(...xs) + ',' + busY);
+    mids.forEach(k => {
+      const r = R2(k), cx = r.x + r.w / 2;
+      d.push('M' + cx + ',' + busY + ' L' + cx + ',' + (r.y - 1));
+      const sm = k.parentElement.querySelector('.flc-sm');
+      if (sm) { const f = R2(sm); d.push('M' + cx + ',' + (r.y + r.h) + ' L' + cx + ',' + (f.y - 1)); }
+    });
+  }
   svg.innerHTML = d.map(p => '<path d="' + p + '"/>').join('');
   if (!grow || still()) return;
   svg.querySelectorAll('path').forEach((p, i) => {
@@ -539,7 +566,7 @@ function arrive(host, fid, st, o) {
 }
 
 g.Flow = {
-  VERSION: '0.2.0', card: card, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
+  VERSION: '0.2.1', card: card, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
   list: list, get: get, boxes: boxes, arrows: arrows, box: box, arrow: arrow, outOf: outOf,
   make: make, patchFlow: patchFlow, delFlow: delFlow,
   addBox: addBox, patchBox: patchBox, delBox: delBox,
