@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.1, 2026-11-18">
+<meta name="mb-version" content="1.0.2, 2026-11-18">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -137,6 +137,7 @@ function build() {
   noteTa.oninput = () => { clearTimeout(noteT); noteT = setTimeout(saveNote, 600); };
   noteTa.onblur = saveNote;
   c2.appendChild(noteTa);
+  c2.style.display = 'none';          /* Tom, 2026-11-18: only comments here; kept for a quick way back */
   main.appendChild(c2);
 
   /* a line, written where you are: Enter adds it, it flies into the block
@@ -144,12 +145,12 @@ function build() {
      enter text and then have it pop up and then have it show up in the box
      of where I currently am") */
   const c3 = el('div', 'card');
-  c3.appendChild(UI.segmented(Journal.KINDS.map(k => ({ id: k.id, name: k.label })), kind, v => { kind = v; }));
+  /* a plain entry, no kinds: a comment on the block he is at (Tom, 2026-11-18) */
   ta = document.createElement('input');
-  ta.type = 'text'; ta.className = 'mb-input'; ta.placeholder = 'Write a line, then Enter';
+  ta.type = 'text'; ta.className = 'mb-input'; ta.placeholder = 'Comment on where you are, then Enter';
   ta.setAttribute('autocapitalize', 'sentences');
   ta.setAttribute('enterkeyhint', 'done');
-  ta.setAttribute('aria-label', 'Write a line');
+  ta.setAttribute('aria-label', 'Comment');
   ta.onkeydown = e => {
     if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
     e.preventDefault(); saveBullet();
@@ -169,7 +170,12 @@ function paintCard() {
   flowName.textContent = f ? f.name.toUpperCase() : 'FLOW';
   flowName.style.display = n > 1 ? '' : 'none';
   Flow.card(cardBox, { fid: id, quiet: true, onPick: () => { Mobile.feedback('success'); setTimeout(paintList, 50); },
-    empty: host => host.appendChild(el('div', 'say', 'Draw a flow in BLOCK’s Flow tab on the PC, and it follows you here.')) });
+    empty: host => {
+      const b = el('button', 'mb-btn go mb-press mb-tap', 'START WITH THE SAMPLE DAY');
+      b.type = 'button';
+      b.onclick = () => { Rec.setting(APP.id, 'fid', Flow.sample('day')); paintCard(); };
+      host.appendChild(b);
+    } });
 }
 function pickFlow() {
   const cur = fid(), r = flowName.getBoundingClientRect();
@@ -199,12 +205,12 @@ function saveBullet() {
   const text = ta.value.trim();
   if (!text) return;
   const from = ta.getBoundingClientRect();
-  const r = Flow.note(fid(), text, kind);
+  const r = Flow.note(fid(), text, 'entry');
   if (!r) return;
   ta.value = '';
   Mobile.feedback('success');
   paintCard(); paintList();
-  if (!r.kept) { UI.toast('Saved as a bullet. Start the flow to keep lines in its blocks.'); return; }
+  if (!r.kept) { UI.toast('Saved as a bullet. Start the flow to keep comments in its blocks.'); return; }
   fly(text, from);
 }
 /* the line rises out of the box and lands in the block, which pops */

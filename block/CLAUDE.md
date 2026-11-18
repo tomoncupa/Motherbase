@@ -82,6 +82,10 @@ Tom: "uniform in design". Each draw sets every box to the tallest box's height, 
 
 Every box is 144 x 72 again and its words shrink to fit on whole words (`Flow.fit`, 15px down to 12); only a box that cannot hold them grows, and every box then takes the tallest height.
 
+## 1.0.34, 2026-11-18: the sample day
+
+Tom: "Create a better sample flow chart based off what I gave you initially, but I don't like that we're starting with woke up bad. Start it with asking me how I woke up." The samples live in `shared/flow.js` (`Flow.sample('day' | '2020')`). The empty Flow tab offers Start with the sample day first, then Your 2020 chart as drawn; the flow menu adds either. The sample day: 32 boxes, starting at How did you wake up? (Good: enough sleep, Bad: short sleep), no box with more than three ways out, a way back from every red box, Lights out loops to the next morning.
+
 ## Needs from the home screen
 
 The new chapter: `HOME.md`, Needs from BLOCK (2026-11-16), asks STREAKS and EVERY & HABITS to count from `Chapter.from('block')`. HOME 1.0.75 copied `rhPeriod`, `rhPer` and `act` ticking into its EVERY & HABITS card (`rhAnyState`, `rhTickH`). Change both when habit maths changes.

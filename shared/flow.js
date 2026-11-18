@@ -395,7 +395,8 @@ function note(fid, text, kind, now) {
   now = now || Date.now();
   const day = D().of(now);
   if (!g.Journal || !g.Journal.add || !String(text || '').trim()) return null;
-  const key = g.Journal.add(day, kind || 'entry', String(text).trim(), {}, 'flow');
+  /* an Entry at the minute it was typed, the words kept as typed (Tom, 2026-11-18) */
+  const key = g.Journal.add(day, kind || 'entry', String(text).trim(), { at: hhmm(now), parsed: 1 }, 'flow');
   const w = fid ? active(fid, now) : null;
   if (w && w.steps.length) {
     const steps = w.steps.slice(), i = steps.length - 1;
@@ -403,6 +404,68 @@ function note(fid, text, kind, now) {
     R().set('fwalk', w.date, fid, { steps: steps });
   }
   return { key: key, day: day, kept: !!(w && w.steps.length) };
+}
+
+/* ── samples ──
+   'day' (Tom, 2026-11-18: "a better sample flow chart based off what I gave
+   you initially ... Start it with asking me how I woke up"): his 2020 chart
+   reordered to start at waking, no box with more than three ways out, and a
+   way back from every red box. '2020' is the picture as he drew it. Laid out
+   on BLOCK's grid: columns 192 apart, rows 108, from 48 in. */
+const SG = { grid: 12, col: 192, row: 108, pad: 48 };
+const SAMPLES = {
+  day: { name: 'My day', start: 'ask',
+    boxes: [['ask', 'How did you wake up?', 't', 2, 0], ['good', 'Woke up good', 'g', 1, 1], ['bad', 'Woke up bad', 'r', 3, 1],
+      ['fix', 'Fix bed', 'g', 1, 2], ['lie', 'Lie there for a bit', 'r', 3, 2], ['more', 'Try for more sleep', 'g', 4, 2],
+      ['teeth', 'Brush teeth, wash face', 'g', 1, 3, 1], ['weigh', 'Weigh in', 'g', 1, 4], ['salt', 'Salt drink, sunlight', 'g', 1, 5, 1],
+      ['client', 'Client check-ins', 'g', 2, 5], ['caf', 'Caffeine', 'g', 1, 6], ['stories', 'Stories and a post', 'g', 2, 6],
+      ['train', 'Train', 'g', 1, 7], ['reset', 'Reset gym, shower, meal', 'g', 1, 8], ['work', "To-do's and deep work", 'g', 1, 9],
+      ['down', 'Down time', 'd', 2, 10], ['make', 'Make content', 'g', 1, 11], ['book', 'Read a book', 'g', 2, 11], ['scroll', 'Scroll or games', 'r', 3, 11],
+      ['night', 'Night routine alarm', 't', 2, 12], ['bag', 'Bag and clothes for tomorrow', 'g', 2, 13], ['todo', "Tomorrow's to-do's", 'g', 2, 14],
+      ['daylio', 'BuJo sync, Daylio', 'g', 2, 15], ['shower', 'Shower', 'g', 2, 16], ['alarm', 'Bed time alarm', 't', 2, 17],
+      ['sleep', 'Lights out, phone away', 'g', 1, 18], ['late', 'Phone in bed', 'r', 3, 18],
+      ['crave', 'Craving junk food', 't', 5, 5], ['plan', 'Eat on plan', 'g', 4, 6], ['junk', 'Eat junk food', 'r', 6, 6],
+      ['avoid', 'Avoid going off track', 'g', 4, 7], ['feel', 'Feel bad about it', 'r', 6, 7]],
+    arrows: [['ask', 'good', 'Good', null, 'enough'], ['ask', 'bad', 'Bad', null, 'short'],
+      ['good', 'fix', '', 0], ['bad', 'fix', 'Try to have a nice day'], ['bad', 'teeth', 'Essentials only', 0], ['bad', 'lie', 'Too flat'],
+      ['lie', 'teeth', 'Get up eventually'], ['lie', 'more'], ['more', 'good', 'Woke up better', null, null, 1], ['more', 'bad', 'Still flat'],
+      ['fix', 'teeth', '', 0], ['teeth', 'weigh', '', 0], ['weigh', 'salt', '', 0], ['salt', 'caf', '', 75], ['salt', 'client', 'Clients first'],
+      ['client', 'stories'], ['stories', 'caf'], ['caf', 'train', '', 15], ['train', 'reset', '', 5], ['reset', 'work', '', 30],
+      ['work', 'down', "All to-do's done"], ['down', 'make'], ['down', 'book'], ['down', 'scroll'],
+      ['make', 'night'], ['book', 'night'], ['scroll', 'book', '30 min, then'], ['scroll', 'night'],
+      ['night', 'bag', '', 0], ['bag', 'todo', '', 0], ['todo', 'daylio', '', 0], ['daylio', 'shower', '', 0], ['shower', 'alarm', 'Some down time'],
+      ['alarm', 'sleep', 'Follow'], ['alarm', 'late', 'Ignore'], ['late', 'sleep', 'Put the phone away'], ['sleep', 'ask', 'Next morning'],
+      ['crave', 'plan', 'Ignore'], ['crave', 'junk', 'Follow'], ['plan', 'avoid'], ['junk', 'feel'], ['feel', 'plan', 'Next meal on plan']] },
+  '2020': { name: '2020 day', start: 'alarm',
+    boxes: [['alarm', 'Bed time alarm', 't', 2, 0], ['bed', 'Go to bed on time, Proper sleep prep, ZMA', 'g', 1, 1], ['tape', "Play tomorrow's videotape", 'g', 0, 1],
+      ['late', 'Sleep Late, Bring phone to bed, No ZMA', 'r', 3, 1], ['well', 'Sleep well', 'g', 1, 2], ['sbad', 'Sleep bad', 'r', 3, 2],
+      ['good', 'Wake up good', 'g', 1, 3], ['wbad', 'Wake up bad', 'r', 3, 3], ['fix', 'Fix Bed', 'g', 1, 4], ['lie', 'Lie there for a bit', 'r', 3, 4],
+      ['more', 'Try to get some more sleep', 'g', 4, 4], ['teeth', 'Brush Teeth, Wash Face, Poop', 'g', 1, 5, 1], ['down', 'Down time', 'd', 3, 5],
+      ['post', 'Write post', 'g', 4, 5], ['weigh', 'Weigh in, Record', 'g', 1, 6], ['night', 'Night routine alarm', 't', 3, 6], ['book', 'Read a book', 'g', 4, 6],
+      ['salt', 'Salt Drink, 2 Scoops, Sunlight Exposure', 'g', 1, 7, 1], ['client', 'Client Check-ins', 'g', 2, 7], ['bag', "Prepare tomorrow's bag and clothes", 'g', 3, 7],
+      ['content', 'Make content', 'g', 4, 7], ['caf', 'Caffeine, Pre-training shower', 'g', 1, 8], ['stories', 'Make stories and post', 'g', 2, 8],
+      ['todo', "Write tomorrow's to-do's", 'g', 3, 8], ['watch', 'Watch something', 'r', 4, 8], ['train', 'Train', 'g', 1, 9], ['bujo', 'BuJoToDo sync', 'g', 3, 9],
+      ['games', 'Video games', 'r', 4, 9], ['reset', 'Reset Gym, Post-training Shower, Post-training meal', 'g', 1, 10], ['daylio', 'Daylio', 'g', 3, 10],
+      ['browse', 'Idle browsing', 'r', 4, 10], ['check', "Check and accomplish to-do's", 'g', 1, 11], ['shower', 'Shower', 'g', 3, 11],
+      ['manga', 'Read manga/webcomics', 'r', 4, 11], ['crave', 'Sudden cravings for junk food', 't', 4, 2], ['plan', 'Eat on plan food', 'g', 5.5, 1],
+      ['avoid', 'Avoid going off track', 'g', 5.5, 2], ['junk', 'Eat junk food', 'r', 5.5, 3], ['feel', 'Feel bad for going off track', 'r', 5.5, 4]],
+    arrows: [['alarm', 'bed', 'Follow'], ['alarm', 'late', 'Ignore'], ['bed', 'tape'], ['tape', 'well'], ['bed', 'well', '', null, 'enough'], ['bed', 'sbad', 'Insomnia', null, 'short'],
+      ['late', 'sbad'], ['well', 'good', '7-8 hrs'], ['sbad', 'wbad'], ['wbad', 'fix', 'Try to have a nice day'], ['wbad', 'lie'], ['wbad', 'teeth', 'Essentials only'],
+      ['lie', 'teeth', 'Get up eventually'], ['lie', 'more'], ['more', 'wbad'], ['more', 'good', '', null, null, 1],
+      ['good', 'fix', '', 0], ['fix', 'teeth', '', 0], ['teeth', 'weigh', '', 0], ['weigh', 'salt', '', 0], ['salt', 'client'], ['client', 'stories'], ['stories', 'caf'],
+      ['salt', 'caf', '', 75], ['caf', 'train', '', 15], ['train', 'reset', '', 5], ['reset', 'check', '', 30], ['check', 'down', "All to-do's done"],
+      ['down', 'post'], ['down', 'book'], ['down', 'content'], ['down', 'watch'], ['down', 'games'], ['down', 'browse'], ['down', 'manga'], ['down', 'night'],
+      ['night', 'bag', '', 0], ['bag', 'todo', '', 0], ['todo', 'bujo', '', 0], ['bujo', 'daylio', '', 0], ['daylio', 'shower', '', 0], ['shower', 'alarm', 'Some down time'],
+      ['crave', 'plan', 'Ignore'], ['crave', 'junk', 'Follow'], ['plan', 'avoid'], ['junk', 'feel']] },
+};
+/** make one of the samples as a new flow; answers its id */
+function sample(which) {
+  const S = SAMPLES[which] || SAMPLES.day, id = make(S.name), B = {};
+  const at = (c, r) => ({ x: SG.pad + Math.round(c * SG.col / SG.grid) * SG.grid, y: SG.pad + r * SG.row });
+  S.boxes.forEach(r => { B[r[0]] = addBox(id, Object.assign({ name: r[1], kind: r[2], at: null, floor: r[5] || 0 }, at(r[3], r[4]))); });
+  patchFlow(id, { start: B[S.start] });
+  S.arrows.forEach(r => addArrow(id, B[r[0]], B[r[1]], { label: r[2] || '', gap: r[3] == null ? null : r[3], sleep: r[4] || null, dash: r[5] || 0 }));
+  return id;
 }
 
 function card(host, o) {
@@ -634,7 +697,7 @@ function arrive(host, fid, st, o) {
 }
 
 g.Flow = {
-  VERSION: '0.3.0', card: card, fit: fit, note: note, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
+  VERSION: '0.3.1', card: card, fit: fit, note: note, sample: sample, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
   list: list, get: get, boxes: boxes, arrows: arrows, box: box, arrow: arrow, outOf: outOf,
   make: make, patchFlow: patchFlow, delFlow: delFlow,
   addBox: addBox, patchBox: patchBox, delBox: delBox,

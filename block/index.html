@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.33, 2026-11-18">
+<meta name="mb-version" content="1.0.34, 2026-11-18">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="icon-192.png">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -4662,12 +4662,14 @@ function renderFlow() {
 function fEmpty(p) {
   const e = el('div', 'fempty');
   e.appendChild(el('p', '', 'No flows.'));
-  const a = el('button', 'btn acc', 'Start from your 2020 chart');
-  a.dataset.tip = 'Bed time alarm to down time, with the bad paths and the ways back. Change any of it.';
-  a.onclick = () => { FV.fid = fSeed2020(); FV.mode = 'plan'; fRemember(); renderFlow(); };
+  const a = el('button', 'btn acc', 'Start with the sample day');
+  a.dataset.tip = 'Starts by asking how you woke up, then good and bad mornings, down time, the night routine and bed. Built from your 2020 chart. Change any of it.';
+  a.onclick = () => { FV.fid = Flow.sample('day'); FV.mode = 'plan'; fRemember(); renderFlow(); };
+  const c = el('button', 'btn', 'Your 2020 chart as drawn');
+  c.onclick = () => { FV.fid = fSeed2020(); FV.mode = 'plan'; fRemember(); renderFlow(); };
   const b = el('button', 'btn', 'New empty flow');
   b.onclick = () => fNewFlow();
-  const row = el('div', 'frow'); row.appendChild(a); row.appendChild(b);
+  const row = el('div', 'frow'); row.appendChild(a); row.appendChild(c); row.appendChild(b);
   e.appendChild(row);
   p.appendChild(e);
 }
@@ -4683,6 +4685,7 @@ function fFlowMenu(x, y) {
   const items = Flow.list().map(o => ({ label: o.name, check: o.id === FV.fid, fn: () => { FV.fid = o.id; FV.sel = null; FV.connect = null; fRemember(); renderFlow(); } }));
   items.push('-',
     { label: 'New flow', fn: fNewFlow },
+    { label: 'Add the sample day', fn: () => { FV.fid = Flow.sample('day'); FV.mode = 'plan'; FV.sel = null; fRemember(); renderFlow(); } },
     { label: 'Add your 2020 chart', fn: () => { FV.fid = fSeed2020(); FV.mode = 'plan'; FV.sel = null; fRemember(); renderFlow(); } },
     { label: 'Rename this flow', fn: () => { const n = prompt('Rename the flow', f.name); if (n && n.trim()) Flow.patchFlow(f.id, { name: n.trim() }); renderFlow(); } },
     { label: 'Delete this flow', fn: () => fDelFlow(f) });
@@ -5010,37 +5013,8 @@ function fRailToday(side, f, h, bs, as, counts) {
 /* ── his 2020 chart, as a starting point ──
    Read off the picture he shared on 2026-11-17. Every box and arrow is his
    to change; the floor is a guess at the essentials and says so. */
-function fSeed2020() {
-  const id = Flow.make('2020 day');
-  const at = (c, r) => ({ x: FB.pad + Math.round(c * FB.col / FB.grid) * FB.grid, y: FB.pad + r * FB.row });
-  const B = {};
-  [['alarm', 'Bed time alarm', 't', 2, 0], ['bed', 'Go to bed on time, Proper sleep prep, ZMA', 'g', 1, 1], ['tape', 'Play tomorrow\'s videotape', 'g', 0, 1],
-   ['late', 'Sleep Late, Bring phone to bed, No ZMA', 'r', 3, 1], ['well', 'Sleep well', 'g', 1, 2], ['sbad', 'Sleep bad', 'r', 3, 2],
-   ['good', 'Wake up good', 'g', 1, 3], ['wbad', 'Wake up bad', 'r', 3, 3], ['fix', 'Fix Bed', 'g', 1, 4], ['lie', 'Lie there for a bit', 'r', 3, 4],
-   ['more', 'Try to get some more sleep', 'g', 4, 4], ['teeth', 'Brush Teeth, Wash Face, Poop', 'g', 1, 5, 1], ['down', 'Down time', 'd', 3, 5],
-   ['post', 'Write post', 'g', 4, 5], ['weigh', 'Weigh in, Record', 'g', 1, 6], ['night', 'Night routine alarm', 't', 3, 6], ['book', 'Read a book', 'g', 4, 6],
-   ['salt', 'Salt Drink, 2 Scoops, Sunlight Exposure', 'g', 1, 7, 1], ['client', 'Client Check-ins', 'g', 2, 7], ['bag', 'Prepare tomorrow\'s bag and clothes', 'g', 3, 7],
-   ['content', 'Make content', 'g', 4, 7], ['caf', 'Caffeine, Pre-training shower', 'g', 1, 8], ['stories', 'Make stories and post', 'g', 2, 8],
-   ['todo', 'Write tomorrow\'s to-do\'s', 'g', 3, 8], ['watch', 'Watch something', 'r', 4, 8], ['train', 'Train', 'g', 1, 9], ['bujo', 'BuJoToDo sync', 'g', 3, 9],
-   ['games', 'Video games', 'r', 4, 9], ['reset', 'Reset Gym, Post-training Shower, Post-training meal', 'g', 1, 10], ['daylio', 'Daylio', 'g', 3, 10],
-   ['browse', 'Idle browsing', 'r', 4, 10], ['check', 'Check and accomplish to-do\'s', 'g', 1, 11], ['shower', 'Shower', 'g', 3, 11],
-   ['manga', 'Read manga/webcomics', 'r', 4, 11], ['crave', 'Sudden cravings for junk food', 't', 4, 2], ['plan', 'Eat on plan food', 'g', 5.5, 1],
-   ['avoid', 'Avoid going off track', 'g', 5.5, 2], ['junk', 'Eat junk food', 'r', 5.5, 3], ['feel', 'Feel bad for going off track', 'r', 5.5, 4]].forEach(r => {
-    B[r[0]] = Flow.addBox(id, Object.assign({ name: r[1], kind: r[2], at: null, floor: r[5] || 0 }, at(r[3], r[4])));
-  });
-  Flow.patchFlow(id, { start: B.alarm });
-  [['alarm', 'bed', 'Follow'], ['alarm', 'late', 'Ignore'], ['bed', 'tape'], ['tape', 'well'], ['bed', 'well', '', null, 'enough'], ['bed', 'sbad', 'Insomnia', null, 'short'],
-   ['late', 'sbad'], ['well', 'good', '7-8 hrs'], ['sbad', 'wbad'], ['wbad', 'fix', 'Try to have a nice day'], ['wbad', 'lie'], ['wbad', 'teeth', 'Essentials only'],
-   ['lie', 'teeth', 'Get up eventually'], ['lie', 'more'], ['more', 'wbad'], ['more', 'good', '', null, null, 1],
-   ['good', 'fix', '', 0], ['fix', 'teeth', '', 0], ['teeth', 'weigh', '', 0], ['weigh', 'salt', '', 0], ['salt', 'client'], ['client', 'stories'], ['stories', 'caf'],
-   ['salt', 'caf', '', 75], ['caf', 'train', '', 15], ['train', 'reset', '', 5], ['reset', 'check', '', 30], ['check', 'down', 'All to-do\'s done'],
-   ['down', 'post'], ['down', 'book'], ['down', 'content'], ['down', 'watch'], ['down', 'games'], ['down', 'browse'], ['down', 'manga'], ['down', 'night'],
-   ['night', 'bag', '', 0], ['bag', 'todo', '', 0], ['todo', 'bujo', '', 0], ['bujo', 'daylio', '', 0], ['daylio', 'shower', '', 0], ['shower', 'alarm', 'Some down time'],
-   ['crave', 'plan', 'Ignore'], ['crave', 'junk', 'Follow'], ['plan', 'avoid'], ['junk', 'feel']].forEach(r => {
-    Flow.addArrow(id, B[r[0]], B[r[1]], { label: r[2] || '', gap: r[3] == null ? null : r[3], sleep: r[4] || null, dash: r[5] || 0 });
-  });
-  return id;
-}
+/* his 2020 chart as drawn; the samples live in shared/flow.js (Flow.sample) */
+function fSeed2020() { return Flow.sample('2020'); }
 
 /* a row landing redraws the flow, unless he is mid-drag or typing in it */
 let fRedrawT = null;
