@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.47, 2026-11-17">
+<meta name="mb-version" content="1.0.48, 2026-11-18">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -739,11 +739,11 @@ function onLens(look, base) {
    Every number here is his to change in Settings. The defaults and where
    each came from are in speak/RESEARCH.md; the bands are words a minute. */
 const STYLES = [
-  { id: 'long',  name: 'Talking head',  note: 'explainers, the long video',        band: [160, 190] },
-  { id: 'short', name: 'Short-form',    note: 'Reels, Shorts, TikTok',              band: [170, 200] },
+  { id: 'long',  name: 'Talking head',  note: 'explainers, the long video',        band: [175, 205] },
+  { id: 'short', name: 'Short-form',    note: 'Reels, Shorts, TikTok',              band: [185, 215] },
   { id: 'teach', name: 'Teaching',      note: 'a tutorial, step by step',           band: [120, 140] },
   { id: 'story', name: 'Story',         note: 'slower at the line that matters',    band: [120, 150] },
-  { id: 'live',  name: 'Live',          note: 'a stream, thinking out loud',        band: [160, 190] },
+  { id: 'live',  name: 'Live',          note: 'a stream, thinking out loud',        band: [175, 205] },
   { id: 'read',  name: 'Read aloud',    note: 'a passage, no thinking',             band: [140, 160] },
 ];
 const DEFAULT_TGT = { fpm: 4, fpmLow: 2, eye: 80, eyeStart: 60, mouthEven: 85, crispPct: 85, pitch: 6, ttMin: 120, ttMax: 180 };
@@ -1412,7 +1412,7 @@ const LIVE = { held: 'ums', crutch: 'crutch', longPauses: 'silences', pauses: 'p
 /* each fault the coach can name, in a few words, for FOCUS */
 const FAULT = { 'wordy': 'Too many words for the point', 'unclear': 'Hard to follow', 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
   fillers: 'Fillers', crutch: 'Crutch phrases', speedup: 'Speeding up', fast: 'Too fast', slow: 'Too slow', 'dead-air': 'Long silences',
-  'run-on': 'Too few pauses', mouth: 'Talking from one side', restarts: 'Stammered starts', flat: 'A flat voice', mumble: 'Soft consonants', eyes: 'Eyes off the lens',
+  'run-on': 'Too few pauses', rushed: 'Speed costing clarity', mouth: 'Talking from one side', restarts: 'Stammered starts', flat: 'A flat voice', mumble: 'Soft consonants', eyes: 'Eyes off the lens',
   'st-moment': 'No moment of change', 'st-stakes': 'Stakes came late', 'st-scene': 'A run-up before the story', 'st-end': 'The ending trailed off' };
 const ST_FAULT = [['moment', 'st-moment', 'Name the five seconds where something changed in you, and build to them.', 'fix-st-moment'],
   ['stakes', 'st-stakes', 'In your first sentence or two, say what you wanted or what you were afraid of.', 'fix-st-stakes'],
@@ -1454,7 +1454,21 @@ function coach(t) {
   if (wpm != null && d !== TT) {
     if (p3 && p3[2] > p3[0] * 1.15 && p3[2] > b[1]) add('speedup', 'wpm', (p3[2] - b[1]) / b[1] * 4 * 0.75, 'Pace rose from ' + p3[0] + ' to ' + p3[2] + ' wpm by the end.', 'Hold the last sentence at the speed of the first.', 'fix-slow', th ? [[th[2], 6]] : []);
     else if (wpm > b[1] + 5) add('fast', 'wpm', (wpm - b[1]) / b[1] * 4 * 0.8, wpm + ' wpm, against ' + b[0] + ' to ' + b[1] + '.', 'Stop and breathe in at every full stop.', 'fix-slow', third(Math.max));
-    else if (wpm < b[0] - 5) add('slow', 'wpm', (b[0] - wpm) / b[0] * 4 * 0.6, wpm + ' wpm, against ' + b[0] + ' to ' + b[1] + '.', 'Shorter sentences, and start the next one before it is perfect.', 'fix-moving', third(Math.min));
+    /* speed is earned (SPEAK 1.0.48). Tom, 2026-11-18, raising the band to
+       the models' pace: "how can we go about this in a way that ensures I
+       don't pick up bad habits along the way". The speed-accuracy trade: a
+       take past the band's first 15 wpm whose clarity slipped (crispness,
+       fillers, stammered starts or mouth evenness under target) is named
+       first, before any pace fault, so he holds the lower pace until it is
+       clean and only then goes faster. */
+    const slips = [];
+    if (m.crisp != null && m.crisp < tg.crispPct) slips.push('crispness ' + Math.round(m.crisp) + '%');
+    if (m.fpm != null && m.fpm > tg.fpm) slips.push(r1(m.fpm) + ' fillers a minute');
+    if ((m.restarts || 0) >= 2) slips.push(m.restarts + ' stammered starts');
+    if (m.mouthEven != null && m.mouthEven < tg.mouthEven) slips.push('mouth evenness ' + Math.round(m.mouthEven) + '%');
+    if (wpm > b[0] + 15 && slips.length) add('rushed', 'wpm', 2.6 + slips.length * 0.3, wpm + ' wpm with ' + slips.join(', ') + '.',
+      'Hold ' + (b[0] + 5) + ' until it is clean, then go faster.', 'fix-slow', third(Math.max));
+    if (wpm < b[0] - 5) add('slow', 'wpm', (b[0] - wpm) / b[0] * 4 * 0.6, wpm + ' wpm, against ' + b[0] + ' to ' + b[1] + '.', 'Shorter sentences, and start the next one before it is perfect.', 'fix-moving', third(Math.min));
   }
   const longs = (ev && ev.pz || []).filter(p => p[1] >= 1.5);
   if (m.longP >= (d.style === 'short' ? 1 : d.style === 'story' ? 3 : 2)) {
@@ -4488,6 +4502,7 @@ const MIND_FOR = {
   'um-start': 'One breath, and know your first sentence before you speak.',
   'um-end': 'Know your last line. Say it, then stop.',
   fillers: 'Silence is fine. Let a pause sit where an um wants to go.',
+  rushed: 'Clean first, fast second. Speed up only while every word stays crisp.',
   crutch: 'End the sentence where the phrase would go, and hold a beat.',
   speedup: 'Hold the pace you start with all the way to the end.',
   fast: 'Slow down. Give each word its full length.',
