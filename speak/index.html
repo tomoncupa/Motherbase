@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.52, 2026-11-18">
+<meta name="mb-version" content="1.0.53, 2026-11-18">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1478,14 +1478,43 @@ const ST_FAULT = [['moment', 'st-moment', 'Name the five seconds where something
   ['stakes', 'st-stakes', 'In your first sentence or two, say what you wanted or what you were afraid of.', 'fix-st-stakes'],
   ['scene', 'st-scene', 'Open inside a place and a moment. Cut everything before it.', 'fix-st-scene'],
   ['end', 'st-end', 'End on what changed in you, then stop.', 'fix-st-end']];
+/* Each drill is graded on its own rubric (SPEAK 1.0.53). Tom, 2026-11-18:
+   "It's like going for a lift and then comparing it to my 5K record." A drill
+   names only the faults, numbers and Claude reads that belong to what it
+   trains: its skill's list below, plus every metric its goals name. The rest
+   is still measured and kept, shown folded as not graded here, and never
+   reaches FOCUS, the plan or the guess. Normal takes (Speak practice, the
+   topic questions, free speak, today's question, posts) have no rubric and
+   are graded on everything, as before. */
+const RUBRIC = {
+  pace: { ask: 'How was your pace?', m: ['wpm', 'cwpm', 'pauses', 'time'] },
+  clean: { ask: 'How free of fillers was it?', m: ['fpm', 'f100', 'um', 'uh', 'held', 'crutch', 'pauses', 'longP', 'heldP'] },
+  flow: { ask: 'Did it keep moving?', m: ['longP', 'ratio', 'restarts', 'repeats', 'heldP', 'pauses', 'time'] },
+  clear: { ask: 'How clear was it?', m: ['crisp', 'pitch', 'fadeShare', 'mouthEven', 'mouthOpen', 'ends', 'marks', 'shadow'] },
+  eyes: { ask: 'How much was on the lens?', m: ['eye', 'eyeAway'] },
+  shape: { ask: 'How clear was the shape?', m: ['time', 'coherence', 'concision'] },
+  story: { ask: 'How did the story land?', m: ['time', 'story', 'heldP'] },
+  devices: { ask: 'Did the device land?', m: ['heldP', 'time'] },
+  script: { ask: 'How much of it was there?', m: ['cover', 'time'] },
+};
+/* the metrics a drill is graded on, as a Set with `ask`; null = everything */
+function rubricOf(d, t) {
+  if (!d || d.check || d.open || !RUBRIC[d.skill] || !(d.step || isFix(d.id) || LIB.indexOf(d) >= 0)) return null;
+  const r = RUBRIC[d.skill], s = new Set(r.m);
+  let gl = t && t.goals;
+  if (!gl) { try { gl = d.goals ? d.goals(targets()) : []; } catch (e) { gl = []; } }
+  (gl || []).forEach(g => s.add(g.m));
+  s.ask = r.ask;
+  return s;
+}
 /* what went wrong in one take, worst first: {id, sev, what, cue, fix} */
 function coach(t) {
   const d = t && t.drill !== 'warm' ? drillById(t.drill) : null;
   if (!d || d.check) return [];
-  const m = t.m || {}, ev = t.ev || null, tg = targets(), b = band(d.style), out = [];
+  const m = t.m || {}, ev = t.ev || null, tg = targets(), b = band(d.style), out = [], rbc = rubricOf(d, t);
   const failed = {}, goalOf = {};
   (t.goals || []).forEach(g => { goalOf[g.m] = g.v; if (g.got != null && !g.ok) failed[g.m] = 1; });
-  const add = (id, metric, sev, what, cue, fix, at) => out.push({ id: id, sev: clamp(sev, 0.1, 2) * (failed[metric] ? 1.5 : 1), what: what, cue: cue, fix: fix, at: (at || []).slice(0, 6) });
+  const add = (id, metric, sev, what, cue, fix, at) => out.push({ id: id, m: metric, sev: clamp(sev, 0.1, 2) * (failed[metric] ? 1.5 : 1), what: what, cue: cue, fix: fix, at: (at || []).slice(0, 6) });
   const end = (ev && ev.end) || m.time || t.dur || 0;
   /* fillers, and where they sat */
   const lim = goalOf.fpm != null ? goalOf.fpm : tg.fpm;
@@ -1522,12 +1551,13 @@ function coach(t) {
        first, before any pace fault, so he holds the lower pace until it is
        clean and only then goes faster. */
     const slips = [];
-    if (m.crisp != null && m.crisp < tg.crispPct) slips.push('crispness ' + Math.round(m.crisp) + '%');
-    if (m.fpm != null && m.fpm > tg.fpm) slips.push(r1(m.fpm) + ' fillers a minute');
-    if ((m.restarts || 0) >= 2) slips.push(m.restarts + ' stammered starts');
-    if (m.mouthEven != null && m.mouthEven < tg.mouthEven) slips.push('mouth evenness ' + Math.round(m.mouthEven) + '%');
-    if (m.cwpm != null && m.cwpm < wpm * 0.85) slips.push('only ' + m.cwpm + ' clear words a minute');
-    if (m.fadeShare != null && m.fadeShare >= 35) slips.push(m.fadeShare + '% of lines fading at the end');
+    const sl = (id, txt) => { if (!rbc || rbc.has(id)) slips.push(txt); };
+    if (m.crisp != null && m.crisp < tg.crispPct) sl('crisp', 'crispness ' + Math.round(m.crisp) + '%');
+    if (m.fpm != null && m.fpm > tg.fpm) sl('fpm', r1(m.fpm) + ' fillers a minute');
+    if ((m.restarts || 0) >= 2) sl('restarts', m.restarts + ' stammered starts');
+    if (m.mouthEven != null && m.mouthEven < tg.mouthEven) sl('mouthEven', 'mouth evenness ' + Math.round(m.mouthEven) + '%');
+    if (m.cwpm != null && m.cwpm < wpm * 0.85) sl('cwpm', 'only ' + m.cwpm + ' clear words a minute');
+    if (m.fadeShare != null && m.fadeShare >= 35) sl('fadeShare', m.fadeShare + '% of lines fading at the end');
     if (wpm > b[0] + 15 && slips.length) add('rushed', 'wpm', 2.6 + slips.length * 0.3, wpm + ' wpm with ' + slips.join(', ') + '.',
       'Hold ' + (b[0] + 5) + ' until it is clean, then go faster.', 'fix-slow', third(Math.max));
     if (wpm < b[0] - 5) add('slow', 'wpm', (b[0] - wpm) / b[0] * 4 * 0.6, wpm + ' wpm, against ' + b[0] + ' to ' + b[1] + '.', 'Shorter sentences, and start the next one before it is perfect.', 'fix-moving', third(Math.min));
@@ -1562,8 +1592,8 @@ function coach(t) {
   /* the four story parts, read by Claude on a story take (SPEAK 1.0.41) */
   const st = jg && jg.st;
   if (st) ST_FAULT.forEach(([k, id, cue, fix]) => { if (st[k] != null && st[k] <= 2) add(id, 'story', (3 - st[k]) / 2 + 0.4, ST_PARTS.filter(q => q[0] === k)[0][1] + ' ' + st[k] + ' of 5: ' + (st[k + 'Why'] || ''), cue, fix, []); });
-  const fb = t.fb || {};
-  return out.filter(f => fb[f.id] !== 0).sort((x, y) => y.sev - x.sev);
+  const fb = t.fb || {}, rb = rubricOf(d, t);
+  return out.filter(f => fb[f.id] !== 0 && (!rb || rb.has(f.m))).sort((x, y) => y.sev - x.sev);
 }
 /* FOCUS: the fault that came top in at least two of the last five takes this week */
 function focus() {
@@ -3281,15 +3311,23 @@ function doNext(t, d, h) {
   const btn = (label, go, fn) => { const b = el('button', 'mb-btn mb-press mb-tap' + (go ? ' go' : ''), '<span>' + label + '</span>'); b.onclick = fn; acts.appendChild(b); return b; };
   const fill = () => {
     const x = takes().filter(y => y.key === t.key)[0] || t, jg = x.judge, wk = coach(x)[0];
+    const rb = rubricOf(d, x), words = !rb || d.asr || rb.has('coherence') || rb.has('story') || rb.has('crutch') || rb.has('cover');
     say.innerHTML = ''; acts.innerHTML = '';
-    if (!x.tx && window.MB_HEAR && (HEAR.busy[x.key] || hasClip(x))) {
+    if (!x.tx && words && window.MB_HEAR && (HEAR.busy[x.key] || hasClip(x))) {
       say.innerHTML = '<b>Get the transcript first.</b> Without your words, crutch phrases, coherence and concision cannot be judged, and nothing reaches your bank.';
       if (HEAR.busy[x.key]) btn('WRITING IT ON THIS PC...', false, () => {}).disabled = true;
       else btn('WRITE THE TRANSCRIPT', true, () => { const row = Rec.get('tclip', x.date, x.key); if (row) fetch(clipUrl(row)).then(r => r.blob()).then(bl => { hearTake(x, bl); fill(); }); });
       return false;
     }
     const strong = jg && jg.coh >= 4 && jg.con >= 4, why = contentCheck(x);
-    if (x.tx && (strong || why)) {
+    const next = rb && !d.fix ? DRILLS.filter(y => y.skill === d.skill && y.step === d.step + 1)[0] : null;
+    if (rb && x.pass && next) {
+      say.innerHTML = '<b>Met. Next step: ' + esc(next.name) + '.</b> ' + esc(next.why || '');
+      btn(next.name.toUpperCase(), true, () => { if (h) h.close(); openDrill(next); });
+    } else if (rb && !wk) {
+      say.innerHTML = x.pass ? '<b>Met.</b> Go again to make it hold, or pick the next drill on TODAY.' : '<b>Not met yet.</b> Go again with the same goal.';
+      btn('GO AGAIN', true, () => { if (h) h.close(); startTake(d); });
+    } else if (x.tx && (!rb || rb.has('coherence') || rb.has('story')) && (strong || why)) {
       say.innerHTML = '<b>This is content. Refine it while it is fresh.</b> ' + esc(strong ? 'It held together and stayed tight (coherence ' + jg.coh + ', concision ' + jg.con + ' of 5).' : 'It has ' + why.join(' and ') + '.');
       btn('REFINE INTO CONTENT', true, () => { if (h) h.close(); openRefine(x); });
     } else if (wk && drillById(wk.fix)) {
@@ -5195,7 +5233,7 @@ function gate(t, d, wrap, fresh) {
   if (!fresh || t.guess) return inner;
   const box = el('div'), g = el('div', 'cnt mb-plate'), out = el('div');
   g.appendChild(el('h3', null, 'BEFORE YOU LOOK'));
-  g.appendChild(el('p', 'muted', 'How clean was that take?'));
+  g.appendChild(el('p', 'muted', (rubricOf(d, t) || {}).ask || 'How clean was that take?'));
   const row = el('div'); row.style.display = 'flex'; row.style.flexWrap = 'wrap'; row.style.gap = 'var(--s-2)';
   [[3, 'CLEAN'], [2, 'OK'], [1, 'MESSY']].forEach(([v, nm]) => {
     const bt = el('button', 'mb-btn mb-press mb-tap', '<span>' + nm + '</span>');
@@ -5239,11 +5277,12 @@ function showTake(t, html, fresh) {
         if (!(t.goals || []).length) wrap.appendChild(el('p', 'muted', 'A count to start from. Nothing to meet.'));
         wrap.appendChild(gs);
       }
-      const rows = el('div', 'stats');
+      const rows = el('div', 'stats'), rb = rubricOf(d, t), others = el('div', 'stats');
       rows.style.marginTop = 'var(--s-3)';
+      const graded = id => !rb || rb.has(id), boxOf = id => graded(id) ? rows : others;
       const put = (id, v, note) => {
         if (v == null) return; const mt = METRICS[id], j = d ? readOf(id, v, d) : null;
-        stat(rows, mt.name, mt.fmt(v) + (mt.unit ? ' ' + mt.unit : ''), j ? j.line : (note || mt.note), j ? j.cls : '');
+        stat(boxOf(id), mt.name, mt.fmt(v) + (mt.unit ? ' ' + mt.unit : ''), j ? j.line : (note || mt.note), j ? j.cls : '');
       };
       if (d) {
         put('wpm', m.wpm, t.asr ? m.words + ' words in ' + r1(m.spoken) + 's' : 'estimated from ' + m.syll + ' syllables');
@@ -5256,15 +5295,15 @@ function showTake(t, html, fresh) {
         put('crisp', m.crisp, 'against today\'s warm-up'); put('pitch', m.pitch, m.f0 ? 'around ' + m.f0 + ' Hz' : '');
         put('eye', m.eye); put('eyeAway', m.eyeAway);
         put('mouthEven', m.mouthEven, m.mouthDir ? 'your ' + m.mouthDir + ' side did more' : ''); put('mouthOpen', m.mouthOpen);
-        if (m.crisp == null && m.crispRaw != null) stat(rows, 'Crispness, raw', Math.round(m.crispRaw * 1000), 'no warm-up to measure against');
-        if (m.eye == null && d.cam) stat(rows, 'On the lens', '·', 'not measured');
+        if (m.crisp == null && m.crispRaw != null) stat(boxOf('crisp'), 'Crispness, raw', Math.round(m.crispRaw * 1000), 'no warm-up to measure against');
+        if (m.eye == null && d.cam) stat(boxOf('eye'), 'On the lens', '·', 'not measured');
         const jbox = el('div'); rows.appendChild(jbox);
         const jfill = () => {
           const x = takes().filter(y => y.key === t.key)[0] || t, jg = x.judge;
           jbox.innerHTML = '';
           if (jg) {
-            stat(jbox, 'Coherence', jg.coh + '/5', jg.cohWhy || ''); stat(jbox, 'Concision', jg.con + '/5', jg.conWhy || '');
-            if (jg.st) ST_PARTS.forEach(([k, nm]) => { if (jg.st[k]) stat(jbox, nm, jg.st[k] + '/5', jg.st[k + 'Why'] || '', jg.st[k] <= 2 ? 'miss' : jg.st[k] >= 4 ? 'met' : ''); });
+            if (graded('coherence') || graded('concision')) { stat(jbox, 'Coherence', jg.coh + '/5', jg.cohWhy || ''); stat(jbox, 'Concision', jg.con + '/5', jg.conWhy || ''); }
+            if (jg.st && graded('story')) ST_PARTS.forEach(([k, nm]) => { if (jg.st[k]) stat(jbox, nm, jg.st[k] + '/5', jg.st[k + 'Why'] || '', jg.st[k] <= 2 ? 'miss' : jg.st[k] >= 4 ? 'met' : ''); });
             const found = storiesLive().filter(s => s.from === x.key);
             if (found.length) {
               const fb2 = el('div', 'cnt mb-plate'); fb2.style.gridColumn = '1 / -1';
@@ -5285,7 +5324,7 @@ function showTake(t, html, fresh) {
             }
             return 1;
           }
-          if ((x.tx || t.tx) && wordsOf(x.tx || t.tx).length >= 40) stat(jbox, 'Coherence and concision', '\u00b7', REF.on ? 'Claude is reading it' : 'read by Claude in SPEAK on the PC');
+          if ((x.tx || t.tx) && wordsOf(x.tx || t.tx).length >= 40 && (graded('coherence') || graded('story'))) stat(jbox, graded('coherence') ? 'Coherence and concision' : 'The story', '\u00b7', REF.on ? 'Claude is reading it' : 'read by Claude in SPEAK on the PC');
           return 0;
         };
         if (!jfill() && REF.on && (t.tx || window.MB_HEAR)) { let n = 0; const iv = setInterval(() => { n++; if (!jbox.isConnected || jfill() || n > 120) clearInterval(iv); }, 1500); }
@@ -5293,7 +5332,14 @@ function showTake(t, html, fresh) {
         put('hiss', m.hiss); put('pitch', m.pitch, 'the siren');
         if (m.crispRaw != null) stat(rows, 'Crispness reference', Math.round(m.crispRaw * 1000), 'what today\'s CLEAR drills are measured against');
       }
-      wrap.appendChild(rows); b.appendChild(gate(t, d, wrap, fresh));
+      wrap.appendChild(rows);
+      if (others.children.length) {
+        const det = el('details', 'cmp mb-plate');
+        det.style.marginTop = 'var(--s-3)';
+        det.innerHTML = '<summary class="mb-tap">ALSO MEASURED, NOT GRADED IN THIS DRILL</summary>';
+        det.appendChild(others); wrap.appendChild(det);
+      }
+      b.appendChild(gate(t, d, wrap, fresh));
       if (t.prompt) b.appendChild(el('p', 'muted', 'Prompt: ' + esc(t.prompt)));
       /* the notes that came with a Todoist question (a Shoot card, or the
          topic finder's answer notes), held back until he has answered */

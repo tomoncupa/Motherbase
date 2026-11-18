@@ -331,6 +331,10 @@ Tom: "can it also guide me towards being a better storyteller", then "A B C", an
 
 CAMERA OFF on the take's top bar (`camBtn`) darkens the video track, drops that take's eyes and mouth and sets `speak.cam` 0; the drill sheet's Camera switch is `speak.cam` too, never `camAll`. In SPEAK.exe the transcript is written while he talks (`liveHearStart`, `mblive:`, `Refine.Live`): pieces cut at quiet moments every 25 s, the last piece at STOP, the whole take the old way if the live run fails. Learned steps (met on 3 days) come after unlearned ones in a date-seeded order (`mixLearned`). (HISTORY.md: Camera off and listening while he talks; Mixed order once learned)
 
+## Each drill has its own rubric, 2026-11-18 (SPEAK 1.0.53)
+
+Tom: "It's like going for a lift and then comparing it to my 5K record." A drill is graded only on its skill's metrics (`RUBRIC`, `rubricOf`) plus whatever its goals name: PACE on pace, clear words and pauses; CLEAN on fillers and crutch phrases; FLOW on silences, restarts and talk share; CLEAR on crispness, pitch, fades, mouth and endings; EYES on the lens; SHAPE on time and Claude's coherence and concision; STORY on time and the four story parts; DEVICES and SCRIPT on their own goals. `coach()` drops every other fault, so FOCUS, the plan, the guess (`realOf`) and the reminders follow, and "speed costing clarity" quotes only slips in the rubric. The sheet folds the rest under ALSO MEASURED, NOT GRADED IN THIS DRILL; BEFORE YOU LOOK asks the drill's own question; DO THIS NEXT says Met with the next step, Go again, or the drill's own fault, never REFINE INTO CONTENT unless the drill grades coherence or a story. Normal takes (Speak practice, the topic questions, free speak, today's question, posts) have no rubric and are graded on everything. Tested in headless Chromium at 1280 with made-up takes; not on a real take.
+
 ## Needs from the foundation
 
 - A device-only row type: one `Rec` would keep and back up but live sync
