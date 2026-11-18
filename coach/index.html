@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.31, 2026-11-16">
+<meta name="mb-version" content="1.0.32, 2026-11-18">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -21,6 +21,7 @@
 <script src="../shared/creatures.js"></script>
 <script src="../shared/chart.js"></script>
 <script src="../shared/range.js"></script>
+<script src="../shared/e1rm.js"></script>
 <style>
 /* COACH, built 2026-09-22. Tom: "Can coach look like a pokemon box on Pc?"
    and "Optimize COACH to make use of iPad and desktop space".
@@ -357,7 +358,8 @@ const KG_LB = 2.20462;
 const show = kg => kg == null || kg === '' ? '' : String(Math.round((unit() === 'lb' ? kg * KG_LB : kg) * 10) / 10);
 /* a weight may be below zero, -20 on a pull-up being 20 of help (TRAIN 1.0.85) */
 const toKg = v => { const n = parseFloat(v); if (!isFinite(n)) return null; return Math.round((unit() === 'lb' ? n / KG_LB : n) * 1000) / 1000; };
-const e1 = (kg, r) => kg > 0 && r > 0 && r <= 12 ? kg * (1 + r / 30) : 0;
+/* the suite's one estimated 1RM (shared/e1rm.js, Brzycki); sets over 12 reps still left out here */
+const e1 = (kg, r, rir) => kg > 0 && r > 0 && r <= 12 ? E1RM.calc(kg, r, rir) : 0;
 
 /* ── clients ── */
 const people = () => Rec.map('cperson');
@@ -1055,7 +1057,7 @@ function liftsOf(pid) {
     const x = by[s.ex] || (by[s.ex] = { name: (ex[s.ex] || {}).name || 'Exercise', best: 0, bs: null, days: {}, last: '' });
     x.days[r.date] = 1;
     if (r.date > x.last) x.last = r.date;
-    const v = e1(loadOf(ex[s.ex], s, r.date, bwL), s.r);
+    const v = e1(loadOf(ex[s.ex], s, r.date, bwL), s.r, s.rir);
     if (v > x.best) { x.best = v; x.bs = s; }
   });
   return Object.values(by).filter(x => x.best > 0)
@@ -1136,7 +1138,7 @@ function blockLifts(pid, a, z) {
   setsOf(pid).forEach(r => {
     if (r.date < a || r.date > z) return;
     const s = r.payload; if (warmSet(s)) return;
-    const v = e1(loadOf(ex[s.ex], s, r.date, bwL), s.r); if (!v) return;
+    const v = e1(loadOf(ex[s.ex], s, r.date, bwL), s.r, s.rir); if (!v) return;
     const x = by[s.ex] || (by[s.ex] = { name: (ex[s.ex] || {}).name || 'Exercise', days: {} });
     const d = x.days[r.date]; if (!d || v > d.v) x.days[r.date] = { v: v, kg: s.kg, r: s.r };
   });

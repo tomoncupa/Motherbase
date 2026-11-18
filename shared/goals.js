@@ -69,7 +69,7 @@
                                        is the activity id, a routine's copy
                                        (`act.routine`) counts too
        {kind: 'lift', ex, target, u, start}  a TRAIN lift's best estimated 1RM
-                                       (TRAIN.e1rm: kg x 36 / (37 - reps)),
+                                       (shared/e1rm.js, Brzycki, as TRAIN reads it),
                                        working sets only, target in kg
        {kind: 'ev', field, target, start}    a STATUS measure, the day's last
                                        reading, in its field's unit
@@ -114,8 +114,8 @@
       const p = r.payload || {};
       if (!r.date || (p.plan && !p.done)) return;
       days[r.date] = 1;
-      if (warm(p) || !(p.kg > 0) || !(p.r > 0) || p.r >= 37 || (cap && p.r > cap)) return;
-      const e = p.kg * 36 / (37 - p.r), m = lift[p.ex] = lift[p.ex] || {};
+      if (warm(p) || !(p.kg > 0) || !(p.r > 0) || (cap && p.r > cap)) return;
+      const e = g.E1RM.calc(p.kg, p.r, p.rir), m = lift[p.ex] = lift[p.ex] || {};
       if (!m[r.date] || e > m[r.date]) m[r.date] = e;
     });
     memo = { at: now, rec: g.Rec, days: days, lift: lift };

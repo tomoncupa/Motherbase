@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.95, 2026-11-17">
+<meta name="mb-version" content="1.0.96, 2026-11-18">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -116,6 +116,7 @@
 <script src="../shared/icons.js"></script>
 <script src="../shared/chart.js"></script>
 <script src="../shared/muscles.js"></script>
+<script src="../shared/e1rm.js"></script>
 <script src="../shared/range.js"></script>
 <script src="../shared/health.js"></script>
 
@@ -5868,8 +5869,10 @@ function closeDrawer(fromBack) {
    is printed.
    ═════════════════════════════════════════════════════════════════════════ */
 
-/* Brzycki, which is what FitNotes uses. It falls apart at high rep counts,
-   which is why the app lets you cap the reps that count towards it. */
+/* Brzycki, which is what FitNotes uses, through the suite's one formula
+   (shared/e1rm.js, decision D4, 2026-11-18): reps in reserve added when
+   the set carries them, reps counted at most 12. The app's own cap
+   (`e1rmMaxReps`, from a FitNotes import) still leaves out sets above it. */
 /* Reps may carry a fraction: a half rep is 8.5 (Tom, 2026-09-25: "let it
    add fractions for reps"). Kept to two places, so stepping and adding up
    never print 9.499999. A comma is read as the point. */
@@ -5878,12 +5881,11 @@ TRAIN.readReps = function (v) {
   return isNaN(n) ? NaN : Math.round(n * 100) / 100;
 };
 TRAIN.showReps = function (n) { return String(Math.round((+n || 0) * 100) / 100); };
-TRAIN.e1rm = function (kg, reps) {
+TRAIN.e1rm = function (kg, reps, rir) {
   if (!kg || !reps) return 0;
   var cap = Rec.setting(APP.id, 'e1rmMaxReps') || 0;
   if (cap && reps > cap) return 0;
-  if (reps >= 37) return 0;
-  return kg * 36 / (37 - reps);
+  return E1RM.calc(kg, reps, rir);
 };
 
 /* ── assisted lifts, the right way up (1.0.83) ──
@@ -5972,7 +5974,7 @@ TRAIN.load = function (s) {
   var bw = TRAIN.bwOn(s.date || Day.today());
   return bw ? Math.max(0, a ? bw - kg : bw + kg) : null;
 };
-TRAIN.e1rmS = function (s) { var l = s ? TRAIN.load(s) : 0; return l ? TRAIN.e1rm(l, TRAIN.sr(s)) : 0; };
+TRAIN.e1rmS = function (s) { var l = s ? TRAIN.load(s) : 0; return l ? TRAIN.e1rm(l, TRAIN.sr(s), s.rir) : 0; };
 TRAIN.volS = function (s) { var l = s ? TRAIN.load(s) : 0; return l ? l * (+s.r || 0) : 0; };
 /* "Heaviest" says the wrong thing about a lift where less is better */
 TRAIN.heavyWord = function (exId) { return TRAIN.isAssisted(exId) ? 'Least help' : 'Heaviest'; };
@@ -9184,8 +9186,8 @@ TRAIN.overviewSheet = function (exId) {
 
 /* ═══════════════ CALCULATORS ═══════════════ */
 
-/* FitNotes' Estimated 1RM Calculator. Brzycki is unit-free, so it works in
-   whatever unit is on screen and never converts. */
+/* FitNotes' Estimated 1RM Calculator. Brzycki (shared/e1rm.js) is
+   unit-free, so it works in whatever unit is on screen and never converts. */
 TRAIN.e1rmCalc = function (kg, reps, exId) {
   var w = null, r = null;
   UI.dialog({
@@ -9200,12 +9202,11 @@ TRAIN.e1rmCalc = function (kg, reps, exId) {
       var run = function () {
         var W = parseFloat(w.value), R = TRAIN.readReps(r.value);
         if (!(W > 0) || !(R > 0)) { out.innerHTML = ''; return; }
-        if (R >= 37) { out.innerHTML = '<div class="empty">Too many reps to estimate</div>'; return; }
-        var one = W * 36 / (37 - R);
+        var one = E1RM.calc(W, R);
         var html = '<div class="bigtime">' + fmt1(one) + ' <span class="u">' + TRAIN.unitLabel(exId) + '</span></div>' +
           '<div class="mb-group">REP MAXES</div><div class="rmgrid">';
         [1, 2, 3, 4, 5, 6, 8, 10, 12, 15].forEach(function (n) {
-          html += '<div class="rmcell"><span>' + n + ' RM</span><b>' + fmt1(one * (37 - n) / 36) + '</b></div>';
+          html += '<div class="rmcell"><span>' + n + ' RM</span><b>' + fmt1(E1RM.weightFor(one, n)) + '</b></div>';
         });
         html += '</div><div class="mb-group">PERCENTAGE (%)</div><div class="rmgrid">';
         [100, 95, 90, 85, 80, 75, 70, 65, 60, 50].forEach(function (p) {

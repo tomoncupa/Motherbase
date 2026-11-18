@@ -148,6 +148,7 @@ An imported exercise of any other type is read off what was logged against it
   session records, Top 3, GRAPH's 1RM and Max Reps, `setDelta`). **Every total,
   Most volume and the arrow's weight x reps half read `r`, every rep.** Where a
   split set's strength is stated it says so: "10 5 (counts as 14)".
+- **Estimated 1RM is the suite's one formula** (`shared/e1rm.js`, decision D4, 2026-11-18): Brzycki, reps in reserve added when the set has them, reps counted at most 12; `e1rmMaxReps` still leaves out sets above it. Not the record rule above.
 - **Records start again with each training block**; the stored `pr` is the
   all-time rule, block records are worked out when shown.
 - **An assisted lift reads the right way up** (1.0.83, Tom 2026-11-16: "more
