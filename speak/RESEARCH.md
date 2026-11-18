@@ -247,3 +247,13 @@ Measured by Claude with CLIP's transcriber (faster-whisper, word times) on 4 min
 | From captions: Chris Williamson 164-171, Ryan Holiday 184-197, Sean Nalewanyj 213, Jeff Nippard 215, Leila Hormozi 248, Iman Gadzhi 233, Jocko with a guest 180, GaryVee 157-169 (a bad model for other reasons) | | | | | |
 
 What it says: every model but Jocko's set piece is faster than the old 160 to 190 band. Their clarity comes from clean, finished sentences, not slow speech. Jocko's weight comes from silence (half of "GOOD" is pauses), not slow words: inside a phrase he runs at 244.
+
+## ASHA Practice Portal, read 2026-11-18
+Pages: Fluency Disorders, Articulation and Phonology, Voice Disorders, Accent Modification, Dysarthria in Adults (asha.org/practice-portal). Written for clinicians treating disorders; no adult rate norms, no syllables-a-second figures, no fading schedule with numbers.
+- Feedback: frequent feedback on how it was done while a skill is new, then occasional feedback on the result only, and varied practice, so it holds and transfers (Dysarthria).
+- Efficiency: understood words a minute, not raw words (Dysarthria). A 2 to 4 minute talk shows whether speech decays (Dysarthria).
+- Cluttering signs: rate too fast for the speaker's own system, irregular pauses, run-together syllables and dropped endings, loudness fading at phrase ends, excess ordinary disfluency. Treatment: slowing and pausing, "fast with pauses", over-articulation, stressing endings, steady loudness to the end (Fluency).
+- Intelligibility (words understood) and comprehensibility (listener effort) are rated apart (Accent Modification).
+- Steps from words to conversation, then self-monitoring and self-correction (Articulation and Phonology).
+- Voice care: straw phonation, lip trills, resonant voice; warning signs effort, fatigue, breathlessness, tension; no self-directed pitch change (Voice).
+- Not supported or not covered there: mouth evenness (kept: it is his own habit, named by him); pitch spread is a variety measure, not a push higher.
