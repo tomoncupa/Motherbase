@@ -312,7 +312,10 @@ def hear(path, a, b):
     finally:
         try: os.remove(wav)
         except OSError: pass
-for line in sys.stdin:
+# .NET writes a byte-order mark before its first line on stdin, which made
+# json.loads skip the first piece of every take; read bytes and drop it
+for raw in sys.stdin.buffer:
+    line = raw.decode('utf-8', 'ignore').lstrip(chr(0xfeff))
     try: m = json.loads(line)
     except ValueError: continue
     if m.get('op') == 'part': hear(m['path'], float(m['from']), float(m['to']))
