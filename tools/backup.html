@@ -57,11 +57,21 @@
   function show(state, detail) { $('state').textContent = state; if (detail != null) $('detail').textContent = detail; }
   var start = Date.now(), MAX = 120000, QUIET = 10000, WHOLE_MAX = 150000, waited = 0;
 
+  /* ?skip=tclip,smodel (2026-11-18): OUTER HEAVEN's half-hourly working copy (Backup.exe --out
+     state/mb-live --url ...?skip=) leaves out SPEAK's recordings, which it never reads: 33 of the
+     store's 41 MB that day. Only these device-only recording types can be skipped; the nightly copy
+     never passes it and keeps everything. The file names what it left out in `skipped`. */
+  var SKIPPABLE = ['tclip', 'smodel'];
+  var SKIP = (new URLSearchParams(location.search).get('skip') || '').split(',')
+    .filter(function (t) { return SKIPPABLE.indexOf(t) >= 0; });
+
   function build() {
     try {
       var rows = Rec.export();
+      if (SKIP.length) rows = rows.filter(function (r) { return SKIP.indexOf(r.type) < 0; });
       var bag = { kind: 'motherbase-backup', v: 1, app: '*', at: new Date().toISOString(),
                   from: 'nightly', synced: B.synced, rows: rows };
+      if (SKIP.length) { bag.from = 'working copy'; bag.skipped = SKIP; }
       B.json = JSON.stringify(bag);
       B.rows = rows.length;
       B.state = 'ready';
