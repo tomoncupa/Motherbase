@@ -79,6 +79,7 @@ const PRECACHE = [
   'shared/e1rm.js',
   'shared/goals.js',
   'shared/chapter.js',
+  'shared/flow.js',
   'shared/skins.js',
   'shared/boot.js',
   'shared/skins.json',

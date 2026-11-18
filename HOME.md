@@ -844,3 +844,7 @@ once per widget instead of copying widgets:
 ## 1.0.136, 2026-11-17: FLOW
 
 A card for BLOCK's Flow tab (Tom picked "the box you're on and what comes next on the home screen and the STATUS desktop widget"). Where he is in the flow BLOCK has open (`block.flowOpen`, else the first), one button per way out with its time and the sleep suggestion, Undo on a pick; not started shows Start at its first box; no flow shows MAKE ONE, which opens BLOCK on Flow (`show: 'flow'`). Every rule is `shared/flow.js`, loaded here. Driven in headless Chromium: drawn at Wake up bad with both ways out.
+
+## 1.0.139, 2026-11-18: FLOW is the travel card
+
+Tom: "put the block I'm currently on the top layer, and then show me the next 2 levels", travel down the list, "cool animations". The card body is `Flow.card` (shared/flow.js), the same card as the new FLOW phone app (`flow/`, now on the roster with `phone: 1`). Drawn `quiet` so a board redraw does not replay the lines; where he was looking survives a redraw. Mockup Tom saw: claude.ai/artifact/61ohjQ3WkohnRRVd1LdKsT. Driven in headless Chromium at 420 wide: drawn at Weigh in, travelled to Salt Drink. `.flnow` and `.flway` CSS are left unused.

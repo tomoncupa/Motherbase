@@ -284,8 +284,262 @@ function clock(ms) {
   return h + ':' + pad(d.getMinutes()) + ap;
 }
 
+/* ══ THE TRAVEL CARD (0.2.0, 2026-11-18) ══
+   Tom: "put the block I'm currently on the top layer, and then show me the
+   next 2 levels", "travel down the list", "cool animations as I travel from
+   block to block". The home screen's FLOW card and the FLOW phone app both
+   draw it with `Flow.card(host, {fid})`, so they cannot disagree.
+
+   Travelling only looks. I'M HERE moves him there and logs every block on
+   the way, each with the arrow it was reached by; BACK TO NOW returns to
+   where he really is. Where he was looking survives a redraw (CS). */
+const CS = {};
+let inks = {}, cardCssDone = false;
+const CARD_CSS = `
+.flc{display:flex;flex-direction:column;gap:var(--s-3,12px);position:relative;min-width:0}
+.flc-trail{display:flex;gap:var(--s-1,4px);align-items:center;flex-wrap:wrap}
+.flc-crumb{position:relative;display:inline-flex;align-items:center;gap:var(--s-1,4px);min-height:var(--s-6,32px);padding:0 var(--s-2,8px);
+  border:1px solid var(--border,GrayText);border-radius:var(--radius-sm,4px);background:var(--bg,Canvas);color:var(--text-2,CanvasText);
+  font:inherit;font-size:var(--f-1,12px);cursor:pointer}
+.flc-crumb::after{content:'';position:absolute;left:0;right:0;top:50%;height:var(--tap,44px);transform:translateY(-50%)}
+.flc-crumb i{width:var(--s-2,8px);height:var(--s-2,8px);border-radius:var(--radius-sm,4px);background:var(--k)}
+.flc-sep{color:var(--text-muted,GrayText);font-size:var(--f-1,12px)}
+.flc-stage{position:relative;display:flex;flex-direction:column;gap:var(--s-3,12px);min-width:0}
+.flc-b{position:relative;border:0;font:inherit;background:var(--k);color:var(--ink);border-radius:var(--radius-sm,4px);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer;
+  -webkit-user-select:none;user-select:none;overflow-wrap:anywhere}
+.flc-top{min-height:calc(var(--s-8,64px) + var(--s-3,12px));padding:var(--s-3,12px);cursor:default}
+.flc-top .n{font-family:var(--font-display,inherit);font-size:var(--f-5,20px);font-weight:var(--w-bold,700);line-height:1.2}
+.flc-top .s{font-size:var(--f-1,12px);margin-top:var(--s-1,4px);opacity:.85}
+.flc-top.now{box-shadow:0 0 0 3px var(--surface-1,Canvas),0 0 0 5px var(--accent,Highlight)}
+.flc-top.now::after{content:'';position:absolute;inset:-5px;border-radius:var(--radius-md,8px);box-shadow:0 0 0 2px var(--accent,Highlight);
+  animation:flc-pulse 2.4s ease-out infinite;pointer-events:none}
+@keyframes flc-pulse{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.06)}}
+.flc-acts{display:flex;gap:var(--s-2,8px);flex-wrap:wrap}
+.flc-acts .mb-btn{flex:1}
+.flc-row{display:flex;gap:var(--s-2,8px);overflow-x:auto;padding-bottom:var(--s-1,4px);scroll-snap-type:x mandatory;position:relative;z-index:1}
+.flc-col{flex:1 0 calc(var(--s-10,128px) - var(--s-2,8px));max-width:calc(var(--s-10,128px) * 1.6);display:flex;flex-direction:column;gap:var(--s-1,4px);scroll-snap-align:start}
+.flc-lab{align-self:center;min-height:calc(var(--f-1,12px) * 1.5);font-size:var(--f-1,12px);line-height:1.5;color:var(--text-2,CanvasText);
+  background:var(--surface-1,Canvas);padding:0 var(--s-1,4px);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.flc-mid{min-height:var(--s-8,64px);padding:var(--s-2,8px);font-size:var(--f-2,14px);font-weight:var(--w-body,500);line-height:1.25}
+.flc-l2{display:flex;flex-direction:column;gap:var(--s-1,4px);margin-top:var(--s-4,16px)}
+.flc-sm{min-height:var(--tap,44px);padding:var(--s-1,4px) var(--s-2,8px);font-size:var(--f-1,12px);line-height:1.2;opacity:.85}
+.flc-more,.flc-say{font-size:var(--f-1,12px);color:var(--text-muted,GrayText);text-align:center}
+.flc-wires{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:0}
+.flc-wires path{fill:none;stroke:var(--border-strong,GrayText);stroke-width:1.5}
+.flc-ghost{position:absolute;pointer-events:none;z-index:5;margin:0}
+@media (hover:hover){.flc-mid:hover,.flc-sm:hover{filter:brightness(1.08)}}
+@media (prefers-reduced-motion:reduce){.flc-top.now::after{animation:none}}
+`;
+function cardCss() {
+  if (cardCssDone || typeof document === 'undefined' || !document.head) return;
+  cardCssDone = true;
+  const s = document.createElement('style'); s.id = 'mb-flow-card-css'; s.textContent = CARD_CSS;
+  document.head.insertBefore(s, document.head.firstChild);
+}
+/* the darker or the lighter text, whichever reads on this kind's fill in
+   the theme worn. Measured, so a light theme gets dark words. */
+function ink(kind) {
+  const tok = (KINDS[kind] || KINDS.g).token, cs = getComputedStyle(document.documentElement);
+  const val = cs.getPropertyValue(tok).trim(), key = tok + val;
+  if (inks[key]) return inks[key];
+  const c = document.createElement('canvas').getContext('2d');
+  const lum = v => { c.clearRect(0, 0, 1, 1); c.fillStyle = 'black'; c.fillStyle = v || 'black'; c.fillRect(0, 0, 1, 1);
+    const d = c.getImageData(0, 0, 1, 1).data, f = x => (x /= 255) <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4);
+    return .2126 * f(d[0]) + .7152 * f(d[1]) + .0722 * f(d[2]); };
+  const ratio = (a, b) => (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+  const fill = lum(val), dark = lum(cs.getPropertyValue('--bg').trim()), light = lum(cs.getPropertyValue('--text-1').trim());
+  return (inks[key] = ratio(fill, dark) >= ratio(fill, light) ? 'var(--bg)' : 'var(--text-1)');
+}
+const kvar = k => 'var(' + (KINDS[k] || KINDS.g).token + ')';
+const gapWords = m => m == null ? '' : m === 0 ? 'Immediately' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' hr' + (m % 60 ? ' ' + m % 60 + ' min' : '');
+const E = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c; if (h != null) n.innerHTML = h; return n; };
+const X = s => String(s == null ? '' : s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const still = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** the flow BLOCK has open, else the first */
+function openFlow() {
+  const o = R().setting('block', 'flowOpen') || {}, all = list();
+  return (all.find(f => f.id === o.fid) || all[0] || {}).id || null;
+}
+
+function card(host, o) {
+  cardCss();
+  o = o || {};
+  const fid = o.fid || openFlow();
+  host.classList.add('flc');
+  host.innerHTML = '';
+  if (!fid || !get(fid)) { host.appendChild(E('div', 'flc-say', 'No flows.')); if (o.empty) o.empty(host); return; }
+  const h = here(fid), real = h && h.box ? h.box.id : null;
+  let st = CS[fid];
+  if (!st || st.now !== real || !box(fid, st.view)) st = CS[fid] = { now: real, view: real || (h && h.start ? h.start.id : null), trail: [] };
+  if (!st.view) { host.appendChild(E('div', 'flc-say', 'This flow has no start box yet.')); return; }
+  paint(host, fid, st, o);
+}
+
+function paint(host, fid, st, o) {
+  host.innerHTML = '';
+  const all = arrows(fid), bs = {}; boxes(fid).forEach(b => { bs[b.id] = b; });
+  const v = bs[st.view], now = st.view === st.now, started = !!st.now;
+  if (st.trail.length) {
+    const tr = E('div', 'flc-trail');
+    st.trail.forEach((id, i) => {
+      const b = bs[id]; if (!b) return;
+      const c = E('button', 'flc-crumb', '<i style="--k:' + kvar(b.kind) + '"></i>' + X(String(b.name).split(',')[0]));
+      c.type = 'button'; c.title = b.name;
+      c.onclick = () => back(host, fid, st, o, i, c);
+      tr.appendChild(c); tr.appendChild(E('span', 'flc-sep', '›'));
+    });
+    host.appendChild(tr);
+  }
+  const stage = E('div', 'flc-stage');
+  host.appendChild(stage);
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'flc-wires');
+  stage.appendChild(svg);
+  const top = E('div', 'flc-b flc-top' + (now ? ' now' : ''),
+    '<span class="n">' + X(v.name) + '</span><span class="s">' + (now ? 'You are here' : !started && !st.trail.length ? 'Not started' : 'Looking ahead') + '</span>');
+  top.style.setProperty('--k', kvar(v.kind)); top.style.setProperty('--ink', ink(v.kind));
+  top.dataset.top = '1';
+  stage.appendChild(top);
+  if (!now) {
+    const acts = E('div', 'flc-acts');
+    const go = E('button', 'mb-btn go mb-press mb-tap', started || st.trail.length ? "I'M HERE" : 'START HERE');
+    go.type = 'button'; go.onclick = () => arrive(host, fid, st, o);
+    acts.appendChild(go);
+    if (started) { const bk = E('button', 'mb-btn mb-press mb-tap', 'BACK TO NOW'); bk.type = 'button'; bk.onclick = () => backNow(host, fid, st, o); acts.appendChild(bk); }
+    stage.appendChild(acts);
+  }
+  const row = E('div', 'flc-row');
+  const ways = all.filter(a => a.a === v.id && bs[a.b]);
+  if (!ways.length) row.appendChild(E('div', 'flc-say', 'Nothing comes after this block.'));
+  ways.forEach(w => {
+    const col = E('div', 'flc-col');
+    col.appendChild(E('span', 'flc-lab', X(w.label || gapWords(w.gap))));
+    const b = bs[w.b], m = E('button', 'flc-b flc-mid', X(b.name));
+    m.type = 'button'; m.style.setProperty('--k', kvar(b.kind)); m.style.setProperty('--ink', ink(b.kind));
+    m.onclick = () => travel(host, fid, st, o, [w.b], m);
+    col.appendChild(m);
+    const l2 = E('div', 'flc-l2'), next = all.filter(a => a.a === w.b && bs[a.b]);
+    next.slice(0, 3).forEach(n => {
+      const c = bs[n.b], s = E('button', 'flc-b flc-sm', X(c.name));
+      s.type = 'button'; s.style.setProperty('--k', kvar(c.kind)); s.style.setProperty('--ink', ink(c.kind)); s.title = c.name;
+      s.onclick = () => travel(host, fid, st, o, [w.b, n.b], s);
+      l2.appendChild(s);
+    });
+    if (next.length > 3) l2.appendChild(E('div', 'flc-more', '+' + (next.length - 3) + ' more'));
+    col.appendChild(l2);
+    row.appendChild(col);
+  });
+  row.addEventListener('scroll', () => wires(stage, svg, top, row, false), { passive: true });
+  stage.appendChild(row);
+  const draw = () => wires(stage, svg, top, row, !o.quiet);
+  if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(draw); else draw();
+  o.quiet = false;
+}
+
+/* right-angle wires: the top block down to each block in row two, and each
+   of those down to its first next block */
+function wires(stage, svg, top, row, grow) {
+  const o = stage.getBoundingClientRect();
+  if (!o.width) return;
+  const R2 = e => { const r = e.getBoundingClientRect(); return { x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height }; };
+  const t = R2(top), d = [];
+  /* below the I'M HERE row when it is showing, so no line runs between the buttons */
+  const acts = stage.querySelector('.flc-acts'), y0 = acts ? R2(acts).y + R2(acts).h : t.y + t.h;
+  row.querySelectorAll('.flc-mid').forEach(k => {
+    const r = R2(k), cx = r.x + r.w / 2;
+    if (r.x + r.w < 0 || r.x > o.width) return;
+    const lab = k.previousElementSibling, my = lab ? R2(lab).y - 6 : r.y - 12;
+    d.push('M' + (t.x + t.w / 2) + ',' + y0 + ' L' + (t.x + t.w / 2) + ',' + my + ' L' + cx + ',' + my + ' L' + cx + ',' + (r.y - 1));
+    const first = k.parentElement.querySelector('.flc-sm');
+    if (first) { const f = R2(first); d.push('M' + cx + ',' + (r.y + r.h) + ' L' + cx + ',' + (f.y - 1)); }
+  });
+  svg.innerHTML = d.map(p => '<path d="' + p + '"/>').join('');
+  if (!grow || still()) return;
+  svg.querySelectorAll('path').forEach((p, i) => {
+    const L = p.getTotalLength ? p.getTotalLength() : 0; if (!L) return;
+    p.style.strokeDasharray = L; p.style.strokeDashoffset = L;
+    p.animate([{ strokeDashoffset: L }, { strokeDashoffset: 0 }], { duration: 380, delay: 160 + i * 25, easing: 'cubic-bezier(.3,.7,.2,1)', fill: 'forwards' });
+  });
+}
+function rise(host) {
+  if (still()) return;
+  host.querySelectorAll('.flc-col').forEach((c, i) => c.animate([{ opacity: 0, transform: 'translateY(28px)' }, { opacity: 1, transform: 'none' }],
+    { duration: 360, delay: 180 + i * 60, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' }));
+  const a = host.querySelector('.flc-acts');
+  if (a) a.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, delay: 300, fill: 'backwards' });
+}
+/* The block clicked is lifted out and flown to the top slot, the old
+   picture lifts and fades, and what comes after rises in beneath. */
+function travel(host, fid, st, o, path, from) {
+  const pos = getComputedStyle(host).position;
+  if (pos === 'static') host.style.position = 'relative';
+  const hr = host.getBoundingClientRect(), f = from.getBoundingClientRect();
+  const ghost = from.cloneNode(true); ghost.classList.add('flc-ghost');
+  Object.assign(ghost.style, { left: (f.left - hr.left) + 'px', top: (f.top - hr.top) + 'px', width: f.width + 'px', height: f.height + 'px' });
+  const oldStage = host.querySelector('.flc-stage'), so = oldStage.getBoundingClientRect();
+  const old = oldStage.cloneNode(true); old.classList.add('flc-ghost');
+  Object.assign(old.style, { left: (so.left - hr.left) + 'px', top: (so.top - hr.top) + 'px', width: so.width + 'px' });
+  st.trail.push(st.view);
+  for (let i = 0; i < path.length - 1; i++) st.trail.push(path[i]);
+  st.view = path[path.length - 1];
+  paint(host, fid, st, o);
+  if (still()) return;
+  host.appendChild(old); host.appendChild(ghost);
+  const tb = host.querySelector('[data-top]'), t = tb.getBoundingClientRect();
+  tb.style.visibility = 'hidden';
+  old.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-24px) scale(.97)' }], { duration: 260, easing: 'ease-in', fill: 'forwards' }).onfinish = () => old.remove();
+  const end = () => { ghost.remove(); tb.style.visibility = ''; };
+  const an = ghost.animate([
+    { left: ghost.style.left, top: ghost.style.top, width: ghost.style.width, height: ghost.style.height },
+    { left: (t.left - hr.left) + 'px', top: (t.top - hr.top) + 'px', width: t.width + 'px', height: t.height + 'px' }
+  ], { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' });
+  an.onfinish = end;
+  setTimeout(end, 700);             /* a page not being drawn never finishes an animation */
+  rise(host);
+}
+/* travelling back: the small block clicked grows into the top slot */
+function back(host, fid, st, o, i, from) {
+  const f = from.getBoundingClientRect();
+  st.view = st.trail[i]; st.trail = st.trail.slice(0, i);
+  paint(host, fid, st, o);
+  if (still()) return;
+  const tb = host.querySelector('[data-top]'), t = tb.getBoundingClientRect();
+  tb.style.transformOrigin = '0 0';
+  tb.animate([
+    { transform: 'translate(' + (f.left - t.left) + 'px,' + (f.top - t.top) + 'px) scale(' + (f.width / t.width) + ',' + (f.height / t.height) + ')', opacity: .6 },
+    { transform: 'none', opacity: 1 }], { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  rise(host);
+}
+function backNow(host, fid, st, o) {
+  const i = st.trail.indexOf(st.now), c = host.querySelectorAll('.flc-crumb')[i];
+  if (i > -1 && c) return back(host, fid, st, o, i, c);
+  st.view = st.now; st.trail = []; paint(host, fid, st, o); rise(host);
+}
+/* I'M HERE: every block from where he is to where he looked is reached, in
+   order, each by the arrow between them. One undo takes them all back. */
+function arrive(host, fid, st, o) {
+  const path = st.trail.concat(st.view);
+  if (path[0] === st.now) path.shift();
+  const all = arrows(fid), t0 = Date.now(), undos = [];
+  let prev = st.now;
+  path.forEach((id, i) => {
+    const a = prev ? all.find(x => x.a === prev && x.b === id) : null;
+    const un = reach(fid, id, a ? a.id : null, t0 + i);
+    if (un) undos.push(un);
+    prev = id;
+  });
+  const b = box(fid, st.view);
+  delete CS[fid];
+  if (o.onPick) o.onPick();
+  card(host, o);
+  const tb = host.querySelector('[data-top]');
+  if (tb && !still()) tb.animate([{ filter: 'brightness(1.35)', transform: 'scale(1.03)' }, { filter: 'none', transform: 'none' }], { duration: 600, easing: 'ease-out' });
+  rise(host);
+  if (undos.length && g.UI && g.UI.undo) g.UI.undo('At ' + X(b ? b.name : ''), () => { undos.reverse().forEach(u => u()); delete CS[fid]; card(host, o); if (o.onPick) o.onPick(); });
+}
+
 g.Flow = {
-  VERSION: '0.1.0', KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
+  VERSION: '0.2.0', card: card, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
   list: list, get: get, boxes: boxes, arrows: arrows, box: box, arrow: arrow, outOf: outOf,
   make: make, patchFlow: patchFlow, delFlow: delFlow,
   addBox: addBox, patchBox: patchBox, delBox: delBox,

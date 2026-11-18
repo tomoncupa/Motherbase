@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.138, 2026-11-18">
+<meta name="mb-version" content="1.0.139, 2026-11-18">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -1147,6 +1147,7 @@ const APPS = [
   { id: 'quest',  nm: 'QUESTS', ic: '◆', file: 'quest/index.html',  ds: 'todos, when they are due, and projects', shares: 'the journal todos', phone: 1 },
   { id: 'train',  nm: 'TRAIN',  ic: '⛭', file: 'train/index.html',  ds: 'the training log — sets, reps, records',     shares: 'the training log + ticks', phone: 1 },
   { id: 'checkin', nm: 'CHECK IN', ic: '◎', file: 'checkin/index.html', ds: 'photos, weight and how the week went', shares: 'weight, with STATUS', phone: 1 },
+  { id: 'flow',   nm: 'FLOW',   ic: '◇', file: 'flow/index.html',   ds: 'BLOCK’s flow on the phone, today’s notes and bullets', shares: 'the flow walk, notes and bullets', phone: 1 },
   { id: 'kitchen', nm: 'KITCHEN', ic: '▥', file: 'kitchen/index.html', ds: 'what is on the shelf, the week of meals, and what is short', shares: 'foods, meals and purchases', phone: 1 },
   { id: 'style',  nm: 'STYLE',  ic: '◧', file: 'style/index.html',  ds: 'pick, compare, edit and add themes',         shares: 'the themes every app wears' },
   { id: 'arc',    nm: 'ARC',    ic: '◇', file: 'arc/index.html',    ds: 'mind canvas — think, map, plan',            solo: 1, mine: 1 },
@@ -4849,56 +4850,23 @@ const WIDGETS = {
   /* ── FLOW: BLOCK's day planned as branches (Tom, 2026-11-17). Every rule is
      shared/flow.js, the same file BLOCK's Flow tab and STATUS's widget follow. */
   flow: {
-    nm: 'FLOW', w: 4, h: 4, app: 'block', to: ['block', 'flow'],
-    fid() {
-      if (!window.Flow) return null;
-      const o = Rec.setting('block', 'flowOpen') || {}, all = Flow.list();
-      return (all.find(f => f.id === o.fid) || all[0] || {}).id || null;
-    },
+    nm: 'FLOW', w: 4, h: 5, app: 'block', to: ['block', 'flow'],
+    fid() { return window.Flow ? Flow.openFlow() : null; },
     sub: () => {
       const id = WIDGETS.flow.fid(); if (!id) return 'none set up';
       const h = Flow.here(id);
       return h && h.box ? 'at ' + h.box.name : 'not started';
     },
+    /* the travel card (shared/flow.js, Flow.card): where he is on top, the
+       next two levels below, travel down to look, I'M HERE to log (Tom,
+       2026-11-18). The FLOW phone app draws the same card. */
     draw(body) {
-      const id = WIDGETS.flow.fid();
-      if (!id) {
-        const e = el('div', 'empty rhempty', 'No flows.');
+      if (!window.Flow) { body.appendChild(el('div', 'empty', 'The flow file did not load.')); return; }
+      Flow.card(body, { quiet: true, empty: host => {
         const add = el('button', 'mb-btn go mb-press mb-tap', 'MAKE ONE');
         add.onclick = ev => { ev.stopPropagation(); goTo(['block', 'flow']); };
-        e.appendChild(add); body.appendChild(e); return;
-      }
-      const h = Flow.here(id), kv = k => 'var(' + ((Flow.KINDS[k] || {}).token || '--line') + ')';
-      const take = (b, a) => {
-        const un = Flow.reach(id, b.id, a ? a.id : null);
-        drawHome();
-        if (un && window.UI) UI.undo((b.kind === 'g' ? 'Ticked ' : 'At ') + esc(b.name), () => { un(); drawHome(); });
-      };
-      const way = (b, words, right, sug, fn) => {
-        const r = el('button', 'flway' + (sug ? ' sug' : ''), '<i style="--k:' + kv(b.kind) + '"></i>' + esc(b.name) +
-          (words ? ' <span class="l">' + esc(words) + '</span>' : '') + (sug ? ' <span class="s">' + sug + '</span>' : '') + (right ? '<span class="r">' + right + '</span>' : ''));
-        r.type = 'button';
-        r.onclick = ev => { ev.stopPropagation(); fn(); };
-        return r;
-      };
-      const list = el('div', 'rowlist');
-      if (!h || !h.box) {
-        const st = h && h.start;
-        const top = el('div', 'flnow', '<span class="k">' + (h && h.walk && h.walk.over ? 'Reached the end' : 'Not started') + '</span>');
-        body.appendChild(top);
-        if (st) list.appendChild(way(st, 'Start here', st.at ? Flow.clock(Date.parse(LifeOS.day() + 'T' + st.at)) : '', '', () => take(st, null)));
-        body.appendChild(list);
-        return;
-      }
-      body.appendChild(el('div', 'flnow', '<span class="k">You are at</span><b>' + esc(h.box.name) + '</b>'));
-      const sug = Flow.suggest(id), times = Flow.times(id);
-      h.ways.forEach(w => {
-        const words = w.label || (w.gap != null ? (w.gap === 0 ? 'Immediately' : w.gap + ' min') : '');
-        const isSug = sug && sug.arrow.id === w.id;
-        list.appendChild(way(w.to, words, times[w.b] ? Flow.clock(times[w.b]) : '', isSug ? 'Slept ' + Flow.hours(sug.hours) : '', () => take(w.to, w)));
-      });
-      if (!h.ways.length) list.appendChild(el('div', 'empty', 'No way out of this box.'));
-      body.appendChild(list);
+        host.appendChild(add);
+      } });
     },
   },
 
@@ -8650,7 +8618,7 @@ const ABOUT = {
   projects: 'Open todos for each project.',
   brief: 'The morning brief from your PC, and its todos.',
   rhythms: 'BLOCK’s Every blocks and Habits: owed, due, coming up and this period’s count, tickable.',
-  flow: 'Where you are in a BLOCK flow, and one tap for each way out.',
+  flow: 'Where you are in a BLOCK flow, the next two levels below, travel down to look and I’M HERE to log it.',
   measure: 'Any measure you track in STATUS, charted.',
   halflife: 'How much of a dose you write in STATUS is still in you, by its half-life.',
   toweigh: 'Today’s ELEMENT doses: AM powders you can change and tick, and the night drink worked out from your food.',

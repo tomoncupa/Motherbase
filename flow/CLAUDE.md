@@ -1,0 +1,41 @@
+# FLOW (CLAUDE.md)
+
+Governs `flow/` only. The repo-root `CLAUDE.md` and `DOCTRINE.md` still apply
+and win any disagreement.
+
+## What it is
+
+BLOCK's flow, followed from the phone. Tom, 2026-11-18: "a widget on the home
+screen, as well as a way to answer block", "This can also be a phone app, a
+phone web app, and then put a field where we can put notes for the day and
+bullets as well." Nothing to do with STATUS's desktop widget.
+
+- **A phone app**, on the home screen's roster with `phone: 1`, so it is in
+  the phone bar, the APPS card and LINKS. Built to the phone rules: 44px
+  targets, safe areas, the shared sheet and menus. Clients get it
+  (`COPY_DIRS`), with BLOCK.
+- **The card is `Flow.card`** in `shared/flow.js`, the same one HOME's FLOW
+  card draws: where he is on top (gold ring), the next two levels below
+  (each way out with its arrow words, then up to three blocks after each),
+  a row of small blocks for where he travelled from. Clicking a block
+  travels: it flies to the top, the old view lifts away, the next levels
+  rise in and the lines draw. Travelling only looks; I'M HERE reaches every
+  block on the way, each by its arrow (ticks, STATUS entries, one Undo);
+  BACK TO NOW returns. Not started: START HERE on the start box.
+- **Which flow:** its own `flow.fid` setting when picked from the name
+  button (shown only with two or more flows), else the one BLOCK has open.
+- **Notes for today** is STATUS's `day` row, `note` (the words LOG shows as
+  the day's summary), merged with `Rec.patch` 600ms after typing stops and
+  on blur; a box being typed in is never redrawn.
+- **Bullets** go through `Journal.add`, Entry by default, Enter saves, like
+  BULLET. Today's last eight lines, newest first, read only.
+- It owns no type. The flow itself is drawn and edited in BLOCK's Flow tab.
+
+## Built and watched
+
+1.0.0, 2026-11-18. Driven in headless Chromium at 390 x 844 with touch on
+the 2020 chart: travelled Brush Teeth then Weigh in, I'M HERE logged both
+with their arrows and ticks, a note typed reached the `day` row, a bullet
+typed with Enter landed at the top of the list; nothing under 12px, no
+sideways scroll. The icon (`APP_ART.flow`, a box and its two ways out) is
+the build session's pick, not Tom's yet. Not seen on his iPhone.

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<meta name="mb-version" content="1.0.0, 2026-11-18">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FLOW">
+<title>FLOW</title>
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#0B0E14">
+<link rel="manifest" href="manifest.json">
+<link href="../shared/fonts/fonts.css" rel="stylesheet">
+
+<!-- FLOW: BLOCK's flow, followed from the phone. Tom, 2026-11-18: "a widget
+     on the home screen, as well as a way to answer block", "This can also be
+     a phone app, a phone web app, and then put a field where we can put notes
+     for the day and bullets as well." The card is shared/flow.js's
+     Flow.card, the same one the home screen's FLOW card draws; the flow
+     itself is drawn and edited in BLOCK's Flow tab on the PC. -->
+<script src="../shared/skins.js"></script>
+<script src="../shared/boot.js"></script>
+<script src="../shared/day.js"></script>
+<script src="../shared/records.js"></script>
+<script src="../shared/journal.js"></script>
+<script src="../shared/flow.js"></script>
+<script src="../shared/mobile.js"></script>
+<script src="../shared/sound.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="../shared/io.js"></script>
+<script src="../shared/icons.js"></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--text-1);
+  font-family:var(--font-body);font-size:var(--f-3);font-weight:var(--w-body);
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;
+}
+header{
+  flex:0 0 auto;display:flex;align-items:center;gap:var(--s-2);
+  padding:calc(var(--s-3) + var(--safe-t)) var(--s-4) var(--s-3);
+  background:var(--surface-1);box-shadow:var(--e-1),var(--rim);
+}
+.logo{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-5);letter-spacing:.18em}
+.logo b{color:var(--accent)}
+.spacer{flex:1}
+main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-6) + var(--safe-b))}
+.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:var(--s-3)}
+.card{border-radius:var(--radius-lg);background:var(--surface-1);padding:var(--s-4);
+  box-shadow:var(--e-1),var(--rim);display:flex;flex-direction:column;gap:var(--s-3);min-width:0}
+.ch{display:flex;align-items:center;gap:var(--s-2)}
+h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
+  letter-spacing:var(--track-cap);color:var(--text-muted)}
+.ch .mut{font-size:var(--f-1);color:var(--text-muted)}
+textarea{width:100%;min-width:0;padding:var(--s-3);border:1px solid var(--border);
+  border-radius:var(--radius-md);background:var(--surface-2);color:var(--text-1);
+  font:inherit;font-size:var(--f-3);line-height:var(--lh-body);resize:none}
+textarea:focus{outline:none;border-color:var(--accent)}
+.say{font-size:var(--f-1);color:var(--text-muted);line-height:var(--lh-body)}
+.list{display:flex;flex-direction:column}
+.line{display:flex;align-items:flex-start;gap:var(--s-2);padding:var(--s-2) 0;border-top:1px solid var(--border)}
+.line:first-child{border-top:0}
+#add{width:100%}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">FL<b>OW</b></div>
+  <div class="spacer"></div>
+  <button class="mb-btn mb-press mb-tap" onclick="openSettings()">SETTINGS</button>
+</header>
+<main class="mb-scroll"><div class="wrap" id="main"></div></main>
+
+<script>
+const APP = {
+  id: 'flow',
+  name: 'Flow',
+  icon: '·',
+  blurb: 'BLOCK’s flow on the phone, with today’s notes and bullets',
+  /* It owns no type. A pick is shared/flow.js's `fwalk` (BLOCK's), a note is
+     STATUS's `day` row, a bullet goes through Journal.add like BULLET's. */
+  types: [],
+};
+Skins.load('../shared/skins.json').then(() => {
+  Skins.restore(APP.id);
+  if (window.Icons) Icons.paint(null, { force: true });
+  paintCard();
+});
+if (window.Icons) Icons.paint();
+Sfx.init(APP.id);
+Rec.declare(APP.id, APP.types);
+IO.register({ app: APP.id, name: 'FLOW', types: ['fwalk', 'day', 'note'],
+  reads: { block: ['flow', 'fbox', 'farrow', 'fwalk', 'setting'], status: ['note', 'day', 'ev'] } });
+
+const esc = UI.esc;
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+let cardBox = null, flowName = null, noteTa = null, noteDay = '', noteT = null, ta = null, listBox = null, syncNote = null, kind = 'entry';
+
+/* which flow: the one picked here, else the one BLOCK has open */
+function fid() {
+  const own = Rec.setting(APP.id, 'fid'), all = Flow.list();
+  return (all.find(f => f.id === own) || {}).id || Flow.openFlow();
+}
+
+function build() {
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+  syncNote = el('div', 'say');
+  main.appendChild(syncNote);
+
+  /* the flow: where you are on top, the next two levels below */
+  const c1 = el('div', 'card');
+  const h1 = el('div', 'ch');
+  flowName = el('button', 'mb-btn mb-press mb-tap', 'FLOW');
+  flowName.type = 'button';
+  flowName.onclick = pickFlow;
+  h1.appendChild(flowName);
+  c1.appendChild(h1);
+  cardBox = el('div');
+  c1.appendChild(cardBox);
+  main.appendChild(c1);
+
+  /* notes for the day: STATUS's day note, the same words LOG shows */
+  const c2 = el('div', 'card');
+  const h2 = el('div', 'ch');
+  h2.appendChild(el('h2', null, 'NOTES FOR TODAY'));
+  c2.appendChild(h2);
+  noteTa = document.createElement('textarea');
+  noteTa.rows = 4; noteTa.placeholder = 'How today is going';
+  noteTa.setAttribute('autocapitalize', 'sentences');
+  noteTa.setAttribute('aria-label', 'Notes for today');
+  noteTa.oninput = () => { clearTimeout(noteT); noteT = setTimeout(saveNote, 600); };
+  noteTa.onblur = saveNote;
+  c2.appendChild(noteTa);
+  main.appendChild(c2);
+
+  /* a bullet, written the way BULLET and STATUS write one */
+  const c3 = el('div', 'card');
+  c3.appendChild(el('h2', null, 'BULLET'));
+  c3.appendChild(UI.segmented(Journal.KINDS.map(k => ({ id: k.id, name: k.label })), kind, v => { kind = v; }));
+  ta = document.createElement('textarea');
+  ta.rows = 2; ta.placeholder = 'Write a bullet';
+  ta.setAttribute('autocapitalize', 'sentences');
+  ta.setAttribute('enterkeyhint', 'done');
+  ta.onkeydown = e => {
+    if (e.key !== 'Enter' || e.shiftKey || e.altKey || e.isComposing || e.keyCode === 229) return;
+    e.preventDefault(); saveBullet();
+  };
+  c3.appendChild(ta);
+  const add = el('button', 'mb-btn go mb-press mb-tap', 'ADD');
+  add.id = 'add'; add.type = 'button'; add.onclick = saveBullet;
+  c3.appendChild(add);
+  listBox = el('div', 'list');
+  c3.appendChild(listBox);
+  main.appendChild(c3);
+
+  paintCard(); paintNote(); paintList(); paintSync();
+}
+
+function paintCard() {
+  if (!cardBox || !window.Flow) return;
+  const id = fid(), f = id && Flow.get(id), n = Flow.list().length;
+  flowName.textContent = f ? f.name.toUpperCase() : 'FLOW';
+  flowName.style.display = n > 1 ? '' : 'none';
+  Flow.card(cardBox, { fid: id, quiet: true, onPick: () => { Mobile.feedback('success'); setTimeout(paintList, 50); },
+    empty: host => host.appendChild(el('div', 'say', 'Draw a flow in BLOCK’s Flow tab on the PC, and it follows you here.')) });
+}
+function pickFlow() {
+  const cur = fid(), r = flowName.getBoundingClientRect();
+  UI.menu(r.left, r.bottom, Flow.list().map(f => ({ label: f.name, check: f.id === cur,
+    fn: () => { Rec.setting(APP.id, 'fid', f.id); paintCard(); } })), { title: 'Which flow' });
+}
+
+/* ── notes for the day ──
+   One `day` row per day, `note` its words: STATUS names the shape and LOG
+   shows it as the day's summary. Merged in, so `rest` and anything else on
+   the row stay. A box being typed in is never redrawn under the thumb. */
+function paintNote() {
+  if (!noteTa || document.activeElement === noteTa) return;
+  noteDay = Day.today();
+  noteTa.value = (Rec.get('day', noteDay, '') || {}).note || '';
+}
+function saveNote() {
+  clearTimeout(noteT);
+  if (!noteTa) return;
+  const d = noteDay || Day.today(), v = noteTa.value;
+  const had = (Rec.get('day', d, '') || {}).note || '';
+  if (v === had) return;
+  Rec.patch('day', d, '', { note: v });
+}
+
+function saveBullet() {
+  const text = ta.value.trim();
+  if (!text) { UI.toast('Nothing to save', { bad: true }); UI.focusSoon(ta, true); return; }
+  Journal.add(Day.today(), kind, text, {}, APP.id);
+  ta.value = '';
+  paintList();
+  Mobile.feedback('success');
+  UI.focusSoon(ta, true);
+}
+/* today's lines, newest first, so a save is something you see land */
+function paintList() {
+  if (!listBox) return;
+  listBox.innerHTML = '';
+  const d = Day.today();
+  const rows = Rec.all('note', { date: d }).filter(r => r.payload)
+    .sort((a, b) => (b.payload.t || 0) - (a.payload.t || 0)).slice(0, 8);
+  if (!rows.length) { listBox.appendChild(el('div', 'say', 'Nothing written today yet.')); return; }
+  rows.forEach(r => {
+    const x = Object.assign({ key: r.key, date: r.date }, r.payload);
+    const row = el('div', 'line mb-bullet' + (x.done ? ' done' : '') + (x.cancelled ? ' cancelled' : ''));
+    row.innerHTML = '<span class="k">' + Journal.markHTML(x.kind, false) + '</span><span class="tx">' + Journal.textHTML(x, d) + '</span>';
+    listBox.appendChild(row);
+  });
+}
+
+/* signed out, a pick, a note and a bullet stay on this phone: say so */
+function paintSync() {
+  if (!syncNote) return;
+  const C = window.Cloud, s = C && C.state ? C.state() : null;
+  const show = !!(s && s.has && !s.file && (!s.on || s.out));
+  syncNote.style.display = show ? '' : 'none';
+  syncNote.textContent = show ? 'Saved on this phone only. Sign in once under SETTINGS, DATA, LIVE SYNC, and it reaches BLOCK and STATUS everywhere.' : '';
+}
+let cloudHooked = false;
+function hookCloud() {
+  if (!cloudHooked && window.Cloud && Cloud.on) { cloudHooked = true; Cloud.on(paintSync); }
+  paintSync();
+}
+setTimeout(hookCloud, 800);
+setTimeout(hookCloud, 3000);
+
+function openSettings() {
+  UI.settings(APP.id, [
+    { id: 'flow', name: 'FLOW', draw: pane => {
+      pane.appendChild(el('div', 'say', 'Boxes, arrows and the floor are drawn in BLOCK’s Flow tab on the PC. This page follows them.'));
+    } },
+  ]);
+}
+
+build();
+Rec.ready(() => { paintCard(); paintNote(); paintList(); });
+let soonT = null;
+Rec.on(() => { clearTimeout(soonT); soonT = setTimeout(() => { paintCard(); paintNote(); paintList(); }, 150); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { paintCard(); paintNote(); paintList(); } });
+</script>
+</body>
+</html>

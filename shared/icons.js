@@ -239,6 +239,7 @@ const ROLES = {
   'app.sheet': 'trophy',
   'app.bullet': 'pencil',
   'app.kitchen': 'bowl',
+  'app.flow': 'nodes',
   quest: 'flag', flag: 'flag',
   pose: 'pose', physique: 'pose', checkin: 'pose',
   compare: 'frames', frames: 'frames',
@@ -329,6 +330,10 @@ const APP_ART = {
   /* KITCHEN, 2026-09-28: a lidded pot on the shelf, for what is kept and
      what gets cooked from it. Picked by the build session, not by Tom yet. */
   kitchen: { c: WHT, g: '<path class="f" d="M5.5 9v8.5a2.5 2.5 0 0 0 2.5 2.5h8a2.5 2.5 0 0 0 2.5-2.5V9"/><path class="h" d="M6 9a6 3 0 0 1 12 0z"/><circle class="s n" cx="12" cy="4.6" r="1.1"/><path d="M4 9h16M5.5 12H3M18.5 12H21M1.5 20h21"/>' },
+  /* FLOW, 2026-11-18: a box on top and the two ways out of it, joined by
+     right-angle lines, as his 2020 chart and the travel card draw them.
+     Picked by the build session, not by Tom yet. */
+  flow:    { c: GOLD, g: '<rect class="f" x="8" y="2.5" width="8" height="5.5" rx="1"/><path d="M12 8v3.5M5.75 11.5h12.5M5.75 11.5V15M18.25 11.5V15"/><rect class="h" x="2" y="15" width="7.5" height="5.5" rx="1"/><rect x="14.5" y="15" width="7.5" height="5.5" rx="1"/>' },
   system:  { c: GOLD, big: 1, g: '<path class="f" d="M4.5 1.5h15l3 3v15l-3 3h-15l-3-3v-15z"/><path d="M1.5 6.5h21"/><circle class="s n" cx="4.5" cy="4" r=".8"/><path class="s n" d="M11.35 9.5h1.3l-.3 7.5h-.7z"/><circle class="s n" cx="12" cy="19.3" r=".85"/>' },
 };
 /* the marks, turned into attributes, so a picture file with no stylesheet

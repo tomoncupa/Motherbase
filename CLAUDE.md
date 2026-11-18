@@ -141,7 +141,7 @@ _template/         the starter app to copy
 <app>/index.html   one app per folder; <app>/CLAUDE.md is that app's brief
 ```
 
-**Phone or desktop:** `train/` and `bullet/` are phone apps; BULLET is never opened on a PC (Tom, 2026-10-02). `status/`, `quest/`, `checkin/`, `system/`, `speak/` and `kitchen/` are for
+**Phone or desktop:** `train/`, `bullet/` and `flow/` are phone apps; BULLET is never opened on a PC (Tom, 2026-10-02). `status/`, `quest/`, `checkin/`, `system/`, `speak/` and `kitchen/` are for
 everywhere. Every other app, including the home screen and `wealth/`, is a
 desktop app. See hard constraint 10. What each one is for, in Tom's words, is
 the table at the top of "The apps" in `DOCTRINE.md`.
@@ -1158,6 +1158,7 @@ own brief since 2026-09-22.
 | `coach/` | COACH, Tom's clients in a PC box. Tom only. Brief: `coach/CLAUDE.md`. |
 | `forge/` | FORGE, the program builder. Weeks of days of exercises, sent through COACH to TRAIN. Tom only, desktop only. Brief: `forge/CLAUDE.md`. |
 | `receipts/` | RECEIPTS, a receipt photo turned into rows. Tom only. Brief: `receipts/CLAUDE.md`. |
+| `flow/` | FLOW, BLOCK's flow on the phone: the travel card (`Flow.card`), today's notes and bullets. Phone, client build. Brief: `flow/CLAUDE.md`. |
 | `bullet/` | BULLET, one screen that writes a bullet. An address on no roster or dock, found from STATUS, Settings, BULLETS. Client build. Brief: `bullet/CLAUDE.md`. |
 | `sheet/` | CHARACTER SHEET. Feats from TRAIN and STATUS as NOTICE windows, with a history; the pixel character is paused. Held out of the client build for now. Brief: `sheet/CLAUDE.md`. |
 | `kitchen/` | KITCHEN, the shelf, the week of meals and targets and gaps. Client build. Brief: `kitchen/CLAUDE.md`. |
