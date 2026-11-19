@@ -54,10 +54,23 @@ press Publish:
           ".validate": "newData.hasChildren(['kind','at','data']) && newData.child('data').isString() && newData.child('data').val().length < 2000000"
         }
       }
+    },
+    "phone": {
+      "$code": {
+        ".read": "auth != null && root.child('u').child(auth.uid).child('phone').val() === $code",
+        ".write": "$code.length >= 20",
+        "$item": {
+          ".validate": "newData.hasChildren(['k','v']) && newData.child('k').isString() && newData.child('k').val().length < 20 && ((newData.child('v').isString() && newData.child('v').val().length < 20000) || newData.child('v').isNumber())"
+        }
+      }
     }
   }
 }
 ```
+
+The `phone` half (2026-11-16) is YOUR IPHONE, below: an inbox your iPhone's
+Shortcut posts into with no sign-in. Anyone holding the code may add to it,
+only the account that keeps that same code at `u/<uid>/phone` may read it.
 
 Your rows sit under your own account and nobody else can read or write them.
 The `indexOn` line is what makes "what changed since last time" fast instead of
@@ -139,6 +152,61 @@ as it lands. Rows live in the store, the way everything else does.
 **Photos still do not travel this way.** A check-in is not sent over the shelf
 yet, only a training log; the parcel cap and the reasons under "What it does
 not do" are both why.
+
+---
+
+## Your iPhone
+
+Tom, 2026-11-16: steps, location, screen time, "as automatic and as low
+friction as possible", for him first and then for clients.
+
+**What a phone can give, and what it cannot.** A web page cannot read any of
+it. An iPhone Shortcut can read Apple Health (steps, sleep) and where the
+phone is, and can note when a chosen app opens and closes, which stands in
+for screen time in those apps. Apple's own Screen Time and Safari history
+cannot leave the phone by any route without a Mac.
+
+**How it travels.** Settings, DATA, LIVE SYNC, YOUR IPHONE, Connect your
+iPhone makes a private code (kept at `u/<uid>/phone`) and shows it. The
+Shortcut posts `{"k": ..., "v": ...}` to
+`<databaseURL>/phone/<code>.json`, one plain web request, no sign-in.
+`shared/phone.js`, in any signed-in page, claims each parcel and turns it
+into rows: steps and sleep as STATUS readings (`ev`, marked `src: 'phone'`),
+a place as a `pplace` row, an app's open spans as a `papp` row.
+
+**Building the Shortcut, once** (Claude cannot: a Shortcut file must be signed
+on a Mac). In the Shortcuts app, a new Shortcut named Motherbase Phone:
+
+1. **Text**: paste your code. Rename its result Code.
+2. **Find Health Samples**: Type Steps, Start Date is in the last 7 days,
+   Group By Day, Sort by Start Date.
+3. **Repeat with Each** over those samples, and inside it a **Text** of
+   Repeat Item's Start Date (Custom format `yyyy-MM-dd`), a space, then
+   Repeat Item's Value.
+4. **Combine Text**: Repeat Results, with New Lines.
+5. **Get Contents of URL**: the database address above followed by
+   `/phone/`, the Code, then `.json`. Method POST, Request Body JSON, two Text
+   fields: `k` = `steps`, `v` = the Combined Text.
+6. Optional, where you are: **Get Current Location**, then a **Text** of its
+   Latitude, a comma, its Longitude, then a second Get Contents of URL with
+   `k` = `place` and `v` = that Text.
+
+Then **Automation**, +, **Charger**, Is Connected, this Shortcut, **Run
+Immediately**, Notify When Run off. Every time the phone goes on charge, the
+week's steps come in.
+
+Time in an app (optional, two automations per app): **App**, pick Instagram,
+Is Opened, Run Immediately, one **Get Contents of URL** with `k` = `app`,
+`v` = `Instagram open`. The same with Is Closed and `Instagram close`.
+
+To hand it to clients, share the Shortcut as an iCloud link, turn the Text
+in step 1 into an import question, and put the link in `SHORTCUT` at the
+top of the YOUR IPHONE part of `shared/phone.js`.
+
+**Not watched yet:** any of it on the iPhone, and the claim against the real
+database (the smoke checks drive the reader without one). Health data is
+locked while the phone is locked, so a run with the screen off may send
+nothing until the next charge.
 
 ---
 

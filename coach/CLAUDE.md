@@ -432,3 +432,26 @@ client, and Tom's own `set`, `exercise` and `tick` counts did not move.
 ## A suggestion is not a session (1.0.29, 2026-10-23)
 
 - TRAIN 1.0.78 made every suggestion a ghost (`plan`, never logged until ticked or UPDATEd). COACH read every `cset` with no regard for `plan`, so Next or Copy on a 1:1 left untouched showed in the week, RECENT SESSIONS, STRENGTH and the range, and billed a WEALTH `sesh`. `setsOf` and `countSession` now skip a set by TRAIN's rule (`setCounts`). Watched on the demo: Copy Previous Sets in Mika's TRAIN frame showed ghosts (55.0, 6), COACH counted 0 sets, 1 after one tick; a ghost cset on Lia (billed per session) billed nothing until ticked. One real 1:1 held 15 such sets on 2026-10-07, a copied day matching 10-06 with no session billed; they stop counting.
+
+## Assisted lifts, the right way up (1.0.30, 2026-11-16)
+
+- TRAIN 1.0.83's rule, read the same here: an exercise is assisted when its
+  name says "assist" unless `cex.assist` is 1 or 0, and its weight is help.
+  `loadOf` is what the body moved: the client's CHECK IN weight (`cval`
+  `<pid>|weight`, their unit) minus the help, null with no weigh-in. The
+  week's volume, RECENT SESSIONS' volume, STRENGTH (`blockLifts`, `liftsOf`)
+  and the range (`rangeSets`) read it, so with no weigh-in an assisted lift
+  is out of volume and strength. Record marks are TRAIN's `pr` flag, which
+  TRAIN recomputes the right way up the first time that client's TRAIN
+  opens on 1.0.83 (`prRule` 4); until then an old flag can sit on the
+  wrong set. Watched on a made-up client: no weigh-in, the day's volume was
+  the bench only; with 180 lb it was (180-70)x13 plus the bench.
+
+## Weight below zero (1.0.31, 2026-11-16)
+
+- TRAIN 1.0.85's rule: a client's lift with any set below zero is read
+  against bodyweight (`exOf` marks it `below`, `goesBelow`), so its load is
+  their weight plus the number, null with no weigh-in, in volume, strength
+  and the range. A set below zero shows as `-9×8`. Typing a negative weight
+  in COACH's set boxes is allowed (`toKg`). Records are still TRAIN's own
+  `pr` flag. [TESTED only through TRAIN's click test and the review.]

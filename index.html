@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.88, 2026-10-27">
+<meta name="mb-version" content="1.0.139, 2026-11-18">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -13,7 +13,21 @@
    and goes home. Only under the home screen: _review.html frames this page
    too, and it has no stayIn. */
 try { if (window.frameElement && typeof parent.stayIn === 'function') location.replace('about:blank'); } catch (e) {}
+/* ?widget=<type>: ONE widget, filling the page, nothing else on it, for
+   ROOM's wallpaper (OUTER HEAVEN) to frame (2026-11-17). Set before the
+   first paint so no header flashes. drawHome reads WMODE. */
+if (/[?&]widget=/.test(location.search)) document.documentElement.classList.add('wmode');
 </script>
+<style>
+html.wmode, html.wmode body { background: transparent !important; overflow: hidden; }
+html.wmode #wrap > *, html.wmode #grid > .w { visibility: hidden; }
+html.wmode #wrap > main, html.wmode #wrap > main > #home { visibility: visible; background: transparent; }
+html.wmode #grid > .w.wone { visibility: visible; position: fixed !important; inset: 0 !important; width: auto !important; height: auto !important;
+  margin: 0 !important; grid-area: auto !important; transform: none !important; z-index: 5; }
+html.wmode #grid > .w.wone .w-head { pointer-events: none; }
+html.wmode #grid > .w.wone .w-head .x, html.wmode #grid > .w.wone .w-head .wdots, html.wmode #grid > .w.wone .w-head .mv { display: none; }
+html.wmode #cardframes, html.wmode #over:empty { display: none; }
+</style>
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -35,8 +49,16 @@ try { if (window.frameElement && typeof parent.stayIn === 'function') location.r
 <script src="shared/day.js"></script>
 <script src="shared/records.js"></script>
 <script src="shared/journal.js"></script>
+<script src="shared/dose.js"></script>
+<script src="shared/grade.js"></script>
+<script src="shared/chapter.js"></script>
+<script src="shared/flow.js"></script>
+<script src="shared/e1rm.js"></script>
+<script src="shared/goals.js"></script>
 <script src="shared/measure.js"></script>
 <script src="shared/chart.js"></script>
+<script src="shared/muscles.js"></script>
+<script src="shared/muscle-key.js"></script>
 <script src="shared/mobile.js"></script>
 <script src="shared/sound.js"></script>
 <script src="shared/ui.js"></script>
@@ -358,8 +380,6 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
    so, and the chart takes what is left rather than taking what it likes. */
 .w-body{flex:1;padding:0 var(--s-3) var(--s-3);min-height:0;overflow:visible;
   display:flex;flex-direction:column;gap:var(--s-2)}
-/* a card that sizes to its contents stops at the window and scrolls inside */
-.w.capped .w-body{overflow:auto}
 /* the zoom level, shown while Ctrl+scroll changes it, gone on the redraw */
 .ztag{position:absolute;top:var(--s-2);right:var(--s-2);z-index:2;pointer-events:none;
   padding:var(--s-1) var(--s-2);border-radius:var(--radius-sm,6px);background:var(--surface-3);
@@ -372,8 +392,10 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
    whole (`sz-cut`, from cutCards) rather than cut in half or scrolled.
    Medium: a chart may be a shorter strip. Large is the widget as built. */
 @media(min-width:821px){
-  #grid > .w[data-sz=s] .w-head{padding:var(--s-2) var(--s-3) var(--s-1)}
-  #grid > .w[data-sz=s] .w-head .sub{display:none}
+  /* the title bar is never zoomed, so it goes by the card's real size
+     (`data-hs`), not the zoomed one: zoomed in, a card kept its answer line */
+  #grid > .w[data-hs=s] .w-head{padding:var(--s-2) var(--s-3) var(--s-1)}
+  #grid > .w[data-hs=s] .w-head .sub{display:none}
   #grid > .w[data-sz=s] .w-body{overflow:hidden;gap:var(--s-1);padding-bottom:var(--s-2);container-type:size}
   #grid > .w[data-sz=s] .w-body > .fits{min-height:0}
   /* a card too short for its title shows only its answer; REARRANGE
@@ -383,12 +405,15 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
   #grid > .w[data-sz=s] .ckbig{font-size:min(var(--f-8),70cqh);line-height:1}
   #grid > .w[data-sz=m] .w-body > .fits{min-height:var(--s-7,48px)}
   #grid > .w .sz-cut{display:none !important}
+  #grid > .w .sz-wrap{white-space:normal !important;text-overflow:clip !important}
 }
 /* A chart takes the room that is left, but never less than a readable strip:
    with the answer on top of it, a small widget left it no room at all. */
 .w-body > .fits{flex:1 1 auto;min-height:var(--s-9,96px)}
 .w-body > .fits > svg{width:100%;height:100%;display:block}
-@media (hover:hover) and (pointer:fine){ .w-body{overflow:auto} }
+/* no scrolling inside a card on the desk (Tom, 2026-11-16): it was auto
+   with a mouse. What does not fit is left off whole by cutCards. */
+@media(min-width:821px){ #grid > .w > .w-body:not(.appslot){overflow:hidden} }
 /* BODY HEATMAP's two figures: one above the other, or side by side,
    whichever draws them bigger in the box. Standing and Double biceps are
    tall and narrow, so they go side by side much sooner than Vitruvian. A
@@ -410,6 +435,8 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .bh-pair.bh-p-vitruvian .bh-sv{width:22%;align-self:center}
 .row .bh-dot{flex:0 0 auto;width:var(--s-2);height:var(--s-2);border-radius:var(--radius-full,999px)}
 .row.bh-row{flex-wrap:wrap;row-gap:0}
+.bh-zero{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.06em;color:var(--dim);padding:0 var(--s-1) var(--s-2);line-height:var(--lh-tight)}
+.bh-zero b{color:var(--txt);font-weight:inherit;letter-spacing:.14em;margin-right:var(--s-1)}
 .row .bh-rec{margin-left:auto;display:inline-flex;align-items:center;justify-content:flex-end;min-width:5ch;gap:var(--s-1);
   font-family:var(--f1);font-size:var(--f-1);letter-spacing:.06em;color:var(--dim2)}
 @media (min-width:821px){
@@ -461,8 +488,46 @@ body.dragging #cardframes{z-index:0}
 .empty .link::after{content:'';position:absolute;left:50%;top:50%;width:max(100%,var(--tap,44px));
   height:var(--tap,44px);transform:translate(-50%,-50%)}
 
+/* THIS WEEK: Tom, 2026-11-16. The call's colour is on its dot; words stay text. */
+.twlist{display:flex;flex-direction:column}
+.twg{padding:var(--s-2) 0;border-top:var(--border-width,1px) solid var(--line);display:flex;flex-direction:column;gap:var(--s-1)}
+.twg:first-child{border-top:0;padding-top:0}
+.twtop{display:flex;align-items:flex-start;gap:var(--s-2)}
+.twn{flex:1;min-width:0;overflow-wrap:anywhere;line-height:var(--lh-body,1.4)}
+.twcall,.twfixb{flex:none;position:relative;display:inline-flex;align-items:center;gap:var(--s-1);border:var(--border-width,1px) solid var(--line);
+  background:var(--surface-2);color:var(--txt);border-radius:var(--radius-md,6px);padding:var(--s-1) var(--s-2);font:inherit;font-size:var(--f-1);cursor:pointer}
+.twcall::before{content:'';width:var(--s-2);height:var(--s-2);border-radius:50%;background:var(--mk)}
+.twcall.mine{border-color:var(--dim2)}
+.twcall::after,.twfixb::after{content:'';position:absolute;left:50%;top:50%;width:max(100%,var(--tap,44px));height:var(--tap,44px);transform:translate(-50%,-50%)}
+.twnew,.twspan{flex:none;font-size:var(--f-1);color:var(--dim2)}
+.twmid{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-2)}
+.twwks{display:inline-flex;gap:var(--s-1)}
+.twwk{min-width:var(--s-5);height:var(--s-5);display:inline-flex;align-items:center;justify-content:center;font-family:var(--f1);
+  font-size:var(--f-1);color:var(--dim2);border:var(--border-width,1px) solid var(--line);border-radius:var(--radius-sm,4px)}
+.twwk.got{color:var(--txt);background:color-mix(in srgb,var(--success) 18%,transparent);border-color:color-mix(in srgb,var(--success) 45%,transparent)}
+.twwk.now{box-shadow:0 0 0 var(--border-width,1px) var(--dim)}
+.twfix{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-1) var(--s-2);font-size:var(--f-1);color:var(--dim)}
+.twnx{min-width:0;overflow-wrap:anywhere}
+.pdtime{display:block;width:100%;min-height:44px;margin-bottom:var(--s-3)}
+.twplan{align-self:flex-start}
+.twbar{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-3)}
 /* ---------- shared widget bits ---------- */
 .rowlist{display:flex;flex-direction:column;gap:5px}
+/* TODAY's trial (2026-11-09): a row is a line, not a plate; the routine's
+   name and colour sit once above its rows; the row you are on is marked by
+   a gold box, not a gold border */
+.rowlist.ruled{gap:0}
+.rowlist.ruled > .row{border-radius:0;border-top:var(--border-width,1px) solid var(--line)}
+.rowlist.ruled > .rgrp{display:flex;align-items:center;gap:var(--s-2);padding:var(--s-3) 0 var(--s-1);
+  font-size:var(--f-1);color:var(--dim)}
+.rowlist.ruled > .rgrp:first-child{padding-top:0}
+.rowlist.ruled > .rgrp.gap{padding:var(--s-2) 0 0}
+.rowlist.ruled > .rgrp i{flex:0 0 auto;width:var(--s-2);height:var(--s-2);border-radius:50%;background:var(--c,var(--dim2))}
+.rowlist.ruled > .row.here .chk:not(.on):not(.jk){border-color:var(--acc)}
+.rowlist.ruled > .row.here .chk.jk{color:var(--acc)}
+/* the QUESTS cards' lines: the first sits flush, the box wears the card's colour */
+.rowlist.qrows > .row:first-child{border-top:0}
+.rowlist.qrows > .row .k{color:var(--c,var(--acc))}
 /* a row is a plate in its own colour, the way a block is in BLOCK: drawHome
    puts mb-plate on it, and --c is the block's colour or the widget's app's */
 .row{display:flex;align-items:center;gap:10px;padding:8px 9px;min-height:var(--tap,44px);
@@ -501,6 +566,24 @@ body.dragging #cardframes{z-index:0}
 /* IDEAS and EVENTS: the words wrap, a little air above and below a second line */
 .row.mb-bullet.wraps .tx{white-space:normal;padding-block:var(--s-1)}
 .row .d{font-size:var(--f-1);color:var(--dim2);font-family:var(--f1);letter-spacing:.06em;flex:0 0 auto}
+/* EVERY & HABITS: this period's ticks as dots, the streak beside them, and the empty state's one button */
+.row .d .rhdots{display:inline-flex;gap:var(--s-1);vertical-align:middle}
+.row .d .rhdots i{width:var(--s-2);height:var(--s-2);border-radius:50%;border:1px solid var(--text-muted)}
+.row .d .rhdots i.on{background:var(--success);border-color:var(--success)}
+.row .d .rhst{margin-left:var(--s-2);color:var(--text-2)}
+.rhempty{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s-2)}
+/* FLOW: where he is in a BLOCK flow and every way out (1.0.136) */
+.flnow{display:flex;flex-direction:column;gap:var(--s-1);margin-bottom:var(--s-2)}
+.flnow .k{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted)}
+.flnow b{font-family:var(--font-display);font-size:var(--f-4);color:var(--text-1);font-weight:600;overflow-wrap:anywhere}
+.flway{display:flex;align-items:center;gap:var(--s-2);width:100%;min-height:var(--tap);padding:0 var(--s-3);text-align:left;cursor:pointer;
+  background:var(--surface-1);border:var(--border-width,1px) solid var(--line);border-radius:var(--radius-sm);color:var(--text-1);font:inherit}
+.flway.sug{border-color:var(--acc)}
+.flway i{flex:0 0 auto;width:var(--s-3);height:var(--s-3);border-radius:var(--radius-sm);background:var(--k)}
+.flway .l{color:var(--text-muted);font-size:var(--f-1)}
+.flway .r{margin-left:auto;color:var(--text-muted);font-size:var(--f-1);white-space:nowrap}
+.flway .s{color:var(--acc);font-size:var(--f-1);white-space:nowrap}
+.flnext{margin-top:var(--s-2);color:var(--text-muted);font-size:var(--f-1)}
 /* MEALS: what a meal was is the point of the row, so not the faintest text */
 .row .d.kc{color:var(--dim);font-variant-numeric:tabular-nums}
 .row.done{opacity:.5}
@@ -600,6 +683,40 @@ body.dragging #cardframes{z-index:0}
 .lap i{font-style:normal;color:var(--dim2)}
 .row .abig{font-family:var(--f1);font-size:var(--f-3);color:var(--txt);letter-spacing:.04em;flex:0 0 auto;min-width:6ch;font-variant-numeric:tabular-nums}
 .row .abig small{font-size:var(--f-1);color:var(--dim2);margin-left:var(--s-1)}
+.dptop{display:flex;flex-direction:column;align-items:center;gap:var(--s-2);padding-bottom:var(--s-3);border-bottom:var(--border-width,1px) solid var(--line);margin-bottom:var(--s-2)}
+.dpletter{font-family:var(--f1);font-size:calc(var(--f-5) * 4);line-height:1;color:var(--txt);flex:0 0 auto;
+  min-width:1.4em;aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+  border:calc(var(--border-width,1px) * 3) solid var(--rc,var(--acc));border-radius:var(--radius-md,6px)}
+.dpsay{font-family:var(--f1);font-size:var(--f-3);color:var(--txt);letter-spacing:.04em;display:flex;align-items:baseline;gap:var(--s-2)}
+.dpsay small{font-size:var(--f-1);color:var(--dim);letter-spacing:.1em}
+.dpline{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-1) 0}
+.dplab{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;color:var(--dim2);flex:0 0 9ch}
+.dpchips{display:flex;flex-wrap:wrap;gap:var(--s-2);flex:1 1 auto;min-width:0}
+.dpchips .tbtn{color:var(--txt);letter-spacing:.04em}
+.dpchips .tbtn.dpadd{color:var(--dim);min-width:var(--tap,44px)}
+.dpchips .tbtn small{font-size:var(--f-1);color:var(--acc);margin-left:var(--s-1);letter-spacing:.02em}
+.dpchips .tbtn.dpdone{color:var(--dim)}
+/* Plan the day's sequence */
+.pdsay{margin:0 0 var(--s-3)}
+.pdlist{display:flex;flex-direction:column;gap:var(--s-1);max-height:50vh;overflow:auto}
+.pdrow{display:grid;grid-template-columns:8ch 1fr auto;gap:var(--s-2);align-items:baseline;font-size:var(--f-2)}
+.pdrow b{font-family:var(--font-display);font-weight:500;color:var(--mut)}
+.pdrow i{font-style:normal;color:var(--dim)}
+.pdoff{color:var(--dim);min-height:var(--tap,44px)}
+.pdodd{width:100%;min-height:calc(var(--tap,44px) * 2);resize:vertical}
+.lwweek,.lwday{flex:none;display:flex;gap:var(--s-3);align-items:flex-start;width:100%;
+  border-bottom:var(--border-width,1px) solid var(--line);color:var(--txt)}
+.lwweek{flex-direction:column;gap:0}
+.lwday:last-child{border-bottom:0}
+.lwlab{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;text-transform:uppercase;color:var(--dim2);flex:0 0 8ch;white-space:nowrap;
+  min-height:var(--tap,44px);padding:0;background:none;border:0;text-align:left;cursor:pointer;display:flex;align-items:center}
+.lwweek .lwlab{flex:none;color:var(--acc)}
+.lwday.today .lwlab{color:var(--acc)}
+.lwtx{flex:1 1 auto;min-width:0;width:100%;min-height:var(--tap,44px);padding:calc((var(--tap,44px) - 1.45em) / 2) 0;margin:0;resize:none;overflow:hidden;
+  border:0;outline:0;background:transparent;color:var(--txt);font-family:inherit;font-size:var(--f-2);line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.lwtx::placeholder{color:var(--dim2);opacity:1}
+.lwtx:focus{box-shadow:inset 0 calc(var(--border-width,1px) * -2) 0 var(--acc)}
+.lwweek .lwtx{padding-top:0}
 .srv{font-style:normal;font-size:var(--f-1);color:var(--dim2);margin-left:var(--s-1)}
 .srv.blk{display:block;margin-left:0}
 .dayrow{display:flex;gap:var(--s-1);flex-wrap:wrap}
@@ -649,8 +766,12 @@ body.dragging #cardframes{z-index:0}
    stretch before. Tiles meet on a hairline, the grid's own gap. */
 .lc{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:var(--border-width,1px);
   background:var(--line);height:100%;border-radius:var(--radius-sm,6px);overflow:hidden}
-.lc-t{background:var(--surface-2,var(--panel));padding:var(--s-3);display:flex;flex-direction:column;justify-content:center;gap:var(--s-1);min-width:0;
-  container-type:size}
+/* `safe center` and `overflow:hidden`: a tile whose lines outgrow it starts
+   at its top and keeps them inside, so cutCards can measure the spill and
+   shed lines whole, and nothing is drawn over the tile below */
+.lc-t{background:var(--surface-2,var(--panel));padding:var(--s-3);display:flex;flex-direction:column;justify-content:safe center;gap:var(--s-1);min-width:0;
+  container-type:size;overflow:hidden}
+.lc-t.lc-tight{padding-top:var(--s-1);padding-bottom:var(--s-1);gap:0}
 .lc-t:only-child,.lc-t:nth-child(3):last-child{grid-column:1 / -1}
 .lc-l{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;color:var(--dim)}
 /* the number grows with its tile, from the scale's 20 to its 48 */
@@ -659,12 +780,15 @@ body.dragging #cardframes{z-index:0}
 .lc-v.nil{color:var(--dim2)}
 /* the unit stays beside the number while it fits and drops under it when
    it does not, rather than the number being cut */
-.lc-u{font-family:var(--f2);font-size:var(--f-2);color:var(--dim);letter-spacing:0;white-space:nowrap;display:inline-block}
-.lc-d{display:flex;align-items:center;gap:var(--s-1);font-family:var(--f1);font-size:var(--f-2);color:var(--dim2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.lc-u{font-family:var(--f2);font-size:var(--f-2);color:var(--dim);letter-spacing:0;display:inline-block}
+/* wraps rather than running off the tile: "100% tracked, same as before"
+   was cut at "befor" (2026-11-16) */
+.lc-d{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-1);font-family:var(--f1);font-size:var(--f-2);color:var(--dim2);font-variant-numeric:tabular-nums}
 .lc-d.up{color:var(--success)}
 .lc-d.dn{color:var(--danger)}
 .lc-d.flat{color:var(--txt)}
 .lc-d svg{flex:0 0 auto}
+.lc-k{color:var(--dim);margin-right:var(--s-1)}
 #grid > .w[data-sz=s] .lc-v{font-size:var(--f-4)}
 @media (max-width:820px){ .lc{height:auto} .lc-t{container-type:normal} .lc-v{font-size:var(--f-7)} }
 .hrow{display:flex;align-items:center;gap:10px;padding:6px 2px}
@@ -676,6 +800,17 @@ body.dragging #cardframes{z-index:0}
 .row.drink .n small,.row.weigh .n small{display:block;color:var(--dim2);font-size:var(--f-1);font-family:var(--f1);letter-spacing:.06em;margin-top:var(--s-1)}
 .row.drink .dl,.row.weigh .dl{display:block;margin-top:var(--s-1);font-size:var(--f-1);color:var(--dim)}
 .row.drink .dl i,.row.weigh .dl i{font-style:normal;color:var(--txt);font-variant-numeric:tabular-nums}
+/* ELEMENT: AM and NIGHT, a drink's name, then one line per powder */
+.mixw .mixh{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.16em;color:var(--acc);margin-top:var(--s-2)}
+.mixw .mixh:first-child{margin-top:0}
+.mixw .mixd{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.06em;color:var(--dim2)}
+.mixw .mixd small{display:block;letter-spacing:0;color:var(--dim);font-family:inherit;font-size:var(--f-1)}
+.row.mixr{align-items:center;gap:var(--s-2)}
+.row.mixr .n{flex:1;min-width:0;white-space:normal}
+.row.mixr .mb-input{flex:0 0 auto;width:6.5em;min-height:var(--tap,44px);text-align:right;font-variant-numeric:tabular-nums}
+.row.mixr .u{color:var(--dim2)}
+.row.mixr.done .n{color:var(--dim)}
+.mixfeed{position:fixed;width:0;height:0;border:0;visibility:hidden;pointer-events:none}
 /* WORK DONE */
 table.wd{width:100%;border-collapse:collapse;font-size:var(--f-2)}
 table.wd th{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;color:var(--dim2);font-weight:400;text-align:right;padding:0 0 var(--s-1) var(--s-2)}
@@ -737,6 +872,8 @@ table.wd tr.grp td{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.16
 .opt.danger .ic{color:var(--warn)}
 /* ADD A WIDGET: a widget's row with its gear beside it, and its own page */
 .wlede{color:var(--dim2);line-height:1.6;margin-bottom:var(--s-4)}
+.wfind{display:block;width:100%;min-height:var(--tap,44px);margin-bottom:var(--s-4)}
+.wfind[hidden]{display:none}
 .wpick{display:flex;align-items:stretch;gap:var(--s-1)}
 .wpick .mb-opt{flex:1;min-width:0}
 .wgear{flex:0 0 var(--tap,44px);min-height:var(--tap,44px);display:grid;place-items:center;
@@ -969,7 +1106,14 @@ window.LifeOS = (function () {
     rows: () => Rec,
   };
 
-  Rec.on(refresh);
+  /* A change made only of `device` rows (report.js, each device's own note,
+     written every few seconds and pulled in from every other device) is
+     nothing the home screen draws, so it does not rebuild the board. An
+     empty list means "anything may have changed" and still refreshes. */
+  Rec.on(list => {
+    if (list && list.length && list.every(r => r && r.type === 'device')) return;
+    refresh();
+  });
   migrate();
   refresh();
   return API;
@@ -1003,6 +1147,7 @@ const APPS = [
   { id: 'quest',  nm: 'QUESTS', ic: '◆', file: 'quest/index.html',  ds: 'todos, when they are due, and projects', shares: 'the journal todos', phone: 1 },
   { id: 'train',  nm: 'TRAIN',  ic: '⛭', file: 'train/index.html',  ds: 'the training log — sets, reps, records',     shares: 'the training log + ticks', phone: 1 },
   { id: 'checkin', nm: 'CHECK IN', ic: '◎', file: 'checkin/index.html', ds: 'photos, weight and how the week went', shares: 'weight, with STATUS', phone: 1 },
+  { id: 'flow',   nm: 'FLOW',   ic: '◇', file: 'flow/index.html',   ds: 'BLOCK’s flow on the phone, today’s notes and bullets', shares: 'the flow walk, notes and bullets', phone: 1 },
   { id: 'kitchen', nm: 'KITCHEN', ic: '▥', file: 'kitchen/index.html', ds: 'what is on the shelf, the week of meals, and what is short', shares: 'foods, meals and purchases', phone: 1 },
   { id: 'style',  nm: 'STYLE',  ic: '◧', file: 'style/index.html',  ds: 'pick, compare, edit and add themes',         shares: 'the themes every app wears' },
   { id: 'arc',    nm: 'ARC',    ic: '◇', file: 'arc/index.html',    ds: 'mind canvas — think, map, plan',            solo: 1, mine: 1 },
@@ -1184,6 +1329,7 @@ addEventListener('keydown', ev => { if (ev.key === 'Escape' && $('#over').classL
    the spot just opens where it was. */
 function goTo(to) {
   if (!to) return;
+  if (to[0] === 'home' && to[1] === 'planday') { go('home'); PLANDAY.open(); return; }
   if (to[0] === 'over') { openOver(to[1]); return; }
   go(to[0]);
   if (!to[1]) return;
@@ -1197,6 +1343,8 @@ function goTo(to) {
    block pressed inside an app (UI.go, shared/ui.js, 2026-10-26) */
 window.addEventListener('message', e => {
   const m = e.data;
+  /* `index.html?show=planday`, from a Plan the day todo pressed in an app on its own */
+  if (m && m.lifeos === 1 && !m.nav && m.show === 'planday' && e.source === window) { PLANDAY.open(); return; }
   if (!m || m.lifeos !== 1 || !m.nav || !app(m.nav)) return;
   if (typeof m.show === 'string' && m.show) goTo([m.nav, m.show]); else go(m.nav);
 });
@@ -1551,6 +1699,32 @@ function trainLastDay() {
    was invisible here while STATUS had it. Same function, same answer, in every
    app that reads a measure. */
 function evValue(date, id) { return Measure.value(date, id); }
+
+/* ── a chart's days follow the card's zoom ──
+   Tom, 2026-11-16: "So if it gets too big, let it show less clusters of
+   data. If it gets too small, let it show more." The days picked on a card
+   are what it shows at 100%; zoomed to 50% it shows twice as many, at 200%
+   half, never under a week. "All of it" stays all of it. A phone has no
+   card zoom. Any chart card with a days pick asks this, names its
+   stretch with zoomDaysName, and goes in ZOOM_DAYS so its menus offer
+   "Follow the zoom".
+   A time frame he picks is locked (`dlock`): Tom, 2026-11-16, "If I chose
+   a setting manually, the zooming in can't change it". Picking is the
+   lock, no button; "Follow the zoom" takes it off. Picks made before the
+   lock existed carry no `dlock` and keep following. */
+const ZOOM_DAYS = { weight: 1, measure: 1, sleep: 1, trainvol: 1, halflife: 1 };
+function zoomDays(cfg, n) {
+  if (cfg && cfg.dlock) return n;
+  const z = (cfg && cfg.zoom && !matchMedia('(max-width:820px)').matches) ? cfg.zoom : 1;
+  /* never under a week, unless the pick itself is under one (HALF-LIFE's 3
+     days): zooming in must never show more */
+  return n >= 3650 || z === 1 ? n : Math.max(Math.min(n, 7), Math.round(n / z));
+}
+function zoomDaysName(list, d) {
+  const hit = list.filter(x => x[0] === d)[0];
+  if (hit) return hit[1];
+  return d % 365 === 0 ? (d / 365) + ' years' : d + ' days';
+}
 
 /** every weight reading in the window, oldest first */
 function weightSeries(days) {
@@ -2102,17 +2276,62 @@ function rhPeriodH(r, date, today, start, made) {
   const f = Day.shift(anchor, len * Math.floor(Day.diff(date, anchor) / len));
   return [f, Day.shift(f, len - 1)];
 }
-function rhAnyState(r, dates, today, start) {
+function rhAnyState(r, dates, today, start, floor) {
   const made = [r.made, dates[0]].filter(Boolean).sort()[0] || today;
   const from = rhPeriodH(r, today, today, start, made)[0];
   const n = dates.filter(d => d >= from && d <= today).length;
-  return { n: n, of: r.times || 1, met: n >= (r.times || 1), today: dates.indexOf(today) >= 0, per: RH_PER_H[rhPerH(r)].one };
+  return { n: n, of: r.times || 1, met: n >= (r.times || 1), today: dates.indexOf(today) >= 0, per: RH_PER_H[rhPerH(r)].one,
+    streak: rhStreakH(r, dates, today, start, made, floor) };
+}
+/* BLOCK's rhStreak, copied: periods with the target met, a short period with
+   any tick holds it, one empty period is forgiven, two end it, the open one
+   never breaks it. `floor` is BLOCK's count-from day (chapter or setting). */
+function rhStreakH(r, dates, today, start, made, floor) {
+  const times = r.times || 1, count = (a, b) => dates.filter(d => d >= a && d <= b).length;
+  const stop = floor && floor > made ? floor : made;
+  let [from, to] = rhPeriodH(r, today, today, start, made);
+  let run = 0, empty = 0, open = true;
+  for (let guard = 0; to >= stop && guard < 2000; guard++) {
+    const n = count(from, to);
+    if (n >= times) { run++; empty = 0; }
+    else if (!open) { if (n) empty = 0; else if (++empty >= 2) break; }
+    open = false;
+    [from, to] = rhPeriodH(r, Day.shift(from, -1), today, start, made);
+  }
+  return run;
 }
 
 /* ── small things several widgets share ── */
 const monday = d => LifeOS.shift(d, -((Day.dow(d) + 6) % 7));
 const peso = n => (n < 0 ? '-' : '') + '\u20b1' + Math.round(Math.abs(n)).toLocaleString();
 /* a todo drawn the shared way, with its box ticking it */
+/* QUESTS's Today order on rows, for the NEXT and PROJECT TASKS cards:
+   QUESTS's sortQ (priority, time, when written) for late ones, its sortDay
+   (the clock first) for today's. A todo with no `due` is due the day it was
+   written; `''` is No date. */
+const dueOfRow = r => r.payload.due === undefined ? r.date : (r.payload.due || null);
+const openTodo = r => r.payload.kind === 'todo' && !r.payload.done && !r.payload.cancelled;
+const atMins = r => r.payload.at ? +r.payload.at.slice(0, 2) * 60 + +r.payload.at.slice(3, 5) : 9999;
+const nextQ = (a, b) => ((+a.payload.pri || 4) - (+b.payload.pri || 4)) || (atMins(a) - atMins(b)) ||
+  ((a.payload.t || 0) - (b.payload.t || 0));
+function nextOrder(rows) {
+  const t = LifeOS.day();
+  return rows.filter(r => dueOfRow(r) < t).sort(nextQ)
+    .concat(rows.filter(r => dueOfRow(r) === t).sort((a, b) => (atMins(a) - atMins(b)) || nextQ(a, b)));
+}
+/* ticking rows; a late one says how late, and with `all`, a later one its day.
+   Ruled lines, not plates (Tom, 2026-11-17: "why they wide purple and
+   ugly", picked A, B and C): the colour only on the tick box. */
+function taskRows(L, all) {
+  const t = LifeOS.day(), wrap = el('div', 'rowlist ruled qrows');
+  L.forEach(r => {
+    const d = dueOfRow(r);
+    const row = tickRow(r, r.date, d && (d < t || (all && d > t)) ? dueWords(d) : '');
+    row.classList.add('wraps');
+    wrap.appendChild(row);
+  });
+  return wrap;
+}
 function tickRow(x, day, tail) {
   const r = bulletRow(x, day, () => { tickTodo(x); drawHome(); });
   if (tail) r.appendChild(el('span', 'd', esc(tail)));
@@ -2284,7 +2503,36 @@ const WM = (() => {
   return { num, month, back, monthLabel, monthIn, monthOut, billsOwed };
 })();
 
-/* A copy of ELEMENT's own `toStatus`, for TO WEIGH's tick:
+/* ELEMENT, running unseen beside the board (Tom, 2026-11-09). Its sums
+   live in ELEMENT and only there, and it writes today's plan (`mix.plan`)
+   each time it draws, which until now was only when he opened it. Loaded
+   once by the cards that read the plan, on the top page only, outside the
+   grid so a redraw never reloads it. It redraws itself on every store write,
+   so food logged anywhere moves the night drink; a plan left from yesterday
+   is redrawn at most once a minute. */
+let mixFrame = null, mixNudged = 0;
+function mixFeed() {
+  /* the path is read off the roster, never written here: the client build
+     drops ELEMENT from it, and a written path stops that build */
+  if (window.top !== window || !app('mix')) return;
+  if (!mixFrame) {
+    mixFrame = document.createElement('iframe');
+    mixFrame.src = app('mix').file;
+    mixFrame.title = 'ELEMENT';
+    mixFrame.tabIndex = -1;
+    mixFrame.setAttribute('aria-hidden', 'true');
+    mixFrame.className = 'mixfeed';
+    document.body.appendChild(mixFrame);
+    return;
+  }
+  const p = Rec.setting('mix', 'plan');
+  if (p && p.date === LifeOS.day()) return;
+  if (Date.now() - mixNudged < 60000) return;
+  mixNudged = Date.now();
+  setTimeout(() => { try { mixFrame.contentWindow.draw(); } catch (e) {} }, 0);
+}
+
+/* A copy of ELEMENT's own `toStatus`, for ELEMENT's tick:
    what went down today, summed from the `dose` rows, written to STATUS as
    zinc and magnesium readings and as salt and citrate meals. Change both. */
 function mixToStatus(d) {
@@ -2318,6 +2566,8 @@ function mixToStatus(d) {
 const STORE_TAKE = 0.5;
 /* at or over this share of full, a store reads SATURATED */
 const STORE_SAT = 0.9;
+/* a daily aim is read as the average a day over this many days */
+const AIM_DAYS = 28;
 
 const WIDGETS = {
   /* ══════════════ TODAY ══════════════
@@ -2437,12 +2687,24 @@ const WIDGETS = {
             .concat(items.filter(x => x.done))
         : items;
 
-      const list = el('div', 'rowlist');
+      /* `ruled`: rows on thin lines, not each in a box, and a routine's name
+         once above its run of rows instead of a chip on every row (Tom,
+         2026-11-09, "A, trial": TODAY only, to see it beside the boxed cards) */
+      const list = el('div', 'rowlist ruled');
       const mark = nn && nn.it ? nn.it : null;
-      let here = null;
+      let here = null, lane = null;
       /* no row with a time, no time column: an empty 60px gutter otherwise */
       const anyAt = shown.some(x => x.at != null);
       shown.forEach(x => {
+        const tg = x.tag || '';
+        if (tg !== lane) {
+          if (tg || lane) {
+            const g = el('div', 'rgrp' + (tg ? '' : ' gap'), tg ? '<i></i>' + esc(tg) : '');
+            if (x.colour) g.style.setProperty('--c', x.colour);
+            list.appendChild(g);
+          }
+          lane = tg;
+        }
         /* `late` is quiet on purpose. It is the difference between a list and
            a telling-off, and a day you are behind on is the day you most need
            to still want to open this. */
@@ -2458,7 +2720,6 @@ const WIDGETS = {
            box ticks it, the words take you to the thing. */
         const href = linkIn(x);
         r.appendChild(el('div', 'n', href ? UI.linkHTML(href, esc(x.name), 'rlink') : esc(x.name)));
-        if (x.tag) r.appendChild(el('div', 'tag', esc(x.tag)));
         if (x.dur) r.appendChild(el('div', 'd', DUR(x.dur)));
         if (x.tick) {
           /* Tom, 2026-09-17: "Today widget has the check at the right, why not
@@ -2730,7 +2991,7 @@ const WIDGETS = {
     /* how many weeks, from the card's menu, as days so the menu's one
        Time frame list serves it; untouched it is the 8 it always was */
     days: [[28, '4 weeks'], [56, '8 weeks'], [91, '13 weeks'], [182, '26 weeks'], [364, '52 weeks']], day0: 56,
-    nWk: cfg => Math.round(((cfg && cfg.days) || 56) / 7),
+    nWk: cfg => Math.max(1, Math.round(zoomDays(cfg, (cfg && cfg.days) || 56) / 7)),
     weeks(cfg) {
       const t = LifeOS.day(), out = [];
       for (let w = WIDGETS.trainvol.nWk(cfg) - 1; w >= 0; w--) {
@@ -2773,9 +3034,13 @@ const WIDGETS = {
      the brighter a muscle, the more sets it got. Counted the way TRAIN's
      WEEKLY counts them: warmups out, a set from today only once it is done,
      and a muscle an exercise ALSO works gets its share (half a set for
-     biceps on a pull-up). TRAIN's muscle groups are names he can change, so
-     each is read onto the body by what it says: "Legs" lights every leg
-     muscle, "Hamstrings" lights only those. A group the body cannot show,
+     biceps on a pull-up). Since 2026-11-17 (Tom: "update the relevant
+     widgets, so all things in our system align") each lift is read by the
+     suite's one rule, `shared/muscles.js` Muscles.forLift, with the rows
+     TRAIN asks with, as TRAIN's VOLUME view counts it: a chin up lights
+     biceps 1 and lats 0.8 (`bodyShare`). A lift no rule knows falls back
+     to its group's name, read by what it says: "Legs" lights every leg
+     muscle. A muscle the body cannot show,
      other than cardio, is named under the list rather than dropped. No
      target and no verdict, as in TRAIN: "I'd rather be told how many times I
      hit a muscle, I'll know if I need to hit more."
@@ -2804,6 +3069,10 @@ const WIDGETS = {
       const days = (cfg && cfg.days) || 7, today = LifeOS.day(), from = LifeOS.shift(today, -(days - 1));
       const heat = bodyHeat(from, today);
       const regs = Object.keys(BODY_NAMES).filter(k => heat.v[k] > 0).sort((a, b) => heat.v[b] - heat.v[a]);
+      /* the muscles at 0 sets, one line at the top of the list, so a short
+         card that leaves rows off still shows them (Tom, 2026-11-16: "show
+         sets done always so that I can see if I did 0 sets") */
+      const zero = Object.keys(BODY_NAMES).filter(k => !(heat.v[k] > 0));
       if (!regs.length && !heat.off.length) {
         /* A8, 2026-10-05: the body, every muscle in its zero colour, and the
            sentence under it, so a new client sees the map they are about to
@@ -2814,7 +3083,7 @@ const WIDGETS = {
         fig.style.cssText = 'flex:1 1 auto;min-height:0';
         fig.innerHTML = bodySvg(heat.v, {}, cfg && cfg.pose);
         col.appendChild(fig);
-        col.appendChild(el('div', 'empty', 'No working sets in the last ' + days + ' days'));
+        col.appendChild(el('div', 'empty', 'Every muscle is ready to train'));
         body.appendChild(col);
         return;
       }
@@ -2831,10 +3100,11 @@ const WIDGETS = {
         const row = el('div', 'row bh-row');
         row.innerHTML = '<span class="bh-dot" style="background:' + bodyColour(rec[k]) + ';opacity:' + bodyBright(heat.v[k], most) + '"></span>' +
           '<span class="nm">' + BODY_NAMES[k] + '</span><span class="rt">' + fmt(heat.v[k]) + '</span>' +
-          (rec[k] && partOn(cfg, 'rec') ? '<span class="bh-rec" title="' + Math.ceil(rec[k].left) + ' of its ' + rec[k].win + ' hours to recover">' +
+          (rec[k] && partOn(cfg, 'rec') ? '<span class="bh-rec" title="' + Math.ceil(rec[k].left) + ' of its ' + rec[k].win + ' hours to recover: ' + esc(rec[k].why) + '">' +
             ((typeof Icons !== 'undefined' && Icons.svg('rest', { size: 12 })) || '') + bodyHours(rec[k].left) + '</span>' : '<span class="bh-rec"></span>');
         list.appendChild(row);
       });
+      if (zero.length && partOn(cfg, 'list')) side.appendChild(el('div', 'bh-zero', '<b>0 SETS</b> ' + zero.map(k => esc(BODY_NAMES[k])).join(', ')));
       if (partOn(cfg, 'list')) side.appendChild(list);
       if (heat.off.length && partOn(cfg, 'off')) {
         const off = el('div', 'empty');
@@ -2872,9 +3142,9 @@ const WIDGETS = {
     days: [[30, '30 days'], [90, '90 days'], [180, '180 days'], [365, 'a year'], [3650, 'all of it']],
     /* the plan's dashed line and its line of words, each its own pick */
     parts: [['plan', 'Plan line'], ['note', 'Plan note']],
-    nmFor: cfg => 'WEIGHT · ' + String((WIDGETS.weight.days.filter(d => d[0] === (cfg.days || 90))[0] || [0, ''])[1]).toUpperCase(),
+    nmFor: cfg => 'WEIGHT · ' + String(zoomDaysName(WIDGETS.weight.days, zoomDays(cfg, cfg.days || 90))).toUpperCase(),
     sub: cfg => {
-      const r = weightSeries((cfg && cfg.days) || 90);
+      const r = weightSeries(zoomDays(cfg, (cfg && cfg.days) || 90));
       /* the plan has its own line under the chart: in the header it pushed
          the line off the card on a phone */
       if (!r.length) return 'no weigh-ins';
@@ -2902,9 +3172,10 @@ const WIDGETS = {
     draw(body, cfg) {
       cfg = cfg || {};
       const today = LifeOS.day(), plan = partOn(cfg, 'plan') ? weightPlan() : null;
-      const back = plan ? Math.max(cfg.days || 90, Day.diff(today, plan.from)) : (cfg.days || 90);
+      const days = zoomDays(cfg, cfg.days || 90);
+      const back = plan ? Math.max(days, Day.diff(today, plan.from)) : days;
       const pts = weightSeries(back);
-      if (!pts.length && !plan) { body.appendChild(el('div', 'empty', 'No weigh-ins in the last ' + (cfg.days || 90) + ' days')); return; }
+      if (!pts.length && !plan) { body.appendChild(el('div', 'empty', 'No weigh-ins in the last ' + days + ' days')); return; }
       /* Every day you stood on the scale is a dot, and the line through them
          is a seven day average. The dots are the point: a daily weight jumps
          around for reasons that have nothing to do with fat, and hiding that
@@ -3070,9 +3341,9 @@ const WIDGETS = {
       const mean = got.reduce((a, v) => a + v, 0) / got.length;
       return mean.toFixed(1) + ' hrs a night' + (target ? ', ' + got.filter(v => v >= target).length + ' of ' + got.length + ' on target' : '');
     },
-    sub: cfg => WIDGETS.sleep.said((cfg && cfg.days) || 7),
+    sub: cfg => WIDGETS.sleep.said(zoomDays(cfg, (cfg && cfg.days) || 7)),
     draw(body, cfg) {
-      const f = Rec.map('field').sleep, n = (cfg && cfg.days) || 7;
+      const f = Rec.map('field').sleep, n = zoomDays(cfg, (cfg && cfg.days) || 7);
       const target = f && f.target ? Number(f.target) : 0;
       const days = [];
       for (let i = n - 1; i >= 0; i--) {
@@ -3189,6 +3460,7 @@ const WIDGETS = {
     },
     parts: [['sub', 'Details'], ['doses', 'Amounts']],
     draw(body, cfg) {
+      mixFeed();
       const p = WIDGETS.drinks.plan();
       const list = el('div', 'rowlist');
       const openIt = () => openOver('mix');
@@ -3213,57 +3485,112 @@ const WIDGETS = {
     },
   },
 
-  /* ══════════════ TO WEIGH ══════════════
-     Tom, 2026-10-25: ELEMENT's powders still to weigh today, in grams, each
-     drink or meal with a tick. The grams are ELEMENT's, read from the plan it
-     publishes (`mix.plan`, each dose with its mineral and mg since ELEMENT
-     1.0.11); this card does no sums of its own. A tick writes the `dose` rows
-     the way ELEMENT's `tickCard` does and then `mixToStatus`, a copy of
-     ELEMENT's `toStatus`, so STATUS's sodium, potassium, zinc and magnesium
-     move at once. Change ELEMENT's and these together. */
+  /* ══════════════ ELEMENT DOSES (was TO WEIGH) ══════════════
+     Tom, 2026-10-25: ELEMENT's powders still to weigh today, with a tick.
+     Tom, 2026-11-09: "It should tell me what my default AM doses are, then
+     I can either edit the number, but I check box it to confirm I did that.
+     Then the night intake is more flexible, element already reads my food
+     intake." So every drink but the night one is AM: one line per powder,
+     its grams in a box he can change, and a tick that writes what he took.
+     NIGHT is what ELEMENT works out is left once the food and the AM doses
+     are in, so it moves as he logs, and it ticks the same way.
+     The grams are still ELEMENT's (`mix.plan`); this card does no sums.
+     ELEMENT runs unseen beside the board (`mixFeed`), so the plan is today's
+     without opening it: until 1.0.104 it was written only when ELEMENT was
+     opened, and his last one was 25 Oct. A tick writes the `dose` row the
+     way ELEMENT's `tickCard` does, with the grams in the box and their mg
+     at the plan's own strength, then `mixToStatus`, a copy of ELEMENT's
+     `toStatus`. Change ELEMENT's and these together. */
   toweigh: {
-    nm: 'TO WEIGH', w: 4, h: 4, app: 'mix', fit: 1, to: ['over', 'mix'],
+    nm: 'ELEMENT DOSES', w: 4, h: 4, app: 'mix', fit: 1, to: ['over', 'mix'],
     plan: () => WIDGETS.drinks.plan(),
     sub: () => {
       const p = WIDGETS.toweigh.plan();
       if (!p) return 'no plan today';
-      const left = p.filter(d => !d.done).length;
-      return left ? left + ' of ' + p.length + ' left' : 'all taken';
+      const all = [].concat.apply([], p.map(s => s.doses)), took = WIDGETS.toweigh.took();
+      const left = all.filter(x => !took[x.id]).length;
+      return left ? left + ' of ' + all.length + ' left' : 'all taken';
     },
     parts: [['done', 'Taken today'], ['sub', 'Details']],
-    tick(s, on) {
+    /* grams typed but not yet ticked, by day and dose; a tick takes them */
+    ed: {},
+    took() {
+      const t = {};
+      Rec.all('dose', { date: LifeOS.day() }).forEach(r => { if (r.payload) t[r.key] = r.payload; });
+      return t;
+    },
+    /* mg in a gram of each powder, ELEMENT's default strengths, for a dose
+       the plan gives no mg for */
+    per: { na: 393, k: 362, zn: 280, mg: 110 },
+    write(s, x, g, on) {
       const d = LifeOS.day();
-      if (on && s.doses.some(x => !x.nut)) { toast('Open ELEMENT once today to tick from here'); openOver('mix'); return; }
-      s.doses.forEach(x => {
-        if (on) Rec.set('dose', d, x.id, { nut: x.nut, mg: x.mg, g: x.g, slot: s.id, t: Date.now() });
-        else Rec.del('dose', d, x.id);
-      });
+      if (on) {
+        const per = x.g > 0 && x.mg > 0 ? x.mg / x.g : WIDGETS.toweigh.per[x.nut] || 0;
+        Rec.set('dose', d, x.id, { nut: x.nut, mg: Math.round(g * per), g: +g.toFixed(3), slot: s.id, t: Date.now() });
+      } else Rec.del('dose', d, x.id);
       mixToStatus(d);
-      if (typeof Mobile !== 'undefined') Mobile.feedback(on ? 'success' : 'untick');
-      drawHome();
     },
     draw(body, cfg) {
-      const p = WIDGETS.toweigh.plan();
+      mixFeed();
+      const W = WIDGETS.toweigh, p = W.plan();
       if (!p) {
-        body.appendChild(el('div', 'empty', 'No plan today.'));
+        body.appendChild(el('div', 'empty', 'No plan for today yet.'));
         const bar = el('div', 'tbar');
         bar.appendChild(tbtn('OPEN ELEMENT', () => openOver('mix'), 'go'));
         body.appendChild(bar);
         return;
       }
-      const show = p.filter(s => !s.done || partOn(cfg, 'done'));
-      if (!show.length) { body.appendChild(el('div', 'empty', 'All taken today.')); return; }
-      const list = el('div', 'rowlist');
-      show.forEach(s => {
-        const r = el('div', 'row weigh' + (s.done ? ' done' : ''));
-        const ck = el('button', 'chk' + (s.done ? ' on' : ''), (typeof Icons !== 'undefined' && Icons.svg('done', { size: 14 })) || '✓');
-        ck.setAttribute('aria-label', (s.done ? 'Untick ' : 'Taken: ') + s.nm);
-        ck.onclick = ev => { ev.stopPropagation(); WIDGETS.toweigh.tick(s, !s.done); };
+      const d = LifeOS.day(), took = W.took();
+      const grams = s => { const v = parseFloat(String(s).replace(',', '.')); return isFinite(v) && v >= 0 ? v : null; };
+      const list = el('div', 'rowlist mixw');
+      const row = (s, x) => {
+        const t = took[x.id], key = d + '|' + x.id;
+        const g = t ? (+t.g || 0) : (W.ed[key] != null ? W.ed[key] : x.g);
+        const r = el('div', 'row mixr' + (t ? ' done' : ''));
+        const ck = el('button', 'chk' + (t ? ' on' : ''), (typeof Icons !== 'undefined' && Icons.svg('done', { size: 14 })) || '');
+        ck.setAttribute('aria-label', (t ? 'Untick ' : 'Taken: ') + x.name);
+        const box = el('input', 'mb-input');
+        box.type = 'text'; box.inputMode = 'decimal'; box.autocomplete = 'off';
+        box.value = g.toFixed(3);
+        box.setAttribute('aria-label', 'Grams of ' + x.name);
+        box.onclick = ev => ev.stopPropagation();
+        box.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); box.blur(); } };
+        box.onchange = () => {
+          const v = grams(box.value);
+          if (v == null) { box.value = g.toFixed(3); return; }
+          box.value = v.toFixed(3);
+          if (t) { W.write(s, x, v, true); drawHome(); } else W.ed[key] = v;
+        };
+        ck.onclick = ev => {
+          ev.stopPropagation();
+          if (!t && !x.nut) { toast('Open ELEMENT once today to tick from here'); openOver('mix'); return; }
+          const v = grams(box.value);
+          W.write(s, x, v == null ? g : v, !t);
+          delete W.ed[key];
+          if (typeof Mobile !== 'undefined') Mobile.feedback(t ? 'untick' : 'success');
+          drawHome();
+        };
         r.appendChild(ck);
-        r.appendChild(el('div', 'n', '<b>' + esc(s.nm) + '</b>' + (partOn(cfg, 'sub') && s.sub ? '<small>' + esc(s.sub) + '</small>' : '') +
-          '<span class="dl">' + s.doses.map(x => esc(x.name) + ' <i>' + x.g.toFixed(3) + 'g</i>').join(' · ') + '</span>'));
-        list.appendChild(r);
-      });
+        r.appendChild(el('div', 'n', esc(x.name)));
+        r.appendChild(box);
+        r.appendChild(el('span', 'u', 'g'));
+        return r;
+      };
+      const group = (label, drinks) => {
+        const out = [];
+        drinks.forEach(s => {
+          const rows = s.doses.filter(x => !took[x.id] || partOn(cfg, 'done'));
+          if (!rows.length) return;
+          out.push(el('div', 'mixd', esc(s.nm) + (partOn(cfg, 'sub') && s.sub ? '<small>' + esc(s.sub) + '</small>' : '')));
+          rows.forEach(x => out.push(row(s, x)));
+        });
+        if (!out.length) return;
+        list.appendChild(el('div', 'mixh', label));
+        out.forEach(n => list.appendChild(n));
+      };
+      group('AM', p.filter(s => s.id !== 'night'));
+      group('NIGHT', p.filter(s => s.id === 'night'));
+      if (!list.children.length) { body.appendChild(el('div', 'empty', 'All taken today.')); return; }
       body.appendChild(list);
     },
   },
@@ -3281,7 +3608,10 @@ const WIDGETS = {
      records do not reach back that far; its cells say how many days had a
      reading, as before. */
   workdone: {
-    nm: 'WORK DONE', w: 6, h: 5, fit: 1,
+    /* `min`, columns and rows: the smallest it can be with every row in
+       view and nothing scrolling inside (Tom, 2026-11-09, with a picture of
+       it at two time frames) */
+    nm: 'WORK DONE', w: 6, h: 6, fit: 1, min: { w: 4, h: 6 },
     periods: PERIODS.map(p => p[0]),
     periodsDef() {
       const first = firstDay(), today = LifeOS.day();
@@ -3398,6 +3728,12 @@ const WIDGETS = {
       Rec.all('meal').forEach(r => { if (!inP(r.date)) return; kcal[r.date] = (kcal[r.date] || 0) + (Number(r.payload.kcal) || 0);
         if (r.payload.t) (at[r.date] = at[r.date] || []).push(+r.payload.t); else meals++; });
       Object.keys(at).forEach(d => at[d].sort((x, z) => x - z).forEach((t, i, A) => { if (!i || t - A[i - 1] > 45 * 60000) meals++; }));
+      /* Tom, 2026-11-09: "tracked Vs untracked meals". Meals eaten and not
+         logged are STATUS's count on the day row (`unmeals`, its Food tab);
+         a day flagged not fully tracked before the count existed is 1. */
+      let unmeals = 0;
+      Rec.all('day').forEach(r => { if (!inP(r.date) || r.deleted) return; const p = r.payload || {};
+        unmeals += p.unmeals != null ? Math.max(0, Math.round(Number(p.unmeals) || 0)) : (p.untracked ? 1 : 0); });
       const st = Rec.setting('status', 'tdeeState'), tdee = st && Number(st.v) > 0 ? Number(st.v) : 0;
       const tgt = Number(statusTargets().kcal) || 0, base = tdee || tgt;
       const fd = Object.keys(kcal);
@@ -3405,7 +3741,7 @@ const WIDGETS = {
       const sday = {};
       for (let i = 0; i < n; i++) { const dd = LifeOS.shift(to, -i), v = evValue(dd, 'steps'); if (v != null && isFinite(v)) { steps.push(Number(v)); sday[dd] = Number(v); } }
       return {
-        n: n, sessions: Object.keys(trained).length, meals: meals, foodDays: fd.length,
+        n: n, sessions: Object.keys(trained).length, meals: meals, unmeals: unmeals, foodDays: fd.length,
         base: base, vs: tdee ? 'maintenance' : 'target',
         diff: base && fd.length ? fd.reduce((a, d) => a + kcal[d] - base, 0) / fd.length : null,
         eat: fd.length ? fd.reduce((a, d) => a + kcal[d], 0) / fd.length : null, tgt: tgt, tdee: tdee,
@@ -3426,15 +3762,15 @@ const WIDGETS = {
          against the n days before. `tone` 1 colours the change by which way
          it went (more training, meals, steps); 0 keeps it neutral, since a
          smaller deficit is not better or worse on its own */
-      const tile = (id, label, val, unit, now, was, dp, tone, wasSaid) => {
+      const tile = (id, label, val, unit, now, was, dp, tone, wasSaid, lead) => {
         if (!partOn(cfg, id)) return;
         const t = el('div', 'lc-t');
         let ch = '';
         if (partOn(cfg, 'change') && now != null && was != null) {
           const dd = Math.round((now - was) * Math.pow(10, dp)) / Math.pow(10, dp);
-          ch = !dd ? '<span class="lc-d">same as before</span>'
-            : '<span class="lc-d ' + (tone ? (dd > 0 ? 'up' : 'dn') : 'flat') + '">' + ico(dd > 0 ? 'collapse' : 'expand') + num(Math.abs(dd), dp) + '</span>';
-        }
+          ch = !dd ? '<span class="lc-d">' + (lead ? lead + ', ' : '') + 'same as before</span>'
+            : '<span class="lc-d ' + (tone ? (dd > 0 ? 'up' : 'dn') : 'flat') + '">' + (lead ? '<span class="lc-k">' + lead + '</span>' : '') + ico(dd > 0 ? 'collapse' : 'expand') + num(Math.abs(dd), dp) + (lead ? '%' : '') + '</span>';
+        } else if (lead) ch = '<span class="lc-d">' + lead + '</span>';
         t.innerHTML = '<span class="lc-l">' + label + '</span>' +
           '<span class="lc-v' + (val === '—' ? ' nil' : '') + '">' + val + (unit ? ' <span class="lc-u">' + unit + '</span>' : '') + '</span>' + ch;
         if (wasSaid) t.title = 'The ' + n + ' days before: ' + wasSaid;
@@ -3444,8 +3780,14 @@ const WIDGETS = {
       if (!Rec.all('set').length) tile('train', 'TRAINED', '—', 'nothing in TRAIN', null, null, 0, 1);
       else if (n === 7) tile('train', 'TRAINED', num(a.sessions, 0), a.sessions === 1 ? 'session' : 'sessions', a.sessions, b.sessions, 0, 1, b.sessions + ' sessions');
       else tile('train', 'TRAINED', num(perWk(a), 1), 'a week', perWk(a), perWk(b), 1, 1, num(perWk(b), 1) + ' a week');
-      if (!a.foodDays) tile('meals', 'MEALS TRACKED', '—', 'no food logged', null, null, 1, 1);
-      else tile('meals', 'MEALS TRACKED', num(perDay(a), 1), 'a day', perDay(a), b.foodDays ? perDay(b) : null, 1, 1, b.foodDays ? num(perDay(b), 1) + ' a day' : '');
+      /* tracked of all eaten, a day; the change is the share tracked */
+      const allDay = s => (s.meals + s.unmeals) / s.n, share = s => s.meals + s.unmeals ? Math.round(s.meals / (s.meals + s.unmeals) * 100) : null;
+      if (!a.foodDays && !a.unmeals) tile('meals', 'MEALS TRACKED', '—', 'no food logged', null, null, 1, 1);
+      else {
+        const was = share(b);
+        tile('meals', 'MEALS TRACKED', num(perDay(a), 1), 'of ' + num(allDay(a), 1) + ' a day', share(a), was, 0, 1,
+          was == null ? '' : num(perDay(b), 1) + ' of ' + num(allDay(b), 1) + ' a day, ' + was + '% tracked', share(a) + '% tracked');
+      }
       /* calories as the gap a day to maintenance, else to the target */
       if (a.eat == null) tile('kcal', 'CALORIES', '—', 'no food logged', null, null, 0, 0);
       else if (a.diff == null) tile('kcal', 'CALORIES', num(Math.round(a.eat), 0), 'a day', a.eat, b.eat, 0, 0, b.eat == null ? '' : num(Math.round(b.eat), 0) + ' a day');
@@ -3484,6 +3826,89 @@ const WIDGETS = {
       });
       /* the header counts every open todo, so the cut says so */
       if (list.length > 12) wrap.appendChild(el('div', 'empty', (list.length - 12) + ' more in QUESTS'));
+      body.appendChild(wrap);
+    },
+  },
+
+  /* ══════════════ NEXT TASK, NEXT 3 TASKS, PROJECT TASKS ══════════════
+     Tom, 2026-11-17: "a widget that only shows the next 1 or 3 next tasks",
+     then "Quest widgets for 1 task, 3 task, tasks only in a certain
+     project": three cards in the picker. Open todos in QUESTS's Today order
+     (`nextOrder`): late first (priority, then time), then today's by the
+     clock, untimed after. Ticked with Journal.tick like every other todo.
+     NEXT TASK and NEXT 3 TASKS follow QUESTS's Today filter
+     (Journal.filterShows) unless the menu says not to; PROJECT TASKS is its
+     own filter. Small and hover-free: ROOM's wallpaper frames the board. */
+  next: {
+    nm: 'NEXT 3 TASKS', w: 3, h: 3, app: 'quest', to: ['quest', 'today'],
+    rows(cfg) {
+      const t = LifeOS.day(), F = partOn(cfg, 'qf') ? Journal.todayFilter() : {};
+      const all = noteRows().filter(r => openTodo(r) && dueOfRow(r) && dueOfRow(r) <= t);
+      const shown = all.filter(r => Journal.filterShows(r.payload, F));
+      return { list: nextOrder(shown), hidden: all.length - shown.length };
+    },
+    /* a NEXT card from the day it took a count from its menu keeps it */
+    count: cfg => (cfg && cfg.n) === 1 ? 1 : 3,
+    menu: (cfg, redraw) => [partToggle(cfg, 'qf', 'Follow the QUESTS filter', redraw)],
+    sub: cfg => {
+      const R = WIDGETS.next.rows(cfg), n = R.list.length;
+      return (n ? n + ' due today' : 'nothing due') + (R.hidden ? ', ' + R.hidden + ' hidden by the filter' : '');
+    },
+    draw(body, cfg, W) {
+      const R = WIDGETS.next.rows(cfg);
+      if (!R.list.length) {
+        body.appendChild(el('div', 'empty', R.hidden ? 'Every task today is hidden by the QUESTS filter.' : 'Nothing due today.'));
+        return;
+      }
+      body.appendChild(taskRows(R.list.slice(0, (W || WIDGETS.next).count(cfg))));
+    },
+  },
+  next1: {
+    nm: 'NEXT TASK', w: 3, h: 2, app: 'quest', to: ['quest', 'today'],
+    count: () => 1,
+    menu: (cfg, redraw) => WIDGETS.next.menu(cfg, redraw),
+    sub: cfg => WIDGETS.next.sub(cfg),
+    draw(body, cfg) { WIDGETS.next.draw(body, cfg, WIDGETS.next1); },
+  },
+  projtasks: {
+    nm: 'PROJECT TASKS', w: 3, h: 4, app: 'quest', to: ['quest'],
+    /* the project picked on the card, else the one with the most open */
+    proj(cfg) {
+      if (cfg && cfg.proj && Rec.get('project', null, cfg.proj)) return cfg.proj;
+      const n = {};
+      noteRows().forEach(r => { if (openTodo(r) && r.payload.proj) n[r.payload.proj] = (n[r.payload.proj] || 0) + 1; });
+      return Object.keys(n).sort((a, b) => n[b] - n[a])[0] || '';
+    },
+    pname: k => { const p = k && Rec.get('project', null, k); return (p && p.name) || k || ''; },
+    nmFor: cfg => { const k = WIDGETS.projtasks.proj(cfg); return k ? '#' + WIDGETS.projtasks.pname(k).toUpperCase() : 'PROJECT TASKS'; },
+    rows(cfg) {
+      const k = WIDGETS.projtasks.proj(cfg), t = LifeOS.day();
+      const mine = noteRows().filter(r => openTodo(r) && k && r.payload.proj === k);
+      const now = mine.filter(r => dueOfRow(r) && dueOfRow(r) <= t);
+      const later = mine.filter(r => dueOfRow(r) && dueOfRow(r) > t)
+        .sort((a, b) => dueOfRow(a).localeCompare(dueOfRow(b)) || nextQ(a, b));
+      const none = mine.filter(r => !dueOfRow(r)).sort(nextQ);
+      return nextOrder(now).concat(later, none);
+    },
+    menu: (cfg, redraw) => {
+      const cur = WIDGETS.projtasks.proj(cfg);
+      const P = Rec.all('project').filter(r => r.payload && !r.deleted)
+        .map(r => ({ k: r.key, nm: r.payload.name || r.key, ord: r.payload.ord || 0 }))
+        .sort((a, b) => a.ord - b.ord || a.nm.localeCompare(b.nm));
+      return P.length ? [{ label: 'Project', sub: P.map(p => ({ label: '#' + p.nm, check: p.k === cur,
+        fn: () => { cfg.proj = p.k; redraw(); } })) }] : [];
+    },
+    sub: cfg => {
+      const L = WIDGETS.projtasks.rows(cfg), t = LifeOS.day(), d = L.filter(r => dueOfRow(r) && dueOfRow(r) <= t).length;
+      return L.length ? L.length + ' open' + (d ? ', ' + d + ' due today' : '') : 'nothing open';
+    },
+    draw(body, cfg) {
+      const k = WIDGETS.projtasks.proj(cfg);
+      if (!k) { body.appendChild(el('div', 'empty', 'No projects in QUESTS.')); return; }
+      const L = WIDGETS.projtasks.rows(cfg);
+      if (!L.length) { body.appendChild(el('div', 'empty', 'Nothing open in #' + esc(WIDGETS.projtasks.pname(k)) + '.')); return; }
+      const wrap = taskRows(L.slice(0, 4), true);
+      if (L.length > 4) wrap.appendChild(el('div', 'empty', (L.length - 4) + ' more in QUESTS'));
       body.appendChild(wrap);
     },
   },
@@ -3582,9 +4007,21 @@ const WIDGETS = {
   sticky: {
     nm: 'STICKY NOTE', w: 4, h: 3, grp: 'DESK',
     sub: () => 'saved with your data',
-    draw(body) {
+    /* Several notes since 2026-11-17: ROOM's wallpaper + makes a note of its
+       own, `lifeos.sticky.<key>`, so it reaches every device as a row. A card
+       with no `sk` is the first note, `lifeos.sticky`, as it always was, and
+       the card menu picks which note a card shows. */
+    menu(cfg, redraw) {
+      const keys = Rec.all('setting').filter(r => /^lifeos\.sticky\.[\w-]+$/.test(r.key)).map(r => r.key.slice(13));
+      if (!keys.length) return [];
+      const first = s => (String(s || '').trim().split(/\s*\n/)[0] || 'Empty note').slice(0, 40);
+      return [{ label: 'Which note', sub: [{ label: first(Rec.setting('lifeos', 'sticky')), check: !cfg.sk, fn: () => { delete cfg.sk; redraw(); } }]
+        .concat(keys.map(k => ({ label: first(Rec.setting('lifeos', 'sticky.' + k)), check: cfg.sk === k, fn: () => { cfg.sk = k; redraw(); } }))) }];
+    },
+    draw(body, cfg) {
+      const name = cfg && cfg.sk ? 'sticky.' + cfg.sk : 'sticky';
       const ta = document.createElement('textarea');
-      ta.value = Rec.setting('lifeos', 'sticky') || '';
+      ta.value = Rec.setting('lifeos', name) || '';
       ta.placeholder = 'Anything.';
       ta.spellcheck = false;
       ta.setAttribute('aria-label', 'Sticky note');
@@ -3605,7 +4042,7 @@ const WIDGETS = {
          the last key, and at once when the box is left (the page leaving
          blurs it first, UI.commitFocused), so a note typed and closed inside
          the half second is kept. */
-      const save = () => { clearTimeout(t); if (ta.value !== (Rec.setting('lifeos', 'sticky') || '')) Rec.setting('lifeos', 'sticky', ta.value); };
+      const save = () => { clearTimeout(t); if (ta.value !== (Rec.setting('lifeos', name) || '')) Rec.setting('lifeos', name, ta.value); };
       ta.oninput = () => { fit(); clearTimeout(t); t = setTimeout(save, 500); };
       ta.onblur = save;
       body.appendChild(ta);
@@ -3873,8 +4310,30 @@ const WIDGETS = {
       if (partOn(cfg, 'age')) top.appendChild(head);
       body.appendChild(top);
 
+      /* Tom, 2026-11-10: "Give me dynamic resizing". Twenty columns always,
+         so a short card showed two rows of four and scrolled. Now the box
+         under the age is measured and the squares take whichever column
+         count draws them biggest with every year showing. A phone card is
+         as tall as what is in it, so there only the width is fitted. */
       const grid = el('div');
       grid.style.cssText = 'display:grid;grid-template-columns:repeat(20,1fr);gap:var(--s-1)';
+      const room = el('div');
+      room.style.cssText = 'flex:1 1 0;min-height:0;min-width:0;overflow:hidden';
+      room.appendChild(grid);
+      const fitYears = () => {
+        if (NARROW()) return;
+        const W = room.clientWidth, H = room.clientHeight;
+        if (!W || !H) return;
+        const g = parseFloat(getComputedStyle(grid).columnGap) || 0;
+        let best = 0, cols = 20;
+        for (let n = 1; n <= span; n++) {
+          const r = Math.ceil(span / n);
+          const s = Math.min((W - (n - 1) * g) / n, (H - (r - 1) * g) / r);
+          if (s > best) { best = s; cols = n; }
+        }
+        grid.style.gridTemplateColumns = 'repeat(' + cols + ',' + Math.floor(best) + 'px)';
+      };
+      if (window.ResizeObserver) new ResizeObserver(fitYears).observe(room);
       for (let i = 0; i < span; i++) {
         const b = el('i');
         const band = bandOf(i);
@@ -3900,7 +4359,7 @@ const WIDGETS = {
         };
         grid.appendChild(b);
       }
-      if (partOn(cfg, 'grid')) body.appendChild(grid);
+      if (partOn(cfg, 'grid')) body.appendChild(NARROW() ? grid : room);
 
       /* ── the legend ──
          What he asked the bands FOR: "when I was young and when im gonna be
@@ -4110,6 +4569,144 @@ const WIDGETS = {
     },
   },
 
+  /* THIS WEEK: Tom, 2026-11-16, from Superfocus. Each QUESTS goal's call for
+     the week, the weeks behind it and its one fix, read from shared/goals.js,
+     the rule QUESTS's Goals screen shows, plus PLAN THE WEEK, which opens
+     QUESTS's week draft. Nothing here needs Todoist. */
+  thisweek: {
+    nm: 'THIS WEEK', w: 4, h: 5, app: 'quest', to: ['quest', 'goals'],
+    sub: () => {
+      const A = Goals.aims();
+      if (!A.length) return 'no goals set';
+      const L = Goals.todos(), n = { on: 0, adj: 0, off: 0 };
+      A.forEach(a => { const h = Goals.health(a, L); if (h && h.v) n[h.v]++; });
+      return ['on', 'adj', 'off'].filter(k => n[k]).map(k => n[k] + ' ' + Goals.NAME[k].toLowerCase()).join(', ') || A.length + ' new this week';
+    },
+    draw(body) {
+      const A = Goals.aims(), L = Goals.todos();
+      const plan = el('button', 'mb-btn mb-press mb-tap twplan', 'PLAN THE WEEK');
+      plan.type = 'button';
+      plan.onclick = e => { e.stopPropagation(); goTo(['quest', 'week']); };
+      if (!A.length) {
+        body.appendChild(el('div', 'empty', 'No goals'));
+        const set = el('button', 'mb-btn mb-press mb-tap twplan', 'SET A GOAL');
+        set.type = 'button';
+        set.onclick = e => { e.stopPropagation(); goTo(['quest', 'goals']); };
+        body.appendChild(set);
+        return;
+      }
+      const wrap = el('div', 'twlist');
+      A.forEach(a => {
+        const h = Goals.health(a, L), nx = Goals.next(a, L);
+        const g = el('div', 'twg');
+        const top = el('div', 'twtop');
+        top.appendChild(el('span', 'twn', esc(a.text)));
+        if (h.v) {
+          const c = el('button', 'twcall', esc(Goals.NAME[h.v]));
+          c.type = 'button';
+          c.style.setProperty('--mk', Goals.MK[h.v]);
+          c.setAttribute('aria-label', 'This week: ' + Goals.NAME[h.v] + (h.mark ? ', your call' : '') + '. Mark it right or wrong');
+          if (h.mark) c.classList.add('mine');
+          c.onclick = e => {
+            e.stopPropagation();
+            const r = c.getBoundingClientRect(), items = [];
+            if (h.auto && !h.mark) items.push({ label: 'That’s right', fn: () => Goals.mark(a.key, h.ws, h.auto) });
+            ['on', 'adj', 'off'].forEach(v => { if (v !== h.v) items.push({ label: 'It’s ' + Goals.NAME[v].toLowerCase(), fn: () => Goals.mark(a.key, h.ws, v) }); });
+            if (h.mark) items.push({ label: 'Clear my call', fn: () => Goals.mark(a.key, h.ws, '') });
+            UI.menu(r.left, r.bottom, items, { title: 'This week’s call' });
+          };
+          top.appendChild(c);
+        } else top.appendChild(el('span', 'twnew', 'New'));
+        g.appendChild(top);
+        const mid = el('div', 'twmid');
+        const strip = el('span', 'twwks');
+        strip.setAttribute('aria-label', 'Tasks done each week, last ' + Goals.WEEKS + ' weeks');
+        const meas = h.src === 'lift' || h.src === 'ev';
+        h.weeks.forEach((k, i) => {
+          const s = el('span', 'twwk' + ((meas ? k.up : k.n) ? ' got' : '') + (i === h.weeks.length - 1 ? ' now' : ''), k.n === '' ? '-' : String(k.n));
+          s.title = (i === h.weeks.length - 1 ? 'This week' : 'Week of ' + Day.short(k.s)) + ': ' + (meas ? (k.n === '' ? 'no reading' : k.n) : k.n + (h.src ? ' days' : ' done'));
+          strip.appendChild(s);
+        });
+        mid.appendChild(strip);
+        if (h.span) mid.appendChild(el('span', 'twspan', esc(h.span)));
+        g.appendChild(mid);
+        /* a goal fed by TRAIN, STATUS or BLOCK says where its data stands */
+        if (h.line) g.appendChild(el('div', 'twfix', '<span class="twnx">' + esc(h.line) + '</span>'));
+        /* WOOP (2026-11-17): the if-then and the days it was kept this week */
+        if (Goals.hasWoop(a)) {
+          const w = Goals.woop(a), k = Goals.kept(a, h.ws, Day.today());
+          g.appendChild(el('div', 'twfix', '<span class="twnx">If ' + esc(w.if || 'the moment comes') + ', then ' + esc(w.then || 'the plan') +
+            '. Kept ' + k.kept + ' of ' + k.cued + ' planned ' + (k.cued === 1 ? 'day' : 'days') + ' this week</span>'));
+        }
+        const fix = el('div', 'twfix');
+        if (nx.kind === 'next') fix.appendChild(el('span', 'twnx', 'Next: ' + esc(nx.x.text) + ', ' + esc(Day.label(Goals.due(nx.x)))));
+        else if (!(nx.kind === 'add' && h.line)) {
+          if (nx.kind === 'sched') fix.appendChild(el('span', 'twnx', 'Next: ' + esc(nx.x.text)));
+          const b = el('button', 'twfixb', nx.kind === 'sched' ? 'Put on today' : 'Add a task');
+          b.type = 'button';
+          b.onclick = e => {
+            e.stopPropagation();
+            if (nx.kind !== 'sched') { goTo(['quest', 'goals']); return; }
+            const keep = Goals.toToday(nx.x);
+            if (keep) UI.undo('On today: <b>' + esc(nx.x.text) + '</b>', () => Rec.set('note', nx.x.date, nx.x.key, keep));
+          };
+          fix.appendChild(b);
+        }
+        if (fix.children.length) g.appendChild(fix);
+        wrap.appendChild(g);
+      });
+      body.appendChild(wrap);
+      /* In Main Menu.exe the CLAUDE panel can draft the week (Tom, 2026-11-16, "2A"):
+         it is handed each goal and writes todos with a day and a goal, each with Undo. */
+      const bar = el('div', 'twbar');
+      bar.appendChild(plan);
+      if (window.MBClaude && MBClaude.ask) {
+        const ai = el('button', 'mb-btn mb-press mb-tap twplan', 'PLAN WITH CLAUDE');
+        ai.type = 'button';
+        ai.onclick = e => {
+          e.stopPropagation();
+          const t = Day.today(), end = Day.shift(Goals.weekStart(t), Day.dow(t) === 0 ? 13 : 6), s0 = Day.dow(t) === 0 ? Day.shift(t, 1) : t;
+          const lines = A.map(a => {
+            const h = Goals.health(a, L), nx = Goals.next(a, L);
+            return '- ' + a.text + ' (key ' + a.key + (a.by ? ', by ' + a.by : '') + '): ' + (h.v ? Goals.NAME[h.v] : 'new') +
+              (h.line ? '; ' + h.line : '') + (nx.kind === 'next' ? '; next task ' + nx.x.text + ' due ' + Goals.due(nx.x) : nx.kind === 'sched' ? '; open task with no day this week: ' + nx.x.text : h.line ? '' : '; nothing open serves it');
+          });
+          const text = ['Plan my week, ' + s0 + ' to ' + end + '. Today is ' + t + '. My goals:'].concat(lines,
+            ['Draft the week as todos with a day and the goal each serves. Say what you wrote.']).join(String.fromCharCode(10));
+          if (!MBClaude.ask(text)) toast('Claude is still answering. Try again when it finishes.', { bad: true });
+        };
+        bar.appendChild(ai);
+      }
+      body.appendChild(bar);
+    },
+  },
+
+  /* NEW CHAPTER: Tom, 2026-11-16, "a reset widget that's just a reset button
+     that removes itself". It opens QUESTS's New chapter (shared/chapter.js);
+     once a chapter starts after the card went on the board, the card takes
+     itself off, with Undo. */
+  newchapter: {
+    nm: 'NEW CHAPTER', w: 3, h: 2, app: 'quest', to: ['quest', 'chapter'],
+    sub: () => { const c = Chapter.current(); return c ? 'this one since ' + Day.short(c.start) : 'count from a new day'; },
+    draw(body, cfg) {
+      const c = Chapter.current();
+      if (c && cfg && cfg.at && c.t > cfg.at) {
+        setTimeout(() => {
+          const i = layout.indexOf(cfg);
+          if (i < 0) return;
+          const gone = layout.splice(i, 1)[0];
+          saveLayout(); drawHome();
+          UI.undo('<b>NEW CHAPTER</b> card removed', () => { layout.splice(i, 0, gone); saveLayout(); drawHome(); });
+        }, 0);
+        return;
+      }
+      const b = el('button', 'mb-btn mb-press mb-tap twplan', 'NEW CHAPTER');
+      b.type = 'button';
+      b.onclick = e => { e.stopPropagation(); goTo(['quest', 'chapter']); };
+      body.appendChild(b);
+    },
+  },
+
   projects: {
     nm: 'PROJECTS', w: 4, h: 3, app: 'quest', to: ['quest'],
     count() {
@@ -4183,17 +4780,19 @@ const WIDGETS = {
 
   /* ── BLOCK ── */
   rhythms: {
-    nm: 'EVERY & HABITS', w: 4, h: 4, app: 'block', to: ['block'],
+    nm: 'EVERY & HABITS', w: 4, h: 4, app: 'block', to: ['block', 'schedule'],
     state() {
       const today = LifeOS.day(), log = {};
       Rec.all('tick').forEach(t => { if (t.date && t.date <= today) (log[t.key] || (log[t.key] = [])).push(t.date); });
       Object.keys(log).forEach(k => log[k].sort());
       const ws = Rec.setting('block', 'weekStart'), rh = Rec.map('rhythm');
+      const ch = window.Chapter ? Chapter.from('block', today) || null : null, sf = Rec.setting('block', 'streakFrom') || null;
+      const floor = ch && (!sf || ch > sf) ? ch : sf;
       return Object.keys(rh).map(id => Object.assign({ id: id }, rh[id]))
         .filter(r => r.name && (r.kind === 'every' || r.kind === 'anytime'))
         .map(r => {
           const tid = rhTickH(r), dates = log[tid] || [];
-          return { r: r, tid: tid, s: r.kind === 'every' ? rhEveryState(r, dates, today) : rhAnyState(r, dates, today, ws == null ? 1 : ws) };
+          return { r: r, tid: tid, s: r.kind === 'every' ? rhEveryState(r, dates, today) : rhAnyState(r, dates, today, ws == null ? 1 : ws, floor) };
         });
     },
     sub: () => {
@@ -4204,7 +4803,12 @@ const WIDGETS = {
     parts: [['every', 'Every'], ['any', 'Habits'], ['done', 'Done today'], ['later', 'Coming later']],
     draw(body, cfg) {
       const all = WIDGETS.rhythms.state(), today = LifeOS.day();
-      if (!all.length) { body.appendChild(el('div', 'empty', 'No Every blocks or habits')); return; }
+      if (!all.length) {
+        const e = el('div', 'empty rhempty', 'No Every blocks or habits.');
+        const add = el('button', 'mb-btn go mb-press mb-tap', 'ADD ONE');
+        add.onclick = ev => { ev.stopPropagation(); goTo(['block', 'habits']); };
+        e.appendChild(add); body.appendChild(e); return;
+      }
       const list = el('div', 'rowlist');
       const row = (x, done, tail, cls) => {
         const r = el('div', 'row' + (done ? ' done' : '') + (cls ? ' ' + cls : ''));
@@ -4231,9 +4835,38 @@ const WIDGETS = {
       if (any.length) {
         list.appendChild(el('div', 'mb-group', 'HABITS'));
         any.sort((a, b) => (a.s.met ? 1 : 0) - (b.s.met ? 1 : 0))
-          .forEach(x => row(x, x.s.today, x.s.n + ' of ' + x.s.of + ' this ' + x.s.per, x.s.met ? 'met' : ''));
+          .forEach(x => {
+            /* dots while they can be counted at a glance, the words past that; the streak as on BLOCK's page */
+            const k = Math.max(x.s.of, x.s.n), words = x.s.n + ' of ' + x.s.of + ' this ' + x.s.per;
+            let tail = k > 14 ? words : '<span class="rhdots" title="' + words + '">' + Array.from({ length: k }, (_, i) => '<i' + (i < x.s.n ? ' class="on"' : '') + '></i>').join('') + '</span>';
+            if (x.s.streak) tail += '<span class="rhst">' + x.s.streak + ' ' + x.s.per + (x.s.streak === 1 ? '' : 's') + '</span>';
+            row(x, x.s.today, tail, x.s.met ? 'met' : '');
+          });
       }
       body.appendChild(list);
+    },
+  },
+
+  /* ── FLOW: BLOCK's day planned as branches (Tom, 2026-11-17). Every rule is
+     shared/flow.js, the same file BLOCK's Flow tab and STATUS's widget follow. */
+  flow: {
+    nm: 'FLOW', w: 4, h: 5, app: 'block', to: ['block', 'flow'],
+    fid() { return window.Flow ? Flow.openFlow() : null; },
+    sub: () => {
+      const id = WIDGETS.flow.fid(); if (!id) return 'none set up';
+      const h = Flow.here(id);
+      return h && h.box ? 'at ' + h.box.name : 'not started';
+    },
+    /* the travel card (shared/flow.js, Flow.card): where he is on top, the
+       next two levels below, travel down to look, I'M HERE to log (Tom,
+       2026-11-18). The FLOW phone app draws the same card. */
+    draw(body) {
+      if (!window.Flow) { body.appendChild(el('div', 'empty', 'The flow file did not load.')); return; }
+      Flow.card(body, { quiet: true, empty: host => {
+        const add = el('button', 'mb-btn go mb-press mb-tap', 'MAKE ONE');
+        add.onclick = ev => { ev.stopPropagation(); goTo(['block', 'flow']); };
+        host.appendChild(add);
+      } });
     },
   },
 
@@ -4251,7 +4884,7 @@ const WIDGETS = {
       return id ? Object.assign({ id: id }, F[id]) : null;
     },
     series(cfg) {
-      const f = WIDGETS.measure.field(cfg), days = (cfg && cfg.days) || 30, out = [];
+      const f = WIDGETS.measure.field(cfg), days = zoomDays(cfg, (cfg && cfg.days) || 30), out = [];
       if (!f) return out;
       for (let i = days - 1; i >= 0; i--) {
         const d = LifeOS.shift(LifeOS.day(), -i), v = evValue(d, f.id);
@@ -4261,7 +4894,7 @@ const WIDGETS = {
     },
     nmFor: cfg => {
       const f = WIDGETS.measure.field(cfg);
-      const span = (WIDGETS.measure.days.filter(d => d[0] === ((cfg && cfg.days) || 30))[0] || [0, ''])[1];
+      const span = zoomDaysName(WIDGETS.measure.days, zoomDays(cfg, (cfg && cfg.days) || 30));
       return (f ? String(f.label || f.id).toUpperCase() : 'MEASURE') + ' \u00b7 ' + span;
     },
     sub: cfg => {
@@ -4289,7 +4922,7 @@ const WIDGETS = {
       let kept = null;
       const box = el('div', 'fits');
       body.appendChild(box);
-      const line = pts.map(p => [p.d, p.v]), days = (cfg && cfg.days) || 30;
+      const line = pts.map(p => [p.d, p.v]), days = zoomDays(cfg, (cfg && cfg.days) || 30);
       Chart.mount(box, { label: (f.label || f.id) + ', ' + pts.length + ' readings' }, c => {
         c.xTime(LifeOS.shift(LifeOS.day(), -(days - 1)), LifeOS.day());
         /* a 1-to-5 scale on its own scale, and a count from zero: mood on a
@@ -4320,8 +4953,8 @@ const WIDGETS = {
      count; open todos, ideas and cancelled lines do not. A tracker may also
      name `field`, a STATUS measure: every reading of it counts as a dose
      at its own time, and so does the food behind it when the measure reads
-     one (`from`, caffeine off a meal), the way STATUS's `entries` adds
-     `fromFood`. Copy of that rule: change both.
+     one (`from`, caffeine off a meal). What counts as a dose, all of it, is
+     shared/dose.js since 2026-10-30, which STATUS's tiles read too.
      STORES (Tom, 2026-10-27, for creatine: "build a muscle-stores view
      instead of a half-life"). A tracker with `kind: 'store'` is not a sum of
      halvings: it is the extra held over the body's own level, which fills
@@ -4333,51 +4966,21 @@ const WIDGETS = {
      steady 5 g a day, which the studies call full.
      `cap` (default 30 g over a baseline of about 120 g), STORE_TAKE and the
      three-week drain are guesses from the loading studies, labelled so on the
-     card's dialog; Tom can change cap and drain there. */
+     card's dialog; Tom can change cap and drain there.
+     AIMS (2026-10-29). A tracker may carry `aim`, an amount a day, and
+     `aimName`, what the aim is for. Its strip then has a line under the
+     header: the average a day over the last AIM_DAYS days, how many of those
+     days had a dose, and whether the average reaches the aim. It follows the
+     hovered point. For an effect studies tie to weeks of a daily amount
+     rather than to a level anything can measure. */
   halflife: {
-    nm: 'HALF-LIFE', w: 5, h: 6, app: 'status', to: ['status'],
+    nm: 'HALF-LIFE', w: 5, h: 6, app: 'status', fit: 1, to: ['status'],
     days: [[3, '3 days'], [7, '7 days'], [14, '14 days'], [30, '30 days']], day0: 7,
-    list: () => Rec.all('setting').filter(r => r.key.indexOf('lifeos.halflife.') === 0 && r.payload && r.payload.v && r.payload.v.name)
-      .map(r => Object.assign({}, r.payload.v, { key: r.key.slice(7) })).sort((a, b) => (a.ord || 0) - (b.ord || 0)),
+    list: () => Dose.trackers(),
     shown: cfg => WIDGETS.halflife.list().filter(x => !(cfg && cfg.hid && cfg.hid.indexOf(x.key) > -1)),
-    /* every dose of one tracker, as [ms, amount], oldest first */
-    doses(x) {
-      const names = String(x.match || '').split(',').map(s => s.trim()).filter(Boolean);
-      const num = '\\s*(\\d+(?:\\.\\d+)?)?';
-      const res = names.map(n => {
-        const q = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        return n.length <= 2 ? new RegExp('^' + q + '(?![\\p{L}])' + num, 'u') : new RegExp('(?:^|[^\\p{L}\\d])' + q + '(?![\\p{L}])' + num, 'iu');
-      });
-      const per = Number(x.per) || 1, bare = x.bare === '' || x.bare == null ? null : Number(x.bare), out = [];
-      if (x.field) {
-        const F = (Rec.map('field') || {})[x.field] || {}, fp = F.per == null ? 1 : (Number(F.per) || 0);
-        Rec.all('ev').forEach(r => {
-          if (r.key !== x.field) return;
-          ((r.payload && r.payload.e) || []).forEach(e => { const v = Number(e.v); if (e.t && v > 0) out.push([e.t, v * per]); });
-        });
-        if (F.from) Rec.all('meal').forEach(r => { const m = r.payload || {}, v = (parseFloat(m[F.from]) || 0) * fp; if (m.t && v > 0) out.push([m.t, v * per]); });
-      }
-      if (res.length) noteRows().forEach(r => {
-        const p = r.payload || {};
-        if (typeof p.text !== 'string' || p.cancelled || p.kind === 'idea' || (p.kind === 'todo' && !p.done)) return;
-        const text = p.text.trim();
-        let m = null;
-        for (let i = 0; i < res.length && !m; i++) m = text.match(res[i]);
-        if (!m) return;
-        const units = m[1] != null ? Number(m[1]) : bare;
-        if (units == null || !isFinite(units) || units <= 0) return;
-        /* the time typed on the line, else when it was written, else noon */
-        let ms = null;
-        const at = /^(\d{1,2}):(\d\d)/.exec(p.at || '');
-        if (r.date && at) ms = new Date(r.date + 'T' + zpad(+at[1]) + ':' + at[2] + ':00').getTime();
-        else if (p.t) {
-          const w = new Date(p.t), wd = w.getFullYear() + '-' + zpad(w.getMonth() + 1) + '-' + zpad(w.getDate());
-          ms = !r.date || wd === r.date ? p.t : new Date(r.date + 'T12:00:00').getTime();
-        } else if (r.date) ms = new Date(r.date + 'T12:00:00').getTime();
-        if (ms != null && isFinite(ms)) out.push([ms, units * per]);
-      });
-      return out.sort((a, b) => a[0] - b[0]);
-    },
+    /* every dose of one tracker, as [ms, amount], oldest first: shared/dose.js
+       decides what counts, the same answer STATUS's tile reads */
+    doses: x => Dose.all(x).map(d => [d.t, d.v]),
     left: (doses, half, at) => doses.reduce((s, d) => d[0] <= at ? s + d[1] * Math.pow(0.5, (at - d[0]) / 3600000 / half) : s, 0),
     /* the extra held in a store at `at`, doses oldest first */
     store(doses, half, cap, at) {
@@ -4408,6 +5011,9 @@ const WIDGETS = {
           f.unit = box('text', x.unit || 'mg');
           f.half = box('text', fmtHalf(x.half), '9 hours');
           f.bare = box('decimal', x.bare);
+          f.tick = box('text', x.tick, 'Name=10');
+          f.aim = box('decimal', x.aim);
+          f.aimName = box('text', x.aimName, 'Aim');
           f.kind = el('select', 'mb-input');
           f.kind.appendChild(new Option('Half-life', '', false, x.kind !== 'store'));
           f.kind.appendChild(new Option('Store that fills up', 'store', false, x.kind === 'store'));
@@ -4431,13 +5037,16 @@ const WIDGETS = {
           };
           b.appendChild(UI.row('Name', 'What the card calls it.', f.name));
           b.appendChild(UI.row('STATUS measure', 'Its readings, and the food behind it, count as doses.', f.field));
-          b.appendChild(UI.row('Written as', 'The words a dose starts with, comma separated. One or two letters must start the line.', f.match));
+          b.appendChild(UI.row('Written as', 'The words a dose starts with, comma separated. One or two letters must start the line. A word with =amount after it, such as pill=50, always counts that much; !words skips any line holding them.', f.match));
           b.appendChild(UI.row('Each 1 is', 'What the number after it is worth.', f.per));
           b.appendChild(UI.row('Unit', 'Shown after the amount.', f.unit));
           b.appendChild(UI.row('Counts as', 'A store fills up with each dose and drains slowly, like creatine in muscle.', f.kind));
           b.appendChild(capRow); showCap();
           b.appendChild(UI.row('Half-life', 'Hours or days, such as 9 hours or 4.5 days. For a store, how fast the extra drains: a guess of 21 days for creatine.', f.half));
           b.appendChild(UI.row('No number', 'How many a line without a number counts as. Blank skips it.', f.bare));
+          b.appendChild(UI.row('Ticked in BLOCK', 'A block name and what one tick of it is worth, such as Vitamin D=1. Counts on a day with no other dose.', f.tick));
+          b.appendChild(UI.row('Daily aim', 'An amount a day, read as the average over the last ' + AIM_DAYS + ' days. Blank for none.', f.aim));
+          b.appendChild(UI.row('Aim is for', 'What the aim line is called on the card.', f.aimName));
           UI.focusSoon(f.name);
         },
         actions: (x.key ? [{ label: 'REMOVE', kind: 'bad', fn: () => {
@@ -4450,12 +5059,12 @@ const WIDGETS = {
           const hm = /^(\d+(?:\.\d+)?)\s*(d|days?|h|hrs?|hours?)?$/i.exec(v('half'));
           const half = hm ? Number(hm[1]) * (/^d/i.test(hm[2] || '') ? 24 : 1) : 0;
           const per = Number(v('per') || 1), bare = v('bare');
-          if (!v('name') || !(v('match') || v('field'))) { toast('Needs a name, and a STATUS measure or how it is written', { bad: true }); return false; }
+          if (!v('name') || !(v('match') || v('field') || v('tick'))) { toast('Needs a name, and a STATUS measure, how it is written or a BLOCK block', { bad: true }); return false; }
           if (!(half > 0)) { toast('Half-life needs a number of hours or days', { bad: true }); return false; }
-          if (!(per > 0) || (bare !== '' && !(Number(bare) >= 0)) || (f.kind.value === 'store' && !(Number(v('cap')) > 0))) { toast('Amounts need to be numbers', { bad: true }); return false; }
+          if (!(per > 0) || (bare !== '' && !(Number(bare) >= 0)) || (v('aim') !== '' && !(Number(v('aim')) > 0)) || (f.kind.value === 'store' && !(Number(v('cap')) > 0))) { toast('Amounts need to be numbers', { bad: true }); return false; }
           const id = x.key ? x.key : 'halflife.' + Date.now().toString(36);
           const was = x.key ? (Rec.setting('lifeos', id) || {}) : { ord: WIDGETS.halflife.list().length };
-          Rec.setting('lifeos', id, Object.assign({}, was, { name: v('name'), field: v('field'), match: v('match'), per: per, unit: v('unit'), half: half, bare: bare === '' ? '' : Number(bare), kind: f.kind.value, cap: Number(v('cap')) || 30 }));
+          Rec.setting('lifeos', id, Object.assign({}, was, { name: v('name'), field: v('field'), match: v('match'), per: per, unit: v('unit'), half: half, bare: bare === '' ? '' : Number(bare), kind: f.kind.value, cap: Number(v('cap')) || 30, aim: v('aim') === '' ? '' : Number(v('aim')), aimName: v('aimName'), tick: v('tick') }));
           drawHome();
         } }]),
       });
@@ -4484,7 +5093,7 @@ const WIDGETS = {
         return;
       }
       body.style.gap = '0';
-      const days = cfg.days || 7, now = Date.now(), DAY = 86400000;
+      const days = zoomDays(cfg, cfg.days || 7), now = Date.now(), DAY = 86400000;
       const t0 = new Date(LifeOS.shift(LifeOS.day(), -(days - 1)) + 'T00:00:00').getTime();
       const step = (days <= 7 ? 1 : days <= 14 ? 2 : 4) * 3600000;
       const amt = v => v >= 10 ? Math.round(v).toLocaleString() : v >= 1 ? +v.toFixed(1) + '' : v >= 0.05 ? +v.toFixed(2) + '' : '0';
@@ -4511,7 +5120,7 @@ const WIDGETS = {
         at(now);
         const cur = pts[pts.length - 1][1], last = doses.filter(d => d[0] <= now).pop();
         const strip = el('div', 'strip');
-        strip.style.cssText = 'flex:1 1 0;min-height:112px;display:flex;flex-direction:column;min-width:0';
+        strip.style.cssText = 'flex:1 0 auto;min-height:112px;display:flex;flex-direction:column;min-width:0';
         const sat = v => st && v >= STORE_SAT * 100;
         /* a reading names the last dose before its own moment, not today's */
         const sayAt = (v, ms) => {
@@ -4526,6 +5135,21 @@ const WIDGETS = {
         const shown = v => st ? String(Math.round(v)) : amt(v);
         const head = Chart.header({ size: 'sm', label: x.name, value: shown(cur), unit: st ? '% full' : u, when: 'now', sub: said });
         strip.appendChild(head.el);
+        /* the aim line: the average a day over the AIM_DAYS days before `ms` */
+        const aim = Number(x.aim) || 0;
+        let aimSet = null;
+        if (aim > 0) {
+          const line = el('div', 'mb-chead sm'), k = el('div', 'k'), d = el('div', 'd');
+          k.textContent = x.aimName || 'Aim';
+          line.append(k, d);
+          strip.appendChild(line);
+          aimSet = ms => {
+            const f = doses.filter(p => p[0] <= ms && p[0] > ms - AIM_DAYS * DAY);
+            const a = f.reduce((s, p) => s + p[1], 0) / AIM_DAYS, n = new Set(f.map(p => dayOf(p[0]))).size, un = x.unit || '';
+            d.textContent = (a >= aim ? 'Reached: ' : 'Under: ') + amt(a) + ' ' + un + ' a day over ' + AIM_DAYS + ' days, aim ' + amt(aim) + ' ' + un + ', a dose on ' + n + ' of them';
+          };
+          aimSet(now);
+        }
         const box = el('div', 'fits');
         box.style.cssText = 'flex:1 1 auto;min-height:72px';
         strip.appendChild(box);
@@ -4547,9 +5171,290 @@ const WIDGETS = {
           c.area(pts); c.line(pts);
           c.dots(pts.filter((p, j) => j && pts[j - 1][0] === p[0] - 1 / DAY));
           c.end(pts[pts.length - 1], shown(cur));
-          c.scrub(pts, { onMove: p => head.set(shown(p[1]), sayAt(p[1], t0 + p[0] * DAY), when(t0 + p[0] * DAY)), onLeave: head.reset });
+          c.scrub(pts, {
+            onMove: p => { head.set(shown(p[1]), sayAt(p[1], t0 + p[0] * DAY), when(t0 + p[0] * DAY)); if (aimSet) aimSet(t0 + p[0] * DAY); },
+            onLeave: () => { head.reset(); if (aimSet) aimSet(now); },
+          });
         });
       });
+    },
+  },
+
+  /* ── DAY PLAN ──
+     Tom, 2026-11-03: "a big widget that just shows my score for the day as it
+     is, then under the letter I can schedule what time I do the walking
+     chunks, training, eating, and bed time". He picked: the Main Menu board,
+     usual times that every day starts with and that can be moved for today
+     only, and every time a journal EVENT, so it shows in STATUS's journal,
+     TODAY and the calendar.
+
+     The letter is shared/grade.js, the one STATUS shows on its Today screen.
+     The usual times are one setting, `lifeos.dayplan` = [{id, kind, at}],
+     written only when he changes them. A day's times are `note` events keyed
+     `plan-<day>-<id>`, `src: 'plan'`: the row IS the time, so moving it in
+     STATUS moves it here. A bed time before 5am is that night's, dated the
+     next day. A usual time becomes the day's event by a merge stamped at the
+     day's own midnight, so any real edit, a removal, or a device that synced
+     first always wins over it, and two devices make the same row. */
+  dayplan: {
+    nm: 'DAY PLAN', w: 4, h: 6, app: 'status', fit: 1, to: ['status'],
+    kinds: [['walk', 'WALKS', 'Walk'], ['train', 'TRAINING', 'Train'], ['eat', 'MEALS', 'Eat'], ['bed', 'BED', 'Bed']],
+    usual: () => (Rec.setting('lifeos', 'dayplan') || []).filter(x => x && x.id && /^\d\d:\d\d$/.test(x.at || '')),
+    menu: (cfg, redraw) => MINE_BUILD ? [{ label: 'Daily Plan the day todo', check: PLANDAY.on(), fn: () => { PLANDAY.set(!PLANDAY.on()); redraw(); } }] : [],
+    /* after midnight is still the night before, for bed only */
+    late: (kind, at) => kind === 'bed' && at < '05:00',
+    dateFor(day, kind, at) { return WIDGETS.dayplan.late(kind, at) ? Day.shift(day, 1) : day; },
+    mins(kind, at) { const h = at.split(':'); return +h[0] * 60 + (+h[1]) + (WIDGETS.dayplan.late(kind, at) ? 1440 : 0); },
+    /* the day's times, read from the journal */
+    rows(day) {
+      const pre = 'plan-' + day + '-';
+      return Rec.all('note', { date: day }).concat(Rec.all('note', { date: Day.shift(day, 1) }))
+        .filter(r => r.key.indexOf(pre) === 0 && r.payload && r.payload.at && !r.payload.cancelled)
+        .map(r => ({ key: r.key, date: r.date, kind: r.payload.plan || 'walk', at: r.payload.at, id: r.payload.planId || '' }));
+    },
+    payload(day, kind, at, id, t) {
+      const k = WIDGETS.dayplan.kinds.find(x => x[0] === kind) || WIDGETS.dayplan.kinds[0];
+      return { kind: 'event', text: k[2], t: t, made: day, at: at, dur: null, ord: 0, done: 0, cancelled: 0,
+               src: 'plan', plan: kind, planId: id || '' };
+    },
+    /* the usual times not yet on the day, written so that anything real wins */
+    seed(day, stamp) {
+      if (!Rec.hydrated) return;
+      const D = WIDGETS.dayplan, mid = stamp || new Date(day + 'T00:00:00').getTime(), out = [];
+      D.usual().forEach(u => {
+        const key = 'plan-' + day + '-' + u.id, date = D.dateFor(day, u.kind, u.at);
+        if (Rec.row('note', date, key) || Rec.tombstone('note', date, key)) return;
+        /* a usual bed time moved across midnight: the old date may hold it */
+        const other = date === day ? Day.shift(day, 1) : day;
+        if (Rec.row('note', other, key) || Rec.tombstone('note', other, key)) return;
+        out.push({ id: Rec.idOf('note', date, key), user_id: Rec.USER, type: 'note', date: date, key: key,
+                   payload: D.payload(day, u.kind, u.at, u.id, mid), updated_at: mid, deleted: false, by: 'home' });
+      });
+      if (!out.length) return;
+      Rec.merge(out);
+      [...new Set(out.map(r => r.date))].forEach(d => Journal.publishNotes(d, 'home'));
+    },
+    /* put one time on the day, moving it to the right date if it crossed midnight */
+    put(day, key, kind, at, id) {
+      const D = WIDGETS.dayplan, date = D.dateFor(day, kind, at), other = date === day ? Day.shift(day, 1) : day;
+      if (Rec.row('note', other, key)) Rec.del('note', other, key);
+      if (Rec.row('note', date, key)) Rec.patch('note', date, key, { at: at });
+      else Rec.set('note', date, key, D.payload(day, kind, at, id, Date.now()));
+      Journal.publishNotes(date, 'home');
+    },
+    /* Tom, 2026-11-04: ask how many blocks the steps are walked in, and the
+       passive steps throughout the day. One setting, the same every day;
+       Grade.stepPlan splits what is left over the walks to come. */
+    steps() {
+      const was = Rec.setting('lifeos', 'steplan') || {};
+      let bl, pa;
+      const box = (v, x) => { const i = document.createElement('input'); i.type = 'number'; i.inputMode = 'numeric';
+        i.min = 0; i.step = x; i.className = 'mb-input'; i.value = v || ''; return i; };
+      UI.dialog({
+        title: 'STEP PLAN', width: 360,
+        body: b => {
+          bl = box(was.blocks, 1); pa = box(was.passive, 500);
+          b.appendChild(UI.row('Blocks', 'How many walks', bl));
+          b.appendChild(UI.row('Passive steps', 'Throughout the day, outside the walks', pa));
+        },
+        actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: () => {
+          const v = { blocks: Math.max(0, Math.min(12, Math.round(+bl.value || 0))), passive: Math.max(0, Math.round(+pa.value || 0)) };
+          Rec.setting('lifeos', 'steplan', v);
+          drawHome();
+          UI.undo(v.blocks + (v.blocks === 1 ? ' walk, ' : ' walks, ') + v.passive.toLocaleString('en-US') + ' passive steps', () => {
+            Rec.setting('lifeos', 'steplan', was); drawHome();
+          });
+        } }],
+      });
+    },
+    edit(day, kind, was) {
+      const D = WIDGETS.dayplan, k = D.kinds.find(x => x[0] === kind);
+      const usualHas = was && was.id && D.usual().some(u => u.id === was.id);
+      let tm, every;
+      const save = (rm) => {
+        if (!rm && !/^\d\d:\d\d$/.test(tm.value)) { toast('Pick a time', { bad: true }); return false; }
+        const at = tm.value, all = !!every.on;
+        const usualWas = D.usual(), rowsWas = D.rows(day);
+        let id = was ? was.id : '';
+        if (!id && all) id = kind[0] + Date.now().toString(36);
+        const key = was ? was.key : 'plan-' + day + '-' + (id || 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5));
+        if (rm) {
+          if (was) { Rec.del('note', was.date, was.key); Journal.publishNotes(was.date, 'home'); }
+          if (all && id) Rec.setting('lifeos', 'dayplan', usualWas.filter(u => u.id !== id));
+        } else {
+          if (all) Rec.setting('lifeos', 'dayplan', usualWas.filter(u => u.id !== id).concat({ id: id, kind: kind, at: at }));
+          D.put(day, key, kind, at, all ? id : (was ? was.id : ''));
+        }
+        drawHome();
+        const say = rm ? k[2] + ' removed' : k[2] + ' at ' + MIN2(D.mins(kind, at));
+        UI.undo(say + (all ? ', every day' : ', today'), () => {
+          Rec.setting('lifeos', 'dayplan', usualWas);
+          D.rows(day).filter(r => !rowsWas.some(o => o.key === r.key)).forEach(r => Rec.del('note', r.date, r.key));
+          rowsWas.forEach(o => {
+            const now = D.rows(day).find(r => r.key === o.key);
+            if (!now || now.at !== o.at || now.date !== o.date) {
+              if (Rec.tombstone('note', o.date, o.key) || !Rec.row('note', o.date, o.key)) Rec.set('note', o.date, o.key, D.payload(day, o.kind, o.at, o.id, Date.now()));
+              else D.put(day, o.key, o.kind, o.at, o.id);
+            }
+          });
+          drawHome();
+        });
+      };
+      UI.dialog({
+        title: (was ? 'CHANGE ' : 'ADD ') + k[1].replace(/S$/, ''), width: 360,
+        body: b => {
+          tm = document.createElement('input'); tm.type = 'time'; tm.className = 'mb-input';
+          tm.value = was ? was.at : ({ walk: '07:00', train: '17:00', eat: '12:00', bed: '23:00' })[kind];
+          b.appendChild(UI.row('Time', '', tm));
+          /* a new time is a usual one when there are none of its kind yet */
+          const on = was ? usualHas : !D.usual().some(u => u.kind === kind);
+          every = UI.toggle(on);
+          b.appendChild(UI.row('Every day', 'Off changes today only', every));
+        },
+        actions: (was ? [{ label: 'REMOVE', fn: () => save(true) }] : []).concat([{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: () => save(false) }]),
+      });
+    },
+    /* the letter's word is under the letter, so the header says what is next */
+    sub: () => {
+      const D = WIDGETS.dayplan, now = new Date(), m = now.getHours() * 60 + now.getMinutes();
+      const k = Object.fromEntries(D.kinds.map(x => [x[0], x[2]]));
+      const n = D.rows(LifeOS.day()).map(x => ({ x: x, m: D.mins(x.kind, x.at) })).filter(o => o.m >= m).sort((a, b) => a.m - b.m)[0];
+      return n ? 'next: ' + k[n.x.kind].toLowerCase() + ' at ' + MIN2(n.m) : '';
+    },
+    draw(body) {
+      const D = WIDGETS.dayplan, day = LifeOS.day();
+      D.seed(day);
+      const g = Grade.day(day), k = g.letter || 'F', r = Grade.RANKS.find(x => x.k === k);
+      const top = el('div', 'dptop');
+      const ring = el('div', 'dpletter', esc(k));
+      ring.style.setProperty('--rc', 'var(--rank-' + k + ')');
+      top.appendChild(ring);
+      top.appendChild(el('div', 'dpsay', esc(r ? r.say : '') + (g.pct != null ? '<small>' + g.pct + '%</small>' : '')));
+      top.style.cursor = 'pointer';
+      top.onclick = () => goTo(['status']);
+      body.appendChild(top);
+      const have = D.rows(day), sp = Grade.stepPlan(day), n0 = v => Math.round(v).toLocaleString('en-US');
+      /* how many walks the steps are split into, and the passive steps around them */
+      const sline = el('div', 'dpline');
+      sline.appendChild(el('span', 'dplab', 'STEPS'));
+      const schips = el('div', 'dpchips');
+      [[sp.blocks + (sp.blocks === 1 ? ' BLOCK' : ' BLOCKS'), 'Set how many walks'],
+       [n0(sp.passive) + ' PASSIVE', 'Set passive steps throughout the day']].forEach(s => {
+        const c = tbtn(esc(s[0]), () => D.steps());
+        c.setAttribute('aria-label', s[1]);
+        schips.appendChild(c);
+      });
+      sline.appendChild(schips);
+      body.appendChild(sline);
+      D.kinds.forEach(kd => {
+        const line = el('div', 'dpline');
+        line.appendChild(el('span', 'dplab', kd[1]));
+        const chips = el('div', 'dpchips');
+        have.filter(x => x.kind === kd[0]).sort((a, b) => D.mins(a.kind, a.at) - D.mins(b.kind, b.at)).forEach(x => {
+          /* a walk still to come carries its share of the steps left */
+          const w = kd[0] === 'walk' && sp.walks.find(v => v.at === x.at);
+          const c = tbtn(esc(MIN2(D.mins(x.kind, x.at))) + (w && w.share ? '<small>' + n0(w.share) + '</small>' : ''),
+                         () => D.edit(day, kd[0], x), w && w.done ? 'dpdone' : '');
+          c.setAttribute('aria-label', 'Change ' + kd[2].toLowerCase() + ' at ' + MIN2(D.mins(x.kind, x.at)));
+          c.oncontextmenu = ev => { ev.preventDefault(); ev.stopPropagation(); D.edit(day, kd[0], x); };
+          chips.appendChild(c);
+        });
+        /* blocks with no time yet: each one a place to put a time */
+        if (kd[0] === 'walk') for (let i = 0; i < sp.untimed; i++) {
+          const c = tbtn(((typeof Icons !== 'undefined' && Icons.svg('add', { size: 13 })) || '+') + (sp.per ? '<small>' + n0(sp.per) + '</small>' : ''),
+                         () => D.edit(day, 'walk', null), 'dpadd');
+          c.setAttribute('aria-label', 'Give walk ' + (sp.walks.length + i + 1) + ' a time');
+          chips.appendChild(c);
+        }
+        if (kd[0] === 'walk' ? !sp.untimed : (kd[0] !== 'bed' || !have.some(x => x.kind === 'bed'))) {
+          const add = tbtn((typeof Icons !== 'undefined' && Icons.svg('add', { size: 13 })) || '+', () => D.edit(day, kd[0], null), 'dpadd');
+          add.setAttribute('aria-label', 'Add a ' + kd[2].toLowerCase() + ' time');
+          chips.appendChild(add);
+        }
+        line.appendChild(chips);
+        body.appendChild(line);
+      });
+    },
+  },
+
+  /* ── LOG WEEK ──
+     Tom, 2026-11-04: "a LOG widget that just shows day summary for the last 7
+     days and the week". A day's summary is `day.note`, the line he writes in
+     LOG's summary column; the week is LOG's `recap` row keyed `week`, dated
+     on the week's first day. LOG's weeks run in sevens from the 1st of the
+     month (1, 8, 15, 22, 29), so the last seven days can touch two of them,
+     and each one they touch is shown, newest first. Pressing a day or a
+     week's name opens LOG on it.
+     Tom, 2026-11-11: "Yes, make it editable". Each summary is a box typed
+     into on the card, saved the way LOG's own summary dialog saves it:
+     trimmed, merged into the row, the row deleted when nothing is left in
+     it. Half a second after the last key, at once on leaving the box, and
+     Enter saves and leaves (Shift+Enter is a new line), as in LOG. */
+  logweek: {
+    nm: 'LOG WEEK', w: 4, h: 7, app: 'log', fit: 1, to: ['log'],
+    starts: [1, 8, 15, 22, 29],
+    weekOf(d) { const n = +d.slice(8); return d.slice(0, 8) + String(WIDGETS.logweek.starts.filter(s => s <= n).pop()).padStart(2, '0'); },
+    weekName(from) {
+      const L = WIDGETS.logweek, s = +from.slice(8), i = L.starts.indexOf(s);
+      const last = new Date(+from.slice(0, 4), +from.slice(5, 7), 0).getDate();
+      const e = i < L.starts.length - 1 ? Math.min(L.starts[i + 1] - 1, last) : last;
+      return 'Week ' + (i + 1) + ' · ' + s + (e === s ? '' : '–' + e) + ' ' + Day.label(from, { month: 'short' });
+    },
+    week: () => [0, 1, 2, 3, 4, 5, 6].map(i => Day.shift(LifeOS.day(), -i)),
+    note: d => ((Rec.get('day', d, '') || {}).note || '').trim(),
+    sub: () => { const n = WIDGETS.logweek.week().filter(d => WIDGETS.logweek.note(d)).length; return n + ' of 7 days written'; },
+    recap: from => ((Rec.get('recap', from, 'week') || {}).text || '').trim(),
+    /* LOG's saveSummary and its week dialog's save, letter for letter */
+    save(kind, d, raw) {
+      const v = String(raw || '').trim();
+      if (kind === 'day') {
+        const cur = Rec.get('day', d, '') || {};
+        if ((cur.note || '') === v) return;
+        const next = Object.assign({}, cur, { note: v });
+        if (!v) delete next.note;
+        if (Object.keys(next).length) Rec.set('day', d, '', next);
+        else Rec.del('day', d, '');
+      } else {
+        const cur = Rec.get('recap', d, 'week');
+        if (((cur && cur.text) || '').trim() === v) return;
+        if (v) Rec.set('recap', d, 'week', Object.assign({}, cur || {}, { text: v }));
+        else if (cur) Rec.del('recap', d, 'week');
+      }
+    },
+    draw(body) {
+      const L = WIDGETS.logweek, today = LifeOS.day(), days = L.week();
+      const row = (cls, kind, d, lab, text, none) => {
+        const r = el('div', cls);
+        const b = el('button', 'lwlab mb-press', esc(lab));
+        b.type = 'button';
+        b.title = 'Open in LOG';
+        b.onclick = () => goTo(['log', d]);
+        const ta = document.createElement('textarea');
+        ta.className = 'lwtx';
+        ta.rows = 1;
+        ta.value = text;
+        ta.placeholder = none;
+        ta.spellcheck = false;
+        ta.setAttribute('aria-label', lab + ' summary');
+        /* grows with what is in it, so a long summary is never cut off */
+        const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+        let t;
+        const save = () => { clearTimeout(t); L.save(kind, d, ta.value); };
+        ta.oninput = () => { fit(); clearTimeout(t); t = setTimeout(save, 500); };
+        ta.onblur = save;
+        ta.onkeydown = e => {
+          if (e.key !== 'Enter' || e.shiftKey || e.altKey || e.isComposing || e.keyCode === 229) return;
+          e.preventDefault();
+          ta.blur();
+        };
+        r.appendChild(b); r.appendChild(ta);
+        body.appendChild(r);
+        requestAnimationFrame(fit);
+      };
+      [...new Set(days.map(L.weekOf))].forEach(from =>
+        row('lwweek', 'week', from, L.weekName(from), L.recap(from), 'No week summary yet'));
+      days.forEach(d => row('lwday' + (d === today ? ' today' : ''), 'day', d,
+        d === today ? 'Today' : Day.label(d, { weekday: 'short' }) + ' ' + +d.slice(8), L.note(d), 'Not written'));
     },
   },
 
@@ -5744,13 +6649,42 @@ const defaultLayout = () => {
    own, `layoutEmpty`, saying the empty list was chosen; without it a reload
    fell back to the old key or the factory board. */
 const chosenEmpty = () => { try { return !!Rec.setting('lifeos', 'layoutEmpty'); } catch (e) { return false; } };
-let layout, layoutHeld = [];
-try { const saved = Rec.setting('lifeos', 'layout'); if (Array.isArray(saved) && saved.length) layout = saved; } catch (e) {}
-if (!layout && !chosenEmpty()) {
-  try { layout = JSON.parse(localStorage.getItem(LKEY)); } catch (e) {}
-  if (!Array.isArray(layout) || !layout.length) layout = defaultLayout();
+/* ── the building block is half a cell (2026-11-16) ──
+   Tom: "a universal building block to build our widget system on". A
+   card's spot and size count in half cells, so it sizes and sits in steps
+   half as wide and half as tall; every card kept its size, because two half
+   cells and the gap between them are one old cell. U is how many units an
+   old cell is.
+
+   The board in units is a new row, `lifeos.layout2`, read first; the old
+   `lifeos.layout` is converted from once, in memory, and left alone, so a
+   device still on the old code keeps drawing its old board rather than
+   every card twice its size. Saved only when he next changes the board. */
+const U = 2, LAYOUT_KEY = 'layout2';
+const halfSpot = s => {
+  if (!s) return s;
+  const r = Object.assign({}, s);
+  if (r.x) r.x = r.x * U - (U - 1);
+  if (r.y) r.y = r.y * U - (U - 1);
+  if (r.w) r.w *= U;
+  if (r.h) r.h *= U;
+  return r;
+};
+const toHalf = list => list.map(c => {
+  if (!c) return c;
+  const o = Object.assign({}, c, halfSpot(spotOf(c)));
+  if (c.W) o.W = halfSpot(c.W);
+  return o;
+});
+function readLayout() {
+  let s = null; try { s = Rec.setting('lifeos', LAYOUT_KEY); } catch (e) {}
+  if (Array.isArray(s) && s.length) return s;
+  /* emptied on purpose: the old board must not come back in its place */
+  if (chosenEmpty()) return null;
+  let o = null; try { o = Rec.setting('lifeos', 'layout'); } catch (e) {}
+  return Array.isArray(o) && o.length ? toHalf(splitOld(o)) : null;
 }
-if (!Array.isArray(layout)) layout = [];
+let layout, layoutHeld = [];
 /* ── two boards: one for the 1920 screen, one for the 3840 ──
    Tom, 2026-10-16, a few hours after 1.0.69 scaled one board to every
    window: "Just save 2 positions between the 2 main screen sizes, I don't
@@ -5766,7 +6700,23 @@ if (!Array.isArray(layout)) layout = [];
    none of the drag, resize and add code had to learn about two boards;
    the other board's spots ride along in `S` and are put back on saving. */
 const WIDE_AT = 2880;
-const boardFor = () => !matchMedia('(max-width:820px)').matches && innerWidth >= WIDE_AT ? 'wide' : 'std';
+/* ── and a third, for a smaller screen (2026-11-16) ──
+   Tom: "accommodate iPad screen sizes, other resolutions". A window under
+   1440px wide (an iPad on its side, a laptop, a window snapped to half the
+   1920 screen) has a board of its own, `T`, drawn at full size rather than
+   the 1920 board shrunk. Until he arranges it, each card takes its 1920
+   size, cut to the window, and the grid packs them in reading order. A
+   phone still stacks. */
+const TAB_BELOW = 1440;
+const BOARD_LETTER = { wide: 'W', tab: 'T' };
+const boardFor = () => matchMedia('(max-width:820px)').matches ? 'std'
+  : innerWidth >= WIDE_AT ? 'wide' : innerWidth < TAB_BELOW ? 'tab' : 'std';
+/* units across a window at full size: a unit is 67px and a 12px gap */
+const fitUnits = () => Math.max(4, Math.floor((innerWidth - 16) / 79));
+/* a card's width on a board it has no spot on yet: as many cards to a row
+   as its 1920 width suggests, sharing the row evenly, so two 8-unit cards
+   on a 14-unit window are 7 each rather than one card and 6 units of gap */
+const shareRow = w => { const f = fitUnits(), n = Math.max(1, Math.round(f / w)); return Math.max(1, Math.min(w, Math.floor(f / n))); };
 let BOARD = boardFor();
 /* `hs`: he set this fit card's height by hand, so it keeps it (1.0.72) */
 const spotOf = e => { const s = {}; ['x', 'y', 'w', 'h', 'hs'].forEach(k => { if (e[k] != null) s[k] = e[k]; }); return s; };
@@ -5798,21 +6748,25 @@ function splitOld(list) {
   return out;
 }
 /* the saved list, made into the board on screen, and back */
+/* The board on screen's spots sit in x, y, w and h; the 1920 board's ride
+   in `S`, and the other board's stay under its own letter untouched. */
 function toWork(list, b) {
-  if (b !== 'wide') return list;
+  const k = BOARD_LETTER[b]; if (!k) return list;
   return list.map(e => {
-    const o = Object.assign({}, e); delete o.W;
+    const o = Object.assign({}, e); delete o[k];
     o.S = spotOf(e);
-    return setSpot(o, e.W || spotOf(e));
+    /* the wide board falls back to the 1920 spot, as it always did; the
+       small one to the 1920 size, cut to the window, placed by the grid */
+    return setSpot(o, e[k] || (b === 'wide' ? spotOf(e) : { w: shareRow(e.w), h: e.h, hs: e.hs }));
   });
 }
 function toStore(list, b) {
-  if (b !== 'wide') return list;
+  const k = BOARD_LETTER[b]; if (!k) return list;
   return list.map(e => {
     const o = Object.assign({}, e); delete o.S;
-    o.W = spotOf(e);
-    /* a card added on the wide screen finds its own spot on the 1920 one */
-    return setSpot(o, e.S || { w: Math.min(e.w, 12), h: e.h });
+    o[k] = spotOf(e);
+    /* a card added on another board finds its own spot on the 1920 one */
+    return setSpot(o, e.S || { w: Math.min(e.w, 12 * U), h: e.h });
   });
 }
 /* the window crossed 2880px: put this board's spots away, take the other's */
@@ -5852,7 +6806,13 @@ function retire(list) {
    first time the board was changed on the old copy. */
 const known = c => !!(c && WIDGETS[c.t] && widgetHere(WIDGETS[c.t]));
 const takeLayout = list => { const r = retire(list); layoutHeld = r.filter(c => !known(c)); return r.filter(known); };
-layout = toWork(takeLayout(splitOld(layout)), BOARD);
+layout = readLayout();
+if (!layout && !chosenEmpty()) {
+  try { layout = JSON.parse(localStorage.getItem(LKEY)); } catch (e) {}
+  layout = Array.isArray(layout) && layout.length ? toHalf(splitOld(layout)) : toHalf(defaultLayout());
+}
+if (!Array.isArray(layout)) layout = [];
+layout = toWork(takeLayout(layout), BOARD);
 /* Written only when he changes something, never on open. A device opened
    before its synced rows arrive has only the factory layout, and saving that
    stamped it newer than his real one, so it replaced his arrangement on every
@@ -5865,21 +6825,21 @@ const saveLayout = () => { try {
   const all = toStore(layout, BOARD).concat(layoutHeld);
   /* the list first, then the flag, each only as it changes */
   layoutSeen = JSON.stringify([all, !all.length]);
-  Rec.setting('lifeos', 'layout', all);
+  Rec.setting('lifeos', LAYOUT_KEY, all);
   if (chosenEmpty() !== !all.length) Rec.setting('lifeos', 'layoutEmpty', all.length ? 0 : 1);
-  layoutSeen = seenKey(Rec.setting('lifeos', 'layout'));
+  layoutSeen = seenKey(readLayout());
 } catch (e) {} };
 /* the layout is a row, so another device's arrangement can land while this
    one is open; it is picked up then, not at the next reload */
 function reloadLayout() {
-  let s = null; try { s = Rec.setting('lifeos', 'layout'); } catch (e) {}
+  const s = readLayout();
   const j = seenKey(s);
   if (j === layoutSeen) return;
   layoutSeen = j;
-  if (Array.isArray(s) && s.length) layout = toWork(takeLayout(splitOld(s)), BOARD);
+  if (Array.isArray(s) && s.length) layout = toWork(takeLayout(s), BOARD);
   else if (chosenEmpty()) { layout = []; layoutHeld = []; }
 }
-try { layoutSeen = seenKey(Rec.setting('lifeos', 'layout')); } catch (e) {}
+try { layoutSeen = seenKey(readLayout()); } catch (e) {}
 
 /* Is there a real pointer? Everything that can only be done by dragging with
    a mouse is gated on this. */
@@ -5940,6 +6900,36 @@ const bodyParts = name => {
   for (let i = 0; i < BODY_RULES.length; i++) if (BODY_RULES[i][0].test(n)) return BODY_RULES[i][1];
   return null;
 };
+/* every muscle on the master list (shared/muscles.js) onto the figure, read
+   from the suite's one muscle key (shared/muscle-key.js, decision D3).
+   Adductors light the glutes, where TRAIN files them; Neck has no shape. */
+const BODY_MUS = MuscleKey.homeMap();
+/* What one set of a lift gives each body part: Muscles.forLift with the
+   lift's own `mus`, FORGE's tag, the list, then its group (TRAIN.musOf
+   asks the same). Two muscles on one part give the part the bigger share,
+   so a bench is one set of chest, not one and a half. `top` is the parts at
+   the lift's biggest share, the ones its weight measures. */
+function bodyShare(id, ex, cats, memo) {
+  if (memo[id]) return memo[id];
+  const g = ex.cat && cats[ex.cat] ? cats[ex.cat].name : null;
+  let also = null, sh;
+  if (ex.also) { also = {}; Object.keys(ex.also).forEach(c => { if (c !== ex.cat && cats[c]) also[cats[c].name] = +ex.also[c] || 0; }); }
+  if (window.Muscles) {
+    const t = ex.name ? Rec.get('ftag', null, String(ex.name).trim().toLowerCase()) : null;
+    sh = Muscles.forLift(ex.name || '', ex.mus, t && Array.isArray(t.mus) ? t.mus : null, g, also).share;
+  } else {
+    sh = {}; if (g) sh[g] = 1;
+    if (also) Object.keys(also).forEach(k => { if (k !== g && also[k] > 0) sh[k] = also[k]; });
+  }
+  const parts = {}, off = {}, hi = Math.max(0, ...Object.values(sh));
+  const top = {};
+  Object.keys(sh).forEach(m => {
+    const ps = BODY_MUS[m] ? [BODY_MUS[m]] : bodyParts(m);
+    if (ps) ps.forEach(k => { parts[k] = Math.max(parts[k] || 0, sh[m]); if (sh[m] === hi) top[k] = 1; });
+    else if (!/cardio/i.test(m)) off[m] = Math.max(off[m] || 0, sh[m]);
+  });
+  return (memo[id] = { parts: parts, off: off, top: top });
+}
 /* the same test as TRAIN.noteWarm in train/index.html: change both */
 const setIsWarm = p => p.warm === 1 || p.warm === true ||
   (p.warm !== 0 && p.warm !== false && !!p.note && /\bwarm[ -]?ups?\b|\bwu\b/i.test(p.note));
@@ -5950,21 +6940,16 @@ const setIsWarm = p => p.warm === 1 || p.warm === true ||
 const setCounts = (p, date, today) => !p.plan || !!p.done;
 function bodyHeat(from, to) {
   const exs = Rec.map('exercise'), cats = Rec.map('excat'), today = LifeOS.day();
-  const v = {}, offN = {};
-  const put = (cat, share) => {
-    const c = cats[cat], name = c ? c.name : '';
-    const parts = bodyParts(name);
-    if (parts) parts.forEach(k => { v[k] = (v[k] || 0) + share; });
-    else if (name && !/cardio/i.test(name)) offN[name] = (offN[name] || 0) + share;
-  };
+  const v = {}, offN = {}, memo = {};
   Rec.all('set').forEach(r => {
     if (!r.date || r.date < from || r.date > to) return;
     const p = r.payload || {};
     if (setIsWarm(p) || !setCounts(p, r.date, today)) return;
     const ex = exs[p.ex];
-    if (!ex || !ex.cat) return;
-    put(ex.cat, 1);
-    if (ex.also) Object.keys(ex.also).forEach(c => { if (c !== ex.cat && cats[c]) put(c, +ex.also[c] || 0); });
+    if (!ex) return;
+    const b = bodyShare(p.ex, ex, cats, memo);
+    Object.keys(b.parts).forEach(k => { v[k] = (v[k] || 0) + b.parts[k]; });
+    Object.keys(b.off).forEach(n => { offN[n] = (offN[n] || 0) + b.off[n]; });
   });
   return { v: v, off: Object.keys(offN).map(k => ({ name: k, n: offN[k] })).sort((a, b) => b.n - a.n) };
 }
@@ -5977,35 +6962,120 @@ function setTime(r, sess) {
   const s = sess[r.date], at = s ? Date.parse(s.end || s.start || '') : NaN;
   return isNaN(at) ? Date.parse(r.date + 'T18:00:00') : at;
 }
-/* how long a muscle takes to come back, Tom's numbers: a big one 72 hours,
-   a small one 24 to 48. Where in that a small one lands is Claude's call:
-   the sets it got on its last day, 2 or fewer a day, 6 or more two. */
-const BODY_BIG = { chest: 1, lats: 1, quads: 1, hams: 1, glutes: 1, lowback: 1 };
+/* How long a muscle takes to come back (Tom, 2026-11-16: "not just hyper
+   individualized to me ... the number of sets done, or how well performance
+   increases per session, calculated against time between sessions").
+   Two parts, for anyone's log:
+   1. The sets it got on its last day set the starting window: the window for
+      a full day of work (6 sets) is 72 hours for a big muscle and 48 for a
+      small one, the usual figures for hard training; 1 set is half that,
+      9 or more a quarter more (`bodyDose`). Half a set from an exercise that
+      also works it counts as half. [ASSUMED: the textbook figures, not
+      measured on him.]
+   2. His own log corrects it (`bodyLearn`): every pair of back-to-back days
+      within 4 days that trained the muscle, the hours between them, and how
+      the estimated 1RM on the same lifts moved, the middle pair of each gap.
+      The shortest gap after which he held it is when that muscle is back,
+      scaled to the sets of the day in question. A gap counts only with 8
+      pairs or more, and as not held only past a 2% drop, and the log counts for pairs / (pairs + 20). Tom's own
+      log, 16 Nov: most muscles have under 6 such pairs, so sets decide. Lifts with no plain weight (assisted, below
+      zero, time or distance) are left out of the comparison. */
+const BODY_BIG = MuscleKey.HOME_BIG;
+const bodyDose = n => Math.max(0.5, Math.min(1.25, 0.4 + 0.1 * n));
+/* gaps that can say anything about recovery: past 4 days every muscle is
+   back, and a pair that far apart measures the block, not the rest */
+const BODY_GAPS = [[0, 36, 24], [36, 60, 48], [60, 96, 72]];
+let bodyLearnMemo = null;
+function bodyLearn() {
+  const all = Rec.all('set'), today = LifeOS.day(), key = today + '|' + all.length;
+  if (bodyLearnMemo && bodyLearnMemo.key === key) return bodyLearnMemo.out;
+  const exs = Rec.map('exercise'), cats = Rec.map('excat'), from = LifeOS.shift(today, -180);
+  const sess = {};
+  Rec.all('session').forEach(r => { if (r.date >= from) sess[r.date] = r.payload || {}; });
+  const M = {}, memo = {};   /* muscle -> date -> {t0, t1, n, best: {ex: e1rm}} */
+  all.forEach(r => {
+    if (!r.date || r.date < from || r.date > today) return;
+    const p = r.payload || {};
+    if (setIsWarm(p) || !setCounts(p, r.date, today)) return;
+    const ex = exs[p.ex];
+    if (!ex) return;
+    const t = setTime(r, sess), kg = +p.kg || 0, reps = +p.r || 0;
+    const plain = kg > 0 && reps >= 1 && reps <= 20 && !(ex.assist === 1 || (ex.assist !== 0 && /assist/i.test(ex.name || '')));
+    const b = bodyShare(p.ex, ex, cats, memo);
+    Object.keys(b.parts).forEach(k => {
+      const d = (M[k] = M[k] || {})[r.date] || (M[k][r.date] = { t0: t, t1: t, n: 0, best: {} });
+      d.t0 = Math.min(d.t0, t); d.t1 = Math.max(d.t1, t); d.n += b.parts[k];
+      if (b.top[k] && plain) { const e = E1RM.calc(kg, reps, p.rir); if (!(d.best[p.ex] >= e)) d.best[p.ex] = e; }
+    });
+  });
+  const out = {};
+  Object.keys(M).forEach(k => {
+    const ds = Object.keys(M[k]).sort(), pairs = [];
+    for (let i = 1; i < ds.length; i++) {
+      const a = M[k][ds[i - 1]], b = M[k][ds[i]];
+      const both = Object.keys(b.best).filter(e => a.best[e]);
+      if (!both.length) continue;
+      const ch = both.reduce((s, e) => s + b.best[e] / a.best[e] - 1, 0) / both.length;
+      pairs.push({ gap: (b.t0 - a.t1) / 36e5, ch: ch, n: a.n });
+    }
+    if (!pairs.length) return;
+    /* the middle pair of each gap, not the average: in Tom's log one pair
+       read +50% after a day and another -17% after four, which is the lift
+       and the rep range moving, not recovery (2026-11-16) */
+    const mid = a => { const z = a.slice().sort((x, y) => x - y), h = z.length >> 1; return z.length % 2 ? z[h] : (z[h - 1] + z[h]) / 2; };
+    const B = BODY_GAPS.map(g => { const ps = pairs.filter(p => p.gap >= g[0] && p.gap < g[1]);
+      return { mid: g[2], n: ps.length, ch: ps.length ? mid(ps.map(p => p.ch)) : 0 }; });
+    const ok = B.filter(b => b.n >= 8);
+    if (!ok.length) return;
+    /* within 2% is the same day twice: the noise of a rep or two */
+    const fine = b => b.ch >= -0.02;
+    /* the first gap with enough pairs already held: back by then, maybe
+       sooner (an upper bound). Not held: back by the first longer gap that
+       did (a lower bound), else by the longest seen. */
+    let ready, bound;
+    if (fine(ok[0])) { ready = ok[0].mid; bound = 'up'; }
+    else { const f = ok.find(fine); ready = f ? f.mid : 96; bound = 'down'; }
+    const ns = pairs.map(p => p.n).sort((x, z) => x - z), typ = ns[Math.floor(ns.length / 2)];
+    out[k] = { ready: ready, bound: bound, typ: typ, pairs: ok.reduce((s, b) => s + b.n, 0) };
+  });
+  bodyLearnMemo = { key: key, out: out };
+  return out;
+}
 function bodyRecovery(now) {
-  const exs = Rec.map('exercise'), cats = Rec.map('excat'), today = LifeOS.day(), from = LifeOS.shift(today, -3);
-  const sess = {}, last = {}, day = {};
+  const exs = Rec.map('exercise'), cats = Rec.map('excat'), today = LifeOS.day(), from = LifeOS.shift(today, -6);
+  const sess = {}, last = {}, day = {}, memo = {};
   Rec.all('session').forEach(r => { if (r.date >= from) sess[r.date] = r.payload || {}; });
   Rec.all('set').forEach(r => {
     if (!r.date || r.date < from || r.date > today) return;
     const p = r.payload || {};
     if (setIsWarm(p) || !setCounts(p, r.date, today)) return;
     const ex = exs[p.ex];
-    if (!ex || !ex.cat) return;
-    const t = setTime(r, sess);
-    const hit = (cat, share) => (bodyParts(cats[cat] && cats[cat].name) || []).forEach(k => {
+    if (!ex) return;
+    const t = setTime(r, sess), b = bodyShare(p.ex, ex, cats, memo);
+    Object.keys(b.parts).forEach(k => {
       const d = day[k] || (day[k] = {});
-      d[r.date] = (d[r.date] || 0) + share;
+      d[r.date] = (d[r.date] || 0) + b.parts[k];
       if (!last[k] || t > last[k].t) last[k] = { t: t, date: r.date };
     });
-    hit(ex.cat, 1);
-    if (ex.also) Object.keys(ex.also).forEach(c => { if (c !== ex.cat && cats[c]) hit(c, +ex.also[c] || 0); });
   });
-  const out = {};
+  const L = bodyLearn(), out = {};
   Object.keys(last).forEach(k => {
-    const n = day[k][last[k].date];
-    const win = BODY_BIG[k] ? 72 : Math.round(24 + 24 * Math.max(0, Math.min(1, (n - 2) / 4)));
+    const n = day[k][last[k].date], base = BODY_BIG[k] ? 72 : 48;
+    const dose = base * bodyDose(n);
+    let win = dose, why = (Math.round(n * 2) / 2) + ' sets last time';
+    const me = L[k];
+    if (me) {
+      /* his gap, at his usual sets, scaled to this day's sets; an upper
+         bound only ever shortens the window, a lower bound only lengthens it */
+      const mine = me.ready * bodyDose(n) / bodyDose(me.typ);
+      const usable = me.bound === 'up' ? Math.min(mine, dose) : Math.max(mine, dose);
+      const w = me.pairs / (me.pairs + 20);
+      win = w * usable + (1 - w) * dose;
+      if (Math.abs(usable - dose) >= 1) why += '; your log, ' + me.pairs + ' pairs of sessions within 4 days: back to your best ' + (me.bound === 'up' ? 'within' : 'only after') + ' about ' + me.ready + ' hours';
+    }
+    win = Math.round(Math.max(12, Math.min(120, win)));
     const left = win - (now - last[k].t) / 36e5;
-    if (left > 0) out[k] = { left: left, win: win };
+    if (left > 0) out[k] = { left: left, win: win, why: why };
   });
   return out;
 }
@@ -6268,7 +7338,10 @@ function bodyColour(r) {
     ? 'color-mix(in oklab, var(--warn) ' + Math.round(g * 200) + '%, var(--danger))'
     : 'color-mix(in oklab, var(--success) ' + Math.round((g - 0.5) * 200) + '%, var(--warn))';
 }
-const bodyBright = (n, max) => (0.25 + 0.75 * (max ? n / max : 0)).toFixed(2);
+/* an untrained muscle is ready, so it is green at the floor, never grey:
+   the body after days off reads all go, not empty (Tom, 2026-11-16: "this
+   is meant to motivate me to train more often, not guilt me") */
+const bodyBright = (n, max) => (0.4 + 0.6 * (max ? n / max : 0)).toFixed(2);
 /* Wider collarbones, Tom, 2026-10-18: "widen the clavicles". Every point
    outside the neck moves out BODY_CLAV units (about 3.3 cm a side, so the
    shoulders go from about 35 to 41 cm across), the whole move at the
@@ -6365,10 +7438,8 @@ function bodySvg(v, rec, pose) {
   const mir = s => s + '<g transform="matrix(-1,0,0,1,200,0)">' + s + '</g>';
   const muscles = l => l.map(m => {
     const n = v[m[0]] || 0, r = rec && rec[m[0]];
-    const st = n > 0
-      ? 'fill:' + bodyColour(r) + ';fill-opacity:' + bodyBright(n, max) + ';stroke:var(--surface-1);stroke-opacity:.85;stroke-width:.5'
-      : 'fill:var(--surface-3);' + ink;
-    const tip = BODY_NAMES[m[0]] + ' · ' + (Math.round(n * 2) / 2) + ' sets' + (r ? ' · ' + Math.ceil(r.left) + 'h to recover' : n ? ' · ready' : '');
+    const st = 'fill:' + bodyColour(r) + ';fill-opacity:' + bodyBright(n, max) + ';stroke:var(--surface-1);stroke-opacity:.85;stroke-width:.5';
+    const tip = BODY_NAMES[m[0]] + ' · ' + (Math.round(n * 2) / 2) + ' sets' + (r ? ' · ' + Math.ceil(r.left) + 'h to recover' : ' · ready');
     return '<path d="' + m[1] + '" style="' + st + '"><title>' + tip + '</title></path>';
   }).join('');
   const skin = bodyWide(BODY_SKIN);
@@ -6469,7 +7540,10 @@ function gapAt(c, r) {
   let r0 = r, r1 = r;
   while (r0 > 1 && rowFree(r0 - 1)) r0--;
   while (r1 < N && rowFree(r1 + 1)) r1++;
-  if (r1 >= N) return { x: c, y: r0, w: 0, h: 0 };
+  /* a patch running off the bottom is open below, but still as wide as the
+     free run: the hint drew a full block from the pointer's column over the
+     card beside it (Tom's DESK TIME, 2026-11-16) */
+  if (r1 >= N) return { x: c0, y: r0, w: c1 - c0 + 1, h: Infinity };
   return { x: c0, y: r0, w: c1 - c0 + 1, h: r1 - r0 + 1 };
 }
 function hint(m, x, y, w, h, land) {
@@ -6486,25 +7560,50 @@ function hint(m, x, y, w, h, land) {
   n.style.height = (h * m.R - m.gap) + 'px';
   g.classList.toggle('gapon', !land);
 }
-/* B: an empty patch offers a widget, the size of the patch */
+/* B: an empty patch offers a widget, one standard block of it */
 (function watchGaps() {
   const g = $('#grid');
+  /* Tom, 2026-11-09: "Why is this 1 giant widget? The underlying grid should
+     be standard sized nodes and blocks". The hint was the whole empty patch,
+     so a big gap read as one giant card. It is now one standard block, 4 by 3,
+     on a lattice of blocks counted from the patch's corner, smaller only where
+     the patch is. A widget added there keeps its own size, cut to the room
+     the patch has right and down of the block. */
+  /* Tom, 2026-11-16: "Having a big dash box does not look refined at all.
+     Just have it match ... the smallest widget size that actually has a
+     function." Measured on the demo: at 2 by 2 units (146 by 72 px, one old
+     cell) 52 of 63 widgets show their answer, at 1 by 1 only 9. So the hint
+     is 2 by 2 units, replacing the 4 by 3 block of 2026-11-09. */
+  const BW = U, BH = U;
+  const block = (gap, at) => {
+    if (!gap.w) return { x: Math.min(gap.x, COLS - BW + 1), y: gap.y, w: BW, h: BH, room: null };
+    /* open below (gapAt's h is Infinity): full blocks down, cut at the sides */
+    /* blocks never overlap: what is left at a patch's edge is a smaller
+       block. His screen is 11 rows (12 columns at 1920, 24 at 3840), so a
+       full-height patch is three 4 by 3 blocks and a 4 by 2 strip. Tom chose
+       that over shorter rows, 2026-11-09. */
+    const x = gap.x + Math.floor((at.c - gap.x) / BW) * BW;
+    const y = gap.y + Math.floor((at.r - gap.y) / BH) * BH;
+    const w = Math.min(BW, gap.x + gap.w - x), h = Math.min(BH, gap.y + gap.h - y);
+    return { x: x, y: y, w: w, h: h, room: { w: gap.x + gap.w - x, h: gap.y + gap.h - y } };
+  };
   const target = ev => {
     if (ev.target !== g || moving || sizing || editing || NARROW()) return null;
     const m = gridMetrics(), at = cellAt(m, ev.clientX, ev.clientY);
-    return { m: m, gap: gapAt(at.c, at.r) };
+    const gap = gapAt(at.c, at.r), bl = gap && block(gap, at);
+    /* a space smaller than the block holds no card that works: no hint */
+    return { m: m, gap: bl && bl.w >= BW && bl.h >= BH ? gap : null, b: bl };
   };
   g.addEventListener('mousemove', ev => {
     if (moving || sizing) return;
     const t = target(ev);
     if (!t || !t.gap) { hint(); return; }
-    const x = t.gap.w ? t.gap.x : Math.min(t.gap.x, COLS - 3);
-    hint(t.m, x, t.gap.y, t.gap.w || 4, t.gap.h || 3);
+    hint(t.m, t.b.x, t.b.y, t.b.w, t.b.h);
   });
   g.addEventListener('mouseleave', () => { if (!moving && !sizing) hint(); });
   g.addEventListener('click', ev => {
     const t = target(ev);
-    if (t && t.gap) { hint(); widgetPicker(t.gap); }
+    if (t && t.gap) { hint(); widgetPicker({ x: t.b.x, y: t.b.y, w: 0, h: 0, room: t.b.room }); }
   });
 })();
 
@@ -6532,6 +7631,36 @@ function tickList(title, x, y, list, isOn, put) {
   };
   return build();
 }
+/* The names the board itself reads off a widget, and the shape each must be.
+   LOG WEEK (1.0.96) gave itself a helper called `days`, the board read it as
+   its list of ranges, and + WIDGET threw for everyone until 1.0.100. Tom,
+   2026-11-05: "make sure that glitch doesnt happen again". A widget's own
+   helpers take any name not here, and _review.html fails on any fault
+   widgetFaults finds. A new name the board reads goes in this list. */
+const WIDGET_SHAPE = {
+  nm: 'string', w: 'number', h: 'number', app: 'string', grp: 'string', about: 'string',
+  draw: 'function', sub: 'function', nmFor: 'function', menu: 'function', periodsDef: 'function',
+  days: 'list', periods: 'list', presets: 'list', to: 'list', parts: 'list or function', min: 'object',
+};
+function widgetFaults() {
+  const out = [];
+  const is = (v, t) => t === 'list' ? Array.isArray(v)
+    : t === 'list or function' ? Array.isArray(v) || typeof v === 'function' : typeof v === t;
+  Object.keys(WIDGETS).forEach(k => {
+    const W = WIDGETS[k];
+    Object.keys(WIDGET_SHAPE).forEach(p => {
+      if (W[p] != null && !is(W[p], WIDGET_SHAPE[p])) out.push(k + '.' + p + ' is a ' + typeof W[p] + ', the board reads a ' + WIDGET_SHAPE[p]);
+    });
+    if (Array.isArray(W.days) && !W.days.every(d => Array.isArray(d))) out.push(k + '.days is not a list of [days, label]');
+    if (W.periods && typeof W.periodsDef !== 'function') out.push(k + ' has periods and no periodsDef');
+    try { if (W.menu && !Array.isArray(W.menu({ t: k }, () => {}))) out.push(k + '.menu hands back no list'); }
+    catch (e) { out.push(k + '.menu threw: ' + e.message); }
+  });
+  return out;
+}
+/* a widget's own menu, and nothing if it throws: one card cannot take the
+   menu down with it */
+const menuOf = (W, cfg, redraw) => { try { const m = W.menu ? W.menu(cfg, redraw) : []; return Array.isArray(m) ? m : []; } catch (e) { console.warn('[home] ' + cfg.t + ' menu', e); return []; } };
 function widgetMenu(i, x, y) {
   const cfg = layout[i]; if (!cfg) return;
   const W = WIDGETS[cfg.t]; if (!W) return;
@@ -6540,7 +7669,7 @@ function widgetMenu(i, x, y) {
      shows, not its factory one, and keeps what it is given (`hs`). */
   const set = (k, v) => {
     if (k === 'h' && W.fit) { cfg.h = effH[i] || cfg.h; cfg.hs = 1; }
-    cfg[k] = Math.max(k === 'h' && W.fit ? 1 : 2, Math.min(k === 'w' ? COLS : 1e4, (cfg[k] || 3) + v));
+    cfg[k] = Math.max(minSize(cfg.t)[k], Math.min(k === 'w' ? COLS : 1e4, (cfg[k] || 3) + v));
     saveLayout(); drawHome();
   };
   /* Move up, Move down, Wider and Narrower are off the menu (Tom,
@@ -6555,16 +7684,19 @@ function widgetMenu(i, x, y) {
   UI.menu(x, y, [
     ...(NARROW() ? [] : [
       { label: 'Taller', fn: () => set('h', 1) },
-      hNow > (W.fit ? 1 : 2) ? { label: 'Shorter', fn: () => set('h', -1) } : null,
-      W.fit && cfg.hs ? { label: 'Fit to contents', fn: () => { delete cfg.hs; cfg.h = W.h; saveLayout(); drawHome(); } } : null,
+      hNow > minSize(cfg.t).h ? { label: 'Shorter', fn: () => set('h', -1) } : null,
+      /* one press, once: the card takes the rows its contents need at
+         its width and zoom, then stays that size (2026-11-16) */
+      document.querySelector('#grid > .w[data-i="' + i + '"] > .w-body.appslot') ? null : { label: 'Fit to contents', fn: () => {
+        const r = needRows(i); if (!r) return;
+        cfg.h = r; cfg.hs = 1; saveLayout(); drawHome();
+      } },
     ]),
     /* A widget that says what ranges it understands gets them offered here,
        so a second copy of it can show a different stretch of time. */
     cfg.zoom && !NARROW() ? { label: 'Zoom back to 100%', fn: () => { delete cfg.zoom; saveLayout(); drawHome(); } } : null,
-    W.days || W.periods || W.parts ? '-' : null,
-    W.days ? { label: 'Time frame', sub: W.days.map(d => ({
-        label: d[1], check: (cfg.days || W.day0 || 90) === d[0],
-        fn: () => { cfg.days = d[0]; saveLayout(); drawHome(); } })) } : null,
+    Array.isArray(W.days) || W.periods || W.parts ? '-' : null,
+    Array.isArray(W.days) ? { label: 'Time frame', sub: daysMenu(W, cfg, () => { saveLayout(); drawHome(); }) } : null,
     /* tick lists: each pick redraws the card and opens the list again, so
        several can be ticked in a row; the last one on cannot go */
     W.periods ? { label: 'Time frames', sub: tickList('Time frames', x, y,
@@ -6578,7 +7710,7 @@ function widgetMenu(i, x, y) {
       (id, on) => { const off = (cfg.off || []).filter(o => o !== id); if (!on) off.push(id);
         if (off.length) cfg.off = off; else delete cfg.off; }) } : null,
     /* a widget with choices of its own puts them here, the same menu */
-    ...(W.menu ? W.menu(cfg, () => { saveLayout(); drawHome(); }) : []),
+    ...menuOf(W, cfg, () => { saveLayout(); drawHome(); }),
     '-',
     /* Tom, 2026-10-18, picked "rebuild the wide board so it draws full
        size": a board drawn under 95% takes every spot times the scale, so
@@ -6596,13 +7728,230 @@ function widgetMenu(i, x, y) {
 
 const NARROW = () => matchMedia('(max-width:820px)').matches;
 /* the icon of a widget that draws for no one app, by what it is about */
-const WIC = { lockedin: 'energy', workdone: 'done', todo: 'done', ideas: 'edit', events: 'today', streaks: 'star',
+const WIC = { lockedin: 'energy', workdone: 'done', todo: 'done', next: 'done', next1: 'done', projtasks: 'done', ideas: 'edit', events: 'today', streaks: 'star',
   sticky: 'edit', clock: 'timer', timer: 'timer', stopwatch: 'timer', intervals: 'timer', alarms: 'timer',
   countdown: 'timer', worldclock: 'timer', desktime: 'timer', calendar: 'calendar', year: 'calendar', life: 'calendar',
   links: 'link', apps: 'menu', upcoming: 'calendar', projects: 'filter', onthisday: 'history', recap: 'history',
   log: 'history', ticks: 'done', 'add-todo': 'add', 'add-entry': 'add', 'add-event': 'add', 'add-idea': 'add' };
+/* ── PLAN THE DAY ──
+   Tom, 2026-11-04: "an event that asks me to plan and prompt my day. It
+   should ask me if block has the day scheduled or if anything is happening
+   today out of the ordinary. It should ask you to finalize how my day is
+   going." He picked: a daily todo that launches its own sequence, for today
+   or tomorrow, and the CLAUDE panel finalizing it, allowed to set DAY PLAN
+   times, the day's todos and the step blocks (shared/claude.js 1.1.0).
+
+   The todo is `planday-<day>`, made by a merge stamped at the day's own
+   midnight, so two devices make the same row and any real edit wins. Its
+   link, `mb:home/planday`, opens the sequence from STATUS, QUESTS, LOG or
+   TODAY. One left untouched on an earlier day is deleted, so a skipped day
+   does not follow him. Outside Main Menu.exe there is no panel, so the
+   words are copied for Claude chat instead.
+
+   Tom, 2026-11-05: clients get it too, "but make sure its optional". The
+   setting `lifeos.planday` is 'off' once turned off, from the sequence's
+   first window or DAY PLAN's menu, and nothing until then, so no default
+   is ever written.
+   Tom only for now (Tom, 2026-11-09: "Make the plan the day task me only
+   for now"): a client build, which has no `mine` app, never adds it and
+   takes back an untouched one it already added. */
+const PLANDAY = {
+  key: d => 'planday-' + d,
+  on: () => MINE_BUILD && Rec.setting('lifeos', 'planday') !== 'off',
+  todo: (day, t) => ({ kind: 'todo', text: 'Plan the day', t: t, made: day, at: null, dur: null, ord: -1, done: 0, cancelled: 0,
+                       src: 'plan', link: 'mb:home/planday' }),
+  set(on) {
+    const day = Day.today(), key = PLANDAY.key(day);
+    Rec.setting('lifeos', 'planday', on ? null : 'off');
+    if (on && Rec.tombstone('note', day, key)) {
+      /* turned off today and on again: the todo it took away comes back */
+      Rec.set('note', day, key, PLANDAY.todo(day, Date.now()));
+      Journal.publishNotes(day, 'home');
+    } else if (on) PLANDAY.seed();
+    else {
+      const r = Rec.get('note', day, key);
+      if (r && !r.done) { Rec.del('note', day, key); Journal.publishNotes(day, 'home'); }
+    }
+    toast(on ? 'Plan the day is back on today’s todos.' : 'Plan the day turned off. DAY PLAN’s menu turns it back on.');
+    drawHome();
+  },
+  seed() {
+    if (!Rec.hydrated || typeof Journal === 'undefined') return;
+    const day = Day.today(), key = PLANDAY.key(day), mid = d => new Date(d + 'T00:00:00').getTime();
+    for (let i = MINE_BUILD ? 1 : 0; i <= 7; i++) {
+      const d = Day.shift(day, -i), r = Rec.row('note', d, PLANDAY.key(d));
+      if (r && !r.deleted && r.payload && !r.payload.done && r.updated_at === mid(d)) Rec.del('note', d, PLANDAY.key(d));
+    }
+    if (!PLANDAY.on() || Rec.row('note', day, key) || Rec.tombstone('note', day, key)) return;
+    Rec.merge([{ id: Rec.idOf('note', day, key), user_id: Rec.USER, type: 'note', date: day, key: key,
+      payload: PLANDAY.todo(day, mid(day)),
+      updated_at: mid(day), deleted: false, by: 'home' }]);
+    Journal.publishNotes(day, 'home');
+  },
+  lab: d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+  /* the words Claude gets */
+  words(s) {
+    const day = s.day, when = day === Day.today() ? 'today' : 'tomorrow';
+    const lab = new Date(day + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    const plan = Rec.get('plan', day, 'routine'), bl = (plan && plan.blocks) || [];
+    const out = ['Plan the day: ' + lab + ' (' + day + '), ' + when + '.'];
+    if (bl.length) {
+      const timed = bl.filter(x => x.s != null), loose = bl.filter(x => x.s == null);
+      out.push('BLOCK has ' + (plan.name || 'a routine') + ': ' +
+        (timed.map(x => MIN2(x.s) + ' ' + x.name + (x.dur ? ' ' + DUR(x.dur) : '')).join('; ') || 'no timed blocks') +
+        (loose.length ? '. Also: ' + loose.map(x => x.name).join(', ') : '') + '.');
+    } else out.push('BLOCK has nothing published for that day.');
+    if (bl.length) out.push('Is BLOCK right for the day: ' + (s.block === 'yes' ? 'yes.' : 'not quite, see below.'));
+    out.push('Out of the ordinary: ' + (s.odd.trim() || 'nothing.'));
+    if (when === 'today') {
+      const gap = Grade.toS(day, at => MIN2(+at.slice(0, 2) * 60 + (+at.slice(3, 5)))).filter(p => p.letter !== 'S');
+      if (gap.length) out.push('Where today stands for an S: ' + gap.map(p => p.label + ' ' + p.text).join('; ') + '.');
+    }
+    out.push('Finalize the day: set its DAY PLAN times (walks, training, meals, bed), the step blocks, and its todos, so it can be an S day. Then tell me the day in time order.');
+    return out.join('\n');
+  },
+  open() {
+    const s = { day: '', block: 'yes', odd: '' }, today = Day.today(), tom = Day.shift(today, 1), lab = PLANDAY.lab;
+    const next = f => setTimeout(f, 0);
+    const late = new Date().getHours() >= 18;
+    /* 1b: WOOP (Tom, 2026-11-17): when each goal's "if" moment happens that
+       day. A time becomes a timed todo, woop-<goal>-<day>, the moment ROOM's
+       wallpaper lifts that goal's card (shared/goals.js, cue). */
+    const cues = () => {
+      const A = Goals.cards();
+      if (!A.length) return block();
+      const boxes = {};
+      UI.dialog({
+        title: 'VISION GOALS · ' + lab(s.day).toUpperCase(), width: 460,
+        body: b => {
+          b.appendChild(el('p', 'pdsay', 'When will each moment happen ' + (s.day === today ? 'today' : 'tomorrow') + '? Blank skips it.'));
+          A.forEach(a => {
+            const w = Goals.woop(a) || {}, was = Rec.get('note', s.day, Goals.cueKey(a.key, s.day));
+            b.appendChild(el('p', 'pdsay', '<b>If ' + esc(w.if || 'the moment comes') + '</b>, then ' + esc(w.then || 'the plan')));
+            const i = document.createElement('input');
+            i.type = 'time'; i.className = 'mb-input pdtime'; i.value = (was && was.at) || '';
+            i.setAttribute('aria-label', 'When: ' + (w.if || a.text));
+            boxes[a.key] = i; b.appendChild(i);
+          });
+        },
+        actions: [{ label: 'CANCEL' }, { label: 'NEXT', kind: 'go', fn: () => {
+          A.forEach(a => { const v = boxes[a.key].value, was = Rec.get('note', s.day, Goals.cueKey(a.key, s.day));
+            if (v || (was && !was.done)) Goals.cue(a, s.day, v); });
+          next(block);
+        } }],
+      });
+    };
+    /* 2: what BLOCK has on it */
+    const block = () => {
+      const plan = Rec.get('plan', s.day, 'routine'), bl = (plan && plan.blocks) || [];
+      UI.dialog({
+        title: 'BLOCK · ' + lab(s.day).toUpperCase(), width: 400,
+        body: b => {
+          if (!bl.length) { b.appendChild(el('p', 'pdsay', 'BLOCK has nothing on this day yet. Opening BLOCK publishes the next two weeks.')); return; }
+          b.appendChild(el('p', 'pdsay', esc(plan.name || 'Routine') + ', ' + bl.length + (bl.length === 1 ? ' block' : ' blocks') + '. Is this the day?'));
+          const list = el('div', 'pdlist');
+          bl.slice(0, 12).forEach(x => list.appendChild(el('div', 'pdrow',
+            '<b>' + (x.s == null ? '' : esc(MIN2(x.s))) + '</b><span>' + esc(x.name) + '</span><i>' + (x.dur ? esc(DUR(x.dur)) : '') + '</i>')));
+          if (bl.length > 12) list.appendChild(el('div', 'pdrow', '<b></b><span>' + (bl.length - 12) + ' more</span><i></i>'));
+          b.appendChild(list);
+        },
+        actions: [{ label: 'OPEN BLOCK', fn: () => next(() => goTo(['block'])) }]
+          .concat(bl.length ? [{ label: 'NOT QUITE', fn: () => { s.block = 'no'; next(odd); } }] : [])
+          .concat([{ label: bl.length ? 'YES' : 'NEXT', kind: 'go', fn: () => { s.block = 'yes'; next(odd); } }]),
+      });
+    };
+    /* 3: anything out of the ordinary, then Claude */
+    const odd = () => {
+      let box;
+      UI.dialog({
+        title: 'ANYTHING DIFFERENT', width: 400,
+        body: b => {
+          b.appendChild(el('p', 'pdsay', s.block === 'yes' ? 'Anything out of the ordinary? A client moved, travel, an appointment, feeling off.'
+                                                           : 'What is different from BLOCK?'));
+          box = document.createElement('textarea'); box.className = 'mb-input pdodd'; box.rows = 4;
+          box.placeholder = 'Nothing, or say what';
+          b.appendChild(box);
+          if (UI.focusSoon) UI.focusSoon(box);
+        },
+        actions: [{ label: 'CANCEL' }, { label: 'FINALIZE', kind: 'go', fn: () => { s.odd = box.value; next(() => PLANDAY.send(s)); } }],
+      });
+    };
+    /* 1: which day */
+    const first = UI.dialog({
+      title: 'PLAN THE DAY', width: 500,
+      body: b => {
+        b.appendChild(el('p', 'pdsay', 'Which day are you planning?'));
+        const off = tbtn('Stop adding this todo every day', () => { if (first && first.close) first.close(); PLANDAY.set(false); }, 'pdoff');
+        b.appendChild(off);
+      },
+      actions: [{ label: 'CANCEL' },
+        { label: 'TODAY · ' + lab(today).toUpperCase(), kind: late ? '' : 'go', fn: () => { s.day = today; next(cues); } },
+        { label: 'TOMORROW · ' + lab(tom).toUpperCase(), kind: late ? 'go' : '', fn: () => { s.day = tom; next(cues); } }],
+    });
+  },
+  send(s) {
+    /* tomorrow's usual times go on now, so Claude moves them rather than adding beside them */
+    if (s.day !== Day.today()) WIDGETS.dayplan.seed(s.day, Date.now());
+    const text = PLANDAY.words(s), today = Day.today(), key = PLANDAY.key(today);
+    const tick = () => { const r = Rec.get('note', today, key); if (r && !r.done) { Journal.tick(today, key, { src: 'home' }); drawHome(); } };
+    if (window.MBClaude && MBClaude.ask) {
+      if (!MBClaude.ask(text)) { toast('Claude is still answering. Try again when it finishes.', { bad: true }); return; }
+      tick();
+      return;
+    }
+    const shown = () => UI.dialog({
+      title: 'FOR CLAUDE', width: 460,
+      body: b => { b.appendChild(el('p', 'pdsay', 'Paste this into Claude.'));
+        const t = document.createElement('textarea'); t.className = 'mb-input pdodd'; t.rows = 9; t.value = text; t.readOnly = true;
+        b.appendChild(t); setTimeout(() => t.select(), 50); },
+      actions: [{ label: 'DONE', kind: 'go' }],
+    });
+    tick();
+    try { navigator.clipboard.writeText(text).then(() => toast('Copied. Paste it into Claude.'), shown); } catch (e) { shown(); }
+  },
+};
+
+/* ── one widget, for ROOM's wallpaper (2026-11-17) ──
+   OUTER HEAVEN's wallpaper frames this page once per widget, as
+   `?widget=<type>&n=<k>&bare=1`: the k-th card of that type on his board,
+   with its own settings, else a fresh one. `&key=<k>` on a sticky note is
+   a note of its own, the setting `lifeos.sticky.<k>`. `?widget=list`
+   draws nothing and hands the wallpaper his cards and every type. Nothing
+   here ever saves the board: the head's buttons are hidden and the card
+   cannot be dragged, removed or sized. */
+const WQ = new URLSearchParams(location.search);
+const WMODE = WQ.get('widget') || '';
+function wmodeList() {
+  const a = [];
+  if (WMODE === 'list' || WMODE === 'sync' || !WIDGETS[WMODE]) return a;
+  const key = (WQ.get('key') || '').replace(/[^\w-]/g, '');
+  const mine = key ? [] : layout.map((c, i) => [c, i]).filter(([c]) => c && c.t === WMODE);
+  const k = Math.max(0, Number(WQ.get('n')) || 0);
+  if (mine[k]) a[mine[k][1]] = mine[k][0];
+  else { const W = WIDGETS[WMODE]; a[layout.length] = Object.assign({ t: WMODE, w: W.w || 4, h: W.h || 3 }, key ? { sk: key } : {}); }
+  return a;
+}
+function wmodeTell() {
+  if ((WMODE !== 'list' && WMODE !== 'sync') || parent === window) return;
+  const cards = [], seen = {};
+  layout.forEach(c => { const W = c && WIDGETS[c.t]; if (!W || String(c.t).indexOf('app-') === 0) return;
+    const n = seen[c.t] = (seen[c.t] == null ? 0 : seen[c.t] + 1);
+    cards.push({ t: c.t, n, nm: W.nmFor ? W.nmFor(c) : W.nm, w: c.w, h: c.h }); });
+  const types = Object.keys(WIDGETS).filter(t => t.indexOf('app-') !== 0 && WIDGETS[t].nm)
+    .map(t => ({ t, nm: WIDGETS[t].nm, w: WIDGETS[t].w || 4, h: WIDGETS[t].h || 3, grp: WIDGETS[t].grp || '' }));
+  const stickies = Rec.all('setting').filter(r => /^lifeos\.sticky\.[\w-]+$/.test(r.key) && !r.deleted).map(r => r.key.slice(13));
+  try { parent.postMessage({ mbWidgets: 1, cards, types, stickies, signedIn: !!(window.Cloud && Cloud.state && Cloud.state().on) }, '*'); } catch (e) {}
+}
+/* Typing in a framed widget: the wallpaper sits behind the desktop and is
+   handed keys only while it knows a box here has the caret. */
+if (WMODE) {
+  const ed = t => t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  document.addEventListener('focusin', e => { if (ed(e.target)) try { parent.postMessage({ mbTyping: 1 }, '*'); } catch (x) {} });
+  document.addEventListener('focusout', e => { if (ed(e.target)) try { parent.postMessage({ mbTyping: 0 }, '*'); } catch (x) {} });
+}
 function drawHome() {
   useBoard();
+  PLANDAY.seed();
   const g = $('#grid'); g.innerHTML = '';
   let firstDone = 0;
   const later = [];
@@ -6614,9 +7963,10 @@ function drawHome() {
   const ord = seenOrder();
   ord.forEach((i, k) => { seen[i] = k; });
   document.body.classList.toggle('editing', editing);
-  layout.forEach((cfg, i) => {
+  const list = WMODE ? wmodeList() : layout;
+  list.forEach((cfg, i) => {
     const W = WIDGETS[cfg.t]; if (!W) return;
-    const n = el('div', 'w mb-card');
+    const n = el('div', 'w mb-card' + (WMODE ? ' wone' : ''));
     n.style.setProperty('--cw', cfg.w); n.style.setProperty('--ch', cfg.h);
     if (cfg.x) { n.classList.add('at'); n.style.setProperty('--gx', cfg.x); n.style.setProperty('--gy', cfg.y); }
     if (NARROW()) n.style.order = rank[i];
@@ -6717,7 +8067,7 @@ function drawHome() {
       /* the rows inside are the plates, in their own colour or the widget's.
          Only the card-shaped rows: a ruled list line (.hrow, .logline) is a
          line, and a plate on it would be a border on a border. */
-      body.querySelectorAll('.row').forEach(r => r.classList.add('mb-plate'));
+      body.querySelectorAll('.row').forEach(r => { if (!r.closest('.ruled')) r.classList.add('mb-plate'); });
     };
     /* On a phone the first TODAY goes to the top and is drawn before
        anything else, so its NOW line is the first thing painted. Tom,
@@ -6808,35 +8158,65 @@ function drawHome() {
    a card leaving the edge leaves empty columns instead; it grows when a
    card goes further right, and never shrinks by itself. */
 let drawnReach = 0;
-const boardReach = () => { const v = Rec.setting('lifeos', 'boardReach'); return v && typeof v === 'object' ? v : {}; };
+/* in units since 2026-11-16, under its own name; the old reach doubled */
+const boardReach = () => {
+  const v = Rec.setting('lifeos', 'boardReach2'); if (v && typeof v === 'object') return v;
+  const o = Rec.setting('lifeos', 'boardReach'), r = {};
+  if (o && typeof o === 'object') for (const k in o) r[k] = (o[k] || 0) * U;
+  return r;
+};
 function keepReach() {
   if (NARROW() || !drawnReach) return;
   const r = boardReach();
   if ((r[BOARD] || 0) >= drawnReach) return;
   r[BOARD] = drawnReach;
-  Rec.setting('lifeos', 'boardReach', r);
+  Rec.setting('lifeos', 'boardReach2', r);
 }
 function fitBoard() {
   const f = SCALE, was = layout.map(c => Object.assign({}, c)), wasReach = boardReach();
   layout.forEach(c => {
     if (!c.x) return;
     c.x = Math.round((c.x - 1) * f) + 1; c.y = Math.round((c.y - 1) * f) + 1;
-    c.w = Math.max(2, Math.round(c.w * f)); c.h = Math.max(c.hs ? 1 : 2, Math.round(c.h * f));
+    c.w = Math.max(1, Math.round(c.w * f)); c.h = Math.max(1, Math.round(c.h * f));
   });
-  const r = boardReach(); r[BOARD] = 0; Rec.setting('lifeos', 'boardReach', r);
+  const r = boardReach(); r[BOARD] = 0; Rec.setting('lifeos', 'boardReach2', r);
   drawnReach = 0; saveLayout(); drawHome(); saveLayout();
   UI.undo('Board fitted to the screen', () => {
-    layout.splice(0, layout.length, ...was); Rec.setting('lifeos', 'boardReach', wasReach);
+    layout.splice(0, layout.length, ...was); Rec.setting('lifeos', 'boardReach2', wasReach);
     drawnReach = 0; saveLayout(); drawHome();
   });
 }
 let COLS = 12, SCALE = 1;
 const CELL = { w: 146, h: 84 };
+/* the smallest a card may be: one cell. Tom, 2026-11-16: "I don't want
+   limits to widget size". It was two by two, a fit card one row, or the
+   widget's own `min` (WORK DONE's 4 by 6, 2026-11-09); `min` stays on the
+   widget, unread. What does not fit in a small card is left off whole. */
+const minSize = () => ({ w: 1, h: 1 });
+/* The rows card i's contents need at its own width and zoom, measured
+   whole (nothing left off) and squeezed to one row, so a child that
+   stretches to fill the card cannot report the card's height as its need. */
+function needRows(i) {
+  const n = $('#grid').querySelector(':scope > .w[data-i="' + i + '"]');
+  if (!n) return 0;
+  const head = n.querySelector('.w-head'), body = n.querySelector(':scope > .w-body');
+  if (!head || !body) return 0;
+  const R = parseFloat($('#grid').style.getPropertyValue('--row')) || CELL.h;
+  const gap = parseFloat(getComputedStyle($('#grid')).rowGap) || 12;
+  const sz = n.dataset.sz, ch = n.style.getPropertyValue('--ch'), ov = body.style.overflow;
+  n.style.setProperty('--ch', 1); n.dataset.sz = 'l'; n.classList.remove('sz-xs');
+  n.querySelectorAll('.sz-cut').forEach(e => e.classList.remove('sz-cut'));
+  body.style.overflow = 'auto';
+  const z = parseFloat(body.style.zoom) || 1;
+  const need = head.offsetHeight + body.scrollHeight * z + 2;
+  body.style.overflow = ov; n.style.setProperty('--ch', ch); n.dataset.sz = sz;
+  return Math.max(1, Math.ceil((need + gap) / R));
+}
 function fitGrid() {
   const g = $('#grid'), home = $('#home');
   if (NARROW()) {
     g.style.removeProperty('--row'); g.style.minHeight = ''; g.style.gridTemplateColumns = ''; g.style.width = '';
-    g.querySelectorAll(':scope > .w').forEach(n => { delete n.dataset.sz; });
+    g.querySelectorAll(':scope > .w').forEach(n => { delete n.dataset.sz; delete n.dataset.hs; });
     COLS = 4; SCALE = 1; placeCards(); return;
   }
   const gap = parseFloat(getComputedStyle(g).rowGap) || 12;
@@ -6851,48 +8231,35 @@ function fitGrid() {
   const fits = [].slice.call(g.querySelectorAll(':scope > .w.fit'));
   const nodes = [].slice.call(g.querySelectorAll(':scope > .w'));
   effH.length = 0;
-  /* the most rows a fit card takes: it stops there and scrolls inside, or
-     LINKS stood 1668px tall in a 1000px window with CLIENTS below the fold.
-     Since 1.0.70 it grows to its contents only as far as the bottom of the
-     window, and never stays smaller than the size he gave it, so a fit
-     card low on the board no longer makes the whole board scroll. */
-  const win = Math.max(1, Math.floor((H + gap) / CELL.h));
+  /* a card saved smaller than its widget's minimum is drawn at the minimum */
+  nodes.forEach(n => {
+    const c = layout[+n.dataset.i]; if (!c) return;
+    const m = minSize(c.t);
+    if (c.w < m.w) c.w = m.w;
+    if (c.hs && c.h < m.h) c.h = m.h;
+    if (!WIDGETS[c.t] || !WIDGETS[c.t].fit) { if (c.h < m.h) c.h = m.h; }
+  });
+  /* A fit card no longer grows to its contents. Tom, 2026-11-16: "the
+     overall widget size should be manually set". Every card is the size he
+     gave it, and its contents fit that (cutCards, and the zoom). Measuring
+     is now one press, Fit to contents on the card's menu (`needRows`). */
   fits.forEach(n => {
-    /* measured squeezed to one row, so a child that stretches to fill
-       the card cannot report the card's own height back as its need, and
-       at its full-size width, so a smaller window does not wrap its lines
-       into more rows */
-    const head = n.querySelector('.w-head'), body = n.querySelector('.w-body');
-    const cw = layout[+n.dataset.i].w;
-    n.style.setProperty('--ch', 1);
-    n.style.width = (cw * CELL.w + (cw - 1) * gap) + 'px';
-    /* measured whole: as a large card, with nothing left off */
-    n.dataset.sz = 'l'; n.classList.remove('sz-xs');
-    n.querySelectorAll('.sz-cut').forEach(e => e.classList.remove('sz-cut'));
-    const was = body.style.overflow;
-    body.style.overflow = 'auto';
-    const need = head.offsetHeight + body.scrollHeight + 2;
-    body.style.overflow = was;
-    n.style.width = '';
-    const want = Math.max(1, Math.ceil((need + gap) / CELL.h));
-    /* a height he dragged or picked is kept, taller or shorter than the
-       contents (Tom, 2026-10-18: "I need widgets to be vertically scalable
-       as well"); short, the body scrolls and a small card leaves rows off */
     const c = layout[+n.dataset.i];
-    const ch = c.hs ? c.h : Math.min(want, Math.max(c.h, win - (c.y || 1) + 1));
-    n.classList.toggle('capped', ch < want);
-    n.style.setProperty('--ch', ch);
-    effH[+n.dataset.i] = ch;
+    n.style.setProperty('--ch', c.h);
+    effH[+n.dataset.i] = c.h;
   });
   /* how far the cards reach, and the cell that fits that in the window;
      never less than the board has been, so taking a card off the right
      edge does not make every other card jump bigger (keepReach) */
-  const usedC = Math.max(12, layout.reduce((a, c) => Math.max(a, (c.x || 1) + c.w - 1), 1), boardReach()[BOARD] || 0);
+  /* a unit is half a cell less half a gap, so two of them and the gap
+     between are one old cell; at least as many as fit the window */
+  const UW = (CELL.w - gap) / U, UH = CELL.h / U;
+  const usedC = Math.max(Math.max(4, Math.floor((Wd + gap) / (UW + gap))), layout.reduce((a, c) => Math.max(a, (c.x || 1) + c.w - 1), 1), boardReach()[BOARD] || 0);
   drawnReach = usedC;
-  const sw = (Wd - (usedC - 1) * gap) / (usedC * CELL.w);
+  const sw = (Wd - (usedC - 1) * gap) / (usedC * UW);
   /* full size, and smaller only in a window too narrow for the board */
   SCALE = Math.max(0.1, Math.min(1, sw));
-  const cw = CELL.w * SCALE, R = CELL.h * SCALE;
+  const cw = UW * SCALE, R = Math.max(gap + 4, UH * SCALE);
   COLS = Math.max(usedC, Math.floor((Wd + gap) / (cw + gap)));
   g.style.gridTemplateColumns = 'repeat(' + COLS + ',' + cw.toFixed(2) + 'px)';
   g.style.width = (COLS * cw + (COLS - 1) * gap).toFixed(2) + 'px';
@@ -6927,10 +8294,14 @@ function sizeCards(nodes, cw, R, gap) {
     const c = layout[+n.dataset.i]; if (!c) return;
     /* in the card's own zoom: a card zoomed to 200% has half the room */
     const z = (!NARROW() && c.zoom) || 1;
-    const w = (c.w * cw + (c.w - 1) * gap) / z, h = ((effH[+n.dataset.i] || c.h) * R - gap) / z;
+    const rw = c.w * cw + (c.w - 1) * gap, rh = (effH[+n.dataset.i] || c.h) * R - gap;
+    const w = rw / z, h = rh / z;
     n.dataset.sz = h < 150 || w < 190 ? 's' : h < 300 || w < 300 ? 'm' : 'l';
+    /* the title bar is not zoomed, so its rules read the real size: zoomed
+       to 300%, a short card kept its title, its menu and its drag handle */
+    n.dataset.hs = rh < 150 || rw < 190 ? 's' : 'l';
     /* too short for a title and an answer both: the answer wins */
-    n.classList.toggle('sz-xs', h < 80);
+    n.classList.toggle('sz-xs', rh < 80);
   });
   cutCards(nodes);
 }
@@ -6940,11 +8311,31 @@ function sizeCards(nodes, cw, R, gap) {
    whole row goes rather than the list. */
 function cutCards(nodes) {
   nodes.forEach(n => {
-    n.querySelectorAll('.sz-cut').forEach(e => e.classList.remove('sz-cut'));
-    if (n.dataset.sz !== 's') return;
+    n.querySelectorAll('.sz-cut, .sz-wrap').forEach(e => e.classList.remove('sz-cut', 'sz-wrap'));
+    n.querySelectorAll('[data-fit]').forEach(e => { e.style.fontSize = e.dataset.fit === '-' ? '' : e.dataset.fit; delete e.dataset.fit; });
+    /* every size since 2026-11-16 (Tom: "I don't want, as much as possible,
+       intra widget scrolling"): a card never scrolls inside, so whatever
+       its size and zoom leave no room for is left off whole */
+    if (NARROW()) return;
     const body = n.querySelector(':scope > .w-body');
     if (!body || body.classList.contains('appslot')) return;
-    const bottom = body.getBoundingClientRect().bottom - (parseFloat(getComputedStyle(body).paddingBottom) || 0) + 1;
+    /* Words cut with "…" wrap instead (DESIGN.md: his words are never
+       ellipsed), before anything is measured for height, so a wrapped line
+       that no longer fits goes whole below. Only a box actually cut. */
+    body.querySelectorAll('*').forEach(e => {
+      if (!(e.scrollWidth > e.clientWidth + 1 && e.firstChild && getComputedStyle(e).textOverflow === 'ellipsis')) return;
+      /* two lines at most: in a box too narrow for that (a todo beside its
+         tick in the smallest card) wrapping stood one word on each line,
+         400px tall, and the card showed nothing, so the "…" stays */
+      const h = e.offsetHeight;
+      e.classList.add('sz-wrap');
+      if (e.offsetHeight > h * 2.2) e.classList.remove('sz-wrap');
+    });
+    /* the padding is read at 100% and drawn in the card's zoom: unscaled, a
+       chart that fills a card zoomed out counted as a few pixels over and
+       was left off whole (HALF-LIFE at 50%, 2026-11-16) */
+    const bz = parseFloat(body.style.zoom) || 1;
+    const bottom = body.getBoundingClientRect().bottom - (parseFloat(getComputedStyle(body).paddingBottom) || 0) * bz + 1;
     const walk = box => {
       [].slice.call(box.children).forEach((e, k) => {
         if (e.classList.contains('sz-cut')) return;
@@ -6954,12 +8345,83 @@ function cutCards(nodes) {
         if (r.bottom <= bottom && !(box === body && spills)) return;
         /* the first thing in a card is its answer: kept, and looked into */
         if (box === body && r.top < bottom && e.children.length > 1) { walk(e); return; }
+        /* a table's rows are what go, never its whole body: WORK DONE
+           zoomed to 150% kept its column heads and nothing else (2026-11-16) */
+        if (/^(TBODY|THEAD|TFOOT)$/.test(e.tagName) && r.top < bottom) { walk(e); return; }
         if (k === 0 && (box === body || box === body.firstElementChild)) return;
         e.classList.add('sz-cut');
       });
     };
     walk(body);
+    /* a group heading with none of its rows left under it goes too */
+    body.querySelectorAll('tr.grp').forEach(g => {
+      let x = g.nextElementSibling;
+      while (x && x.classList.contains('sz-cut')) x = x.nextElementSibling;
+      if (!x || x.classList.contains('grp')) g.classList.add('sz-cut');
+    });
+    /* A tile with a fixed height (CONSISTENCY's four) sheds its own lines
+       when they outgrow it, the change first, then the label, never the
+       number: zoomed in, they spilled over the tile below (2026-11-16). */
+    body.querySelectorAll('.lc-t').forEach(t => {
+      /* the padding gives way before any line does */
+      t.classList.remove('lc-tight');
+      if (t.scrollHeight > t.clientHeight + 1) t.classList.add('lc-tight');
+      const lines = [].slice.call(t.children).filter(e => !e.classList.contains('lc-v')).reverse();
+      for (const e of lines) {
+        if (t.scrollHeight <= t.clientHeight + 1) break;
+        e.classList.add('sz-cut');
+      }
+    });
+    cutSides(n, body);
   });
+}
+/* The same rule across: a word or a number the card or one of its boxes
+   cuts at the side is left off whole, last first, so "HAMSTRINGS" does not
+   read "HAMSTRI" in a card zoomed to 200%. The last words left in a card
+   stay, cut or not: something beats nothing. Words a box hides whole were
+   left off on purpose and are not touched (2026-11-16, tools/home-sweep.py). */
+function cutSides(n, body) {
+  /* big type shrinks to fit first (DESIGN.md: shrink, then wrap, then leave
+     off): DAY PLAN's letter, the clock, a phase's name. Never under 12px. */
+  for (let pass = 0; pass < 6; pass++) {
+    const big = cutTexts(n, body).filter(o => o.cut && parseFloat(getComputedStyle(o.e).fontSize) > 13);
+    if (!big.length) break;
+    big.forEach(o => {
+      const fs = parseFloat(getComputedStyle(o.e).fontSize);
+      if (o.e.dataset.fit == null) o.e.dataset.fit = o.e.style.fontSize || '-';
+      o.e.style.fontSize = Math.max(12, Math.floor(fs * 0.82)) + 'px';
+    });
+  }
+  const texts = cutTexts(n, body);
+  const left = texts.filter(o => !o.cut).length;
+  if (!left) return;
+  texts.reverse().forEach(o => { if (o.cut) o.e.classList.add('sz-cut'); });
+}
+/* every piece of words the card shows, and whether a box cuts it (across
+   or down); words a box hides whole are not listed */
+function cutTexts(n, body) {
+  const card = n.getBoundingClientRect();
+  const texts = [];
+  const wk = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+  for (let x = wk.nextNode(); x; x = wk.nextNode()) {
+    if (!x.nodeValue.trim() || !x.parentElement || x.parentElement.closest('.sz-cut')) continue;
+    const rg = document.createRange(); rg.selectNodeContents(x);
+    const q = rg.getBoundingClientRect();
+    if (q.width < 0.5 || q.height < 0.5) continue;
+    /* what clips it: the card, and any box between with its overflow cut */
+    let l = card.left, r = card.right, t = card.top, b = card.bottom;
+    for (let a = x.parentElement; a && a !== n; a = a.parentElement) {
+      if (a.scrollWidth <= a.clientWidth + 1 && a.scrollHeight <= a.clientHeight + 1 && a !== body) continue;
+      const cs = getComputedStyle(a);
+      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const ar = a.getBoundingClientRect();
+      l = Math.max(l, ar.left); r = Math.min(r, ar.right); t = Math.max(t, ar.top); b = Math.min(b, ar.bottom);
+    }
+    const sw = Math.min(q.right, r) - Math.max(q.left, l), sh = Math.min(q.bottom, b) - Math.max(q.top, t);
+    if (sw <= 0.5 || sh <= 0.5) continue;
+    texts.push({ e: x.parentElement, cut: sw < q.width - 2 || sh < q.height - 2 });
+  }
+  return texts;
 }
 /* A fit card measured in the fallback font came out a row short and was
    never measured again: MACROS opened with CALORIES cut in half, then grew
@@ -6978,17 +8440,21 @@ if (document.fonts) {
    level is `zoom` on the card's layout entry, so it syncs and survives a
    redraw. Desk only. An app card's frame is its own page and takes no
    zoom from here. */
-const ZOOMS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+const ZOOMS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 let zoomT = 0, zoomAcc = 0;
+/* Shift and the wheel does the same since 2026-11-16 (Tom: "shift size
+   scrolling", the card's size untouched and what it shows changing).
+   Zoomed in, less fits and the rest is left off; zoomed out, more fits.
+   Windows turns a Shift+wheel into a sideways scroll, so deltaX counts. */
 document.addEventListener('wheel', ev => {
-  if (!ev.ctrlKey || view !== 'home' || NARROW()) return;
+  if (!(ev.ctrlKey || ev.shiftKey) || view !== 'home' || NARROW()) return;
   const n = ev.target && ev.target.closest && ev.target.closest('#grid > .w');
   if (!n) return;
   ev.preventDefault();
   const c = layout[+n.dataset.i], body = n.querySelector(':scope > .w-body');
   if (!c || !body || body.classList.contains('appslot')) return;
   /* a mouse notch is about 100, a trackpad sends many small ones */
-  zoomAcc += ev.deltaY;
+  zoomAcc += ev.deltaY || ev.deltaX;
   if (Math.abs(zoomAcc) < 40) return;
   const up = zoomAcc < 0; zoomAcc = 0;
   const z = c.zoom || 1;
@@ -7022,8 +8488,20 @@ function startMove(ev, i) {
      WEIGHT is its range and not plain WEIGHT */
   const W = WIDGETS[layout[i].t];
   gh.innerHTML = '<div class="w-head">' + esc(W.nmFor ? W.nmFor(layout[i]) : W.nm) + '</div>';
-  window.addEventListener('pointermove', onMove);
-  window.addEventListener('pointerup', endMove, { once: true });
+  /* the shared drag always ends once: a release never heard (Alt+Tab, a
+     touch the browser took back, Escape) drops nothing and leaves no ghost,
+     where it used to leave `moving` set and the board refusing to redraw */
+  Mobile.drag(ev, { slop: 0, move: onMove, drop: endMove, tap: endMove, cancel: cancelMove });
+}
+function cancelMove() {
+  if (!moving) return;
+  window.removeEventListener('pointermove', onMove);
+  document.body.classList.remove('dragging');
+  $('#ghost').style.display = 'none';
+  moving.node.classList.remove('drag');
+  hint();
+  moving = null;
+  drawHome();
 }
 function onMove(ev) {
   if (!moving) return;
@@ -7063,26 +8541,33 @@ function startResize(ev, i, node) {
   document.body.classList.add('dragging');
   sizing = { i: i, node: node, fit: fit, cols: m.cols, colw: m.colw, gap: m.gap, x: ev.clientX, y: ev.clientY, w: layout[i].w,
     h: fit ? (effH[i] || layout[i].h) : layout[i].h, h0: layout[i].h, hs: layout[i].hs };
-  window.addEventListener('pointermove', onResize);
-  window.addEventListener('pointerup', endResize, { once: true });
+  Mobile.drag(ev, { slop: 0, move: onResize, drop: endResize, tap: endResize, cancel: cancelResize });
+}
+/* a resize that never hears its release goes back to the size it had */
+function cancelResize() {
+  if (!sizing) return;
+  window.removeEventListener('pointermove', onResize);
+  document.body.classList.remove('dragging');
+  const c = layout[sizing.i];
+  if (c) {
+    c.w = sizing.w; c.h = sizing.h0;
+    if (sizing.hs === undefined) delete c.hs; else c.hs = sizing.hs;
+  }
+  sizing = null; drawHome();
 }
 function onResize(ev) {
   if (!sizing) return;
   const dw = Math.round((ev.clientX - sizing.x) / (sizing.colw + sizing.gap));
   const dh = Math.round((ev.clientY - sizing.y) / (parseFloat($('#grid').style.getPropertyValue('--row')) || 84));
-  const w = Math.max(2, Math.min(sizing.cols, sizing.w + dw));
+  const mn = minSize(layout[sizing.i].t);
+  const w = Math.max(mn.w, Math.min(sizing.cols, sizing.w + dw));
   layout[sizing.i].w = w;
   sizing.node.style.setProperty('--cw', w);
   const c = layout[sizing.i];
-  /* a fit card dragged back to where it started measures itself again */
-  if (sizing.fit && !dh) {
-    c.h = sizing.h0; if (sizing.hs) c.hs = 1; else delete c.hs;
-    if (!sizing.hs) { sizing.node.style.setProperty('--ch', sizing.h); return placeCards(); }
-  }
   /* no ceiling: a card can be dragged as tall as he likes and the board
      scrolls (Tom, 2026-10-18: "today should be infinitely vertically
      expandable"). It was 12 rows. */
-  const h = Math.max(sizing.fit ? 1 : 2, sizing.h + dh);
+  const h = Math.max(mn.h, sizing.h + dh);
   c.h = h;
   if (sizing.fit) { c.hs = 1; effH[sizing.i] = h; }
   sizing.node.style.setProperty('--ch', h);
@@ -7114,6 +8599,9 @@ const ABOUT = {
   lockedin: 'How consistent you are: training sessions a week, meals tracked a day, calorie deficit or surplus, and steps, averaged over the weeks you pick, beside the stretch before.',
   workdone: 'What got done and what your numbers averaged, over 7 and 30 days and longer.',
   todo: 'Open todos, tickable, each naming where it came from.',
+  next: 'The next 3 tasks due today or late, in QUESTS order. Follows the QUESTS filter.',
+  next1: 'Only the next task due today or late, in QUESTS order. Follows the QUESTS filter.',
+  projtasks: 'Open tasks in one QUESTS project, picked from the card’s menu: due today first, then by date.',
   ideas: 'Your idea bullets, the ! lines.',
   events: 'Your event bullets, what happened.',
   streaks: 'Everything on a run right now, and for how many days.',
@@ -7125,12 +8613,15 @@ const ABOUT = {
   links: 'Every app’s web address, to copy or open.',
   apps: 'A button for every app, in dock order; keys 1 to 9 open the first nine.',
   upcoming: 'Todos with a date coming up.',
+  thisweek: 'Each goal’s call for the week, its one fix, and Plan the week.',
+  newchapter: 'One button that starts a new chapter, then takes itself off.',
   projects: 'Open todos for each project.',
   brief: 'The morning brief from your PC, and its todos.',
   rhythms: 'BLOCK’s Every blocks and Habits: owed, due, coming up and this period’s count, tickable.',
+  flow: 'Where you are in a BLOCK flow, the next two levels below, travel down to look and I’M HERE to log it.',
   measure: 'Any measure you track in STATUS, charted.',
   halflife: 'How much of a dose you write in STATUS is still in you, by its half-life.',
-  toweigh: 'ELEMENT’s powders still to weigh today, in grams, with a tick for each drink.',
+  toweigh: 'Today’s ELEMENT doses: AM powders you can change and tick, and the night drink worked out from your food.',
   macros: 'Protein, carbs, fat and calories today against your targets.',
   meals: 'What you have eaten today.',
   records: 'The records TRAIN marked, newest first.',
@@ -7156,13 +8647,20 @@ Object.keys(WIDGETS).forEach(k => { if (WIDGETS[k].about && !ABOUT[k]) ABOUT[k] 
    (`days`) and any pick list its `menu` offers. Only pick lists: a menu item
    that opens a sheet of its own (WEIGHT's cut plan) stays on the card, since
    a sheet opened from this one walks history off the page (root brief). */
+/* the Time frame list, in the card's menu and in + WIDGET: picking a
+   stretch locks it against the zoom; on a card that follows the zoom,
+   "Follow the zoom" comes first and is the one ticked */
+function daysMenu(W, cfg, done) {
+  const zk = Object.keys(WIDGETS).filter(k => WIDGETS[k] === W)[0], zoomable = !!ZOOM_DAYS[zk];
+  const L = W.days.map(d => ({ label: d[1], check: (!zoomable || cfg.dlock) && (cfg.days || W.day0 || 90) === d[0],
+    fn: () => { cfg.days = d[0]; if (zoomable) cfg.dlock = 1; done(); } }));
+  if (zoomable) L.unshift({ label: 'Follow the zoom', check: !cfg.dlock, fn: () => { delete cfg.dlock; done(); } });
+  return L;
+}
 function widgetChoices(W, cfg, redraw) {
   const out = [];
-  if (W.days) out.push({ label: 'SHOW', sub: W.days.map(d => ({
-    label: d[1], check: (cfg.days || W.day0 || 90) === d[0], fn: () => { cfg.days = d[0]; redraw(); } })) });
-  let m = [];
-  try { m = W.menu ? W.menu(cfg, redraw) : []; } catch (e) { m = []; }
-  m.forEach(x => { if (x && x.sub && x.sub.length) out.push({ label: String(x.label).toUpperCase(), sub: x.sub }); });
+  if (Array.isArray(W.days)) out.push({ label: 'SHOW', sub: daysMenu(W, cfg, redraw) });
+  menuOf(W, cfg, redraw).forEach(x => { if (x && x.sub && x.sub.length) out.push({ label: String(x.label).toUpperCase(), sub: x.sub }); });
   return out;
 }
 function widgetPicker(spot) {
@@ -7176,9 +8674,12 @@ function widgetPicker(spot) {
   const put = cfg => {
     if (spot) {
       cfg.x = spot.x; cfg.y = spot.y;
-      if (spot.w) { cfg.w = Math.max(2, spot.w); cfg.h = Math.max(1, spot.h); }
+      if (spot.w) { const m = minSize(cfg.t); cfg.w = Math.max(m.w, spot.w); cfg.h = Math.max(m.h, spot.h); }
+      else if (spot.room) { const m = minSize(cfg.t); cfg.w = Math.max(m.w, Math.min(cfg.w, spot.room.w)); cfg.h = Math.max(m.h, Math.min(cfg.h, spot.room.h)); }
       else cfg.x = Math.min(spot.x, COLS + 1 - cfg.w);
     }
+    /* NEW CHAPTER takes itself off once a chapter starts after this moment */
+    if (cfg.t === 'newchapter') cfg.at = Date.now();
     layout.push(cfg);
     pinned = layout.length - 1;
   };
@@ -7186,6 +8687,17 @@ function widgetPicker(spot) {
   const ico = (role, ch) => (typeof Icons !== 'undefined' && Icons.svg(role, { size: 18 })) || ch;
   const mo = $('#modal'); mo.innerHTML = '';
   mo.appendChild(el('h3', null, 'ADD A WIDGET'));
+  /* Search (Tom, 2026-11-09: "I also want a search function when I add a
+     new widget"): every word typed must appear in the widget's name, its
+     one line, its group or a ready-made version's name. Shown on the list,
+     hidden on one widget's page. */
+  let q = '';
+  const find = el('input', 'mb-input wfind');
+  find.type = 'search'; find.placeholder = 'Search widgets'; find.setAttribute('aria-label', 'Search widgets');
+  find.autocomplete = 'off';
+  find.oninput = () => { q = find.value.trim().toLowerCase(); list(); };
+  mo.appendChild(find);
+  const hit = (...xs) => { const s = xs.join(' ').toLowerCase(); return q.split(/\s+/).every(w => s.indexOf(w) >= 0); };
   /* the list and one widget's page take turns in this one box */
   const box = el('div', 'wpickbox');
   mo.appendChild(box);
@@ -7207,9 +8719,9 @@ function widgetPicker(spot) {
   /* One widget's page: what it shows, its choices, and ADD. The choices
      write a draft copy, so nothing on the board changes until ADD. */
   const page = (k, back) => {
-    const W = WIDGETS[k], cfg = { t: k, w: W.w, h: W.h };
+    const W = WIDGETS[k], cfg = { t: k, w: W.w * U, h: W.h * U };
     const draw = () => {
-      box.innerHTML = '';
+      box.innerHTML = ''; find.hidden = true;
       const bk = optBtn(ico('back', '←'), 'All widgets', '');
       bk.onclick = back; box.appendChild(bk);
       const top = el('div', 'wpage');
@@ -7234,17 +8746,26 @@ function widgetPicker(spot) {
   };
 
   const list = () => {
-    box.innerHTML = '';
-    box.appendChild(el('div', 'wlede', FINE
+    box.innerHTML = ''; find.hidden = false;
+    if (!q) box.appendChild(el('div', 'wlede', FINE
       ? 'Press a widget to add it, or its gear to set it up first. On the board, drag a widget by its title to move it, drag its bottom-right corner to resize it, and right click it for its menu.'
       : 'Press a widget to add it, or its gear to set it up first. Your layout follows you to every device you sign in on.'));
-    groups.forEach(g => keys.filter(k => grpOf(WIDGETS[k]) === g).forEach((k, gi) => {
+    /* names first: "work" is WORK DONE, not every app card whose line says
+       it works inside the card. The lines are searched only when no name
+       matches, so "sleep" still finds what shows sleep. */
+    const byName = k => hit(WIDGETS[k].nm, grpOf(WIDGETS[k]), (WIDGETS[k].presets || []).map(p => p.nm).join(' '));
+    const named = q && keys.some(byName);
+    const shown = k => !q || (named ? byName(k)
+      : hit(WIDGETS[k].nm, ABOUT[k] || '', grpOf(WIDGETS[k]), (WIDGETS[k].presets || []).map(p => p.nm + ' ' + (p.note || '')).join(' ')));
+    let found = 0;
+    groups.forEach(g => keys.filter(k => grpOf(WIDGETS[k]) === g && shown(k)).forEach((k, gi) => { try {
       const W = WIDGETS[k], n = layout.filter(c => c.t === k).length;
+      found++;
       if (!gi) box.appendChild(group(g));
       const line = (ABOUT[k] || '') + (n ? ' On the board' + (n > 1 ? ' ' + n + ' times' : '') + '.' : '');
       const row = el('div', 'wpick');
       const b = optBtn(ico('app.' + (W.app || 'home'), '▤'), W.nm, line);
-      b.onclick = () => add({ t: k, w: W.w, h: W.h }, W.nm);
+      b.onclick = () => add({ t: k, w: W.w * U, h: W.h * U }, W.nm);
       row.appendChild(b);
       if (widgetChoices(W, { t: k }, () => {}).length) {
         const gb = el('button', 'wgear mb-press', ico('options', '⚙'));
@@ -7262,14 +8783,18 @@ function widgetPicker(spot) {
       (W.presets || []).forEach(ps => {
         const pr = el('div', 'wpick');
         const pb = optBtn(ico('app.' + (W.app || 'home'), '▤'), ps.nm, ps.note || '');
-        pb.onclick = () => add(Object.assign({ t: k, w: W.w, h: W.h }, ps.cfg), ps.nm);
+        pb.onclick = () => add(Object.assign({ t: k, w: W.w * U, h: W.h * U }, ps.cfg, ps.cfg.w ? { w: ps.cfg.w * U } : {}, ps.cfg.h ? { h: ps.cfg.h * U } : {}), ps.nm);
         pr.appendChild(pb);
         const sp = el('span', 'wgear none');
         sp.setAttribute('aria-hidden', 'true');
         pr.appendChild(sp);
         box.appendChild(pr);
       });
-    }));
+    } catch (e) { console.warn('[home] ' + k + ' left off ADD A WIDGET', e); } }));
+    if (q) {
+      if (!found) box.appendChild(el('div', 'wlede', 'No widget matches “' + esc(find.value.trim()) + '”.'));
+      return;
+    }
     box.appendChild(group('LAYOUT'));
     /* a row of the list, with the gear's room kept like the rest */
     const layoutRow = b => {
@@ -7290,13 +8815,16 @@ function widgetPicker(spot) {
          was the list, so every move after it was written into the factory
          board and the next Reset gave the moved board back */
       const was = layout.slice(), held = layoutHeld.slice();
-      layout = toWork(defaultLayout(), BOARD); layoutHeld = []; saveLayout(); closeModal(); drawHome();
+      layout = toWork(toHalf(defaultLayout()), BOARD); layoutHeld = []; saveLayout(); closeModal(); drawHome();
       UI.undo('layout reset', () => { layout = was; layoutHeld = held; saveLayout(); drawHome(); });
     };
     layoutRow(rb);
   };
   list();
   openModal();
+  /* a mouse can type straight away; a phone keeps its keyboard down until
+     the box is pressed, so the list is not half covered on open */
+  if (FINE && typeof UI !== 'undefined' && UI.focusSoon) UI.focusSoon(find);
 }
 
 /* ══════════════ backup and export ══════════════
@@ -7924,6 +9452,7 @@ LifeOS.ready(() => {
   LifeOS.prune(800);
   go(location.hash.slice(1) || 'home');
   refreshDataBtn();
+  if (WMODE) { wmodeTell(); setTimeout(wmodeTell, 5000); setInterval(wmodeTell, 60000); }
 });
 clock(); setInterval(clock, 20000);
 /* midnight: today rolls over, so the home screen must too */

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.81, 2026-10-28">
+<meta name="mb-version" content="1.0.96, 2026-11-18">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -115,6 +115,8 @@
 <script src="../shared/io.js"></script>
 <script src="../shared/icons.js"></script>
 <script src="../shared/chart.js"></script>
+<script src="../shared/muscles.js"></script>
+<script src="../shared/e1rm.js"></script>
 <script src="../shared/range.js"></script>
 <script src="../shared/health.js"></script>
 
@@ -400,9 +402,16 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .tset .grow{flex:0 0 auto}
 .tset .tnote{flex:1 1 0;min-width:0;font-size:var(--f-1);line-height:var(--lh-tight);color:var(--text-2);
   overflow-wrap:anywhere}
+.tset .tnote.tedit{cursor:pointer}
+.tset .ghostnote{color:var(--text-muted);font-style:italic}
+.trackbox > .lastline{padding:var(--s-3) 0 0}
 .tset .col{text-align:right;white-space:nowrap}
 .tset .col.w{min-width:7em}
 .tset .col.r{min-width:5em}
+/* the columns are inline here, so their min-widths never applied and the
+   reps sat touching the unit: "65.0 kgs7 reps" (Tom, 2026-11-09: "space
+   between weight and reps") */
+.tset .col.w:not(:empty) + .col.r{margin-left:var(--s-4)}
 .tset b{font-size:var(--f-4);font-weight:var(--w-bold);color:var(--text-2)}
 .tset .u{color:var(--text-muted);font-size:var(--f-2)}
 .tset .chk{width:var(--s-6);height:var(--s-6);flex:0 0 auto;border:0;background:none;
@@ -423,6 +432,12 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .lastline .lasttime{display:-webkit-box;-webkit-box-orient:vertical;
   -webkit-line-clamp:2;overflow:hidden}
 .lasttime b{color:var(--text-2);font-variant-numeric:tabular-nums}
+/* one of last time's sets, a press that loads it as ghosts (1.0.82): the
+   same words, a dotted line under them, and the press state */
+.lastset{display:inline;font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;
+  cursor:pointer;text-decoration:underline dotted var(--text-muted);
+  border-radius:var(--radius-sm);-webkit-tap-highlight-color:transparent}
+.lastset:active{color:var(--text-1);background:var(--surface-2)}
 /* A past day on TRACK: a ring in the theme's warning colour, the words in
    the reading colour so every theme can read them. */
 .pastday{display:flex;align-items:center;gap:var(--s-2);margin:var(--s-1) var(--s-1) 0;
@@ -603,6 +618,14 @@ div.prow{padding:0}
 .mb-line.sv2{stroke:var(--data-2)}.mb-dot.sv2{fill:var(--data-2)}
 .mb-line.sv3{stroke:var(--data-3)}.mb-dot.sv3{fill:var(--data-3)}
 .mb-line.sv4{stroke:var(--data-4)}.mb-dot.sv4{fill:var(--data-4)}
+/* Volume By Set: the newest session loud, the one before it clear, older faded */
+.mb-line.vbs-new{stroke:var(--accent);stroke-width:3}.mb-dot.vbs-new{fill:var(--accent);opacity:1}
+.mb-line.vbs-prev{stroke:var(--data-2);stroke-width:2}.mb-dot.vbs-prev{fill:var(--data-2);opacity:1}
+.mb-line.vbs-old{stroke:var(--text-muted);stroke-width:1;opacity:.55}.mb-dot.vbs-old{fill:var(--text-muted);opacity:.8}
+.chartbox.vbs{cursor:crosshair}
+.vbskey{margin-top:var(--s-3)}
+.vbskey .mb-chip{display:inline-flex;align-items:center;gap:var(--s-2);font-variant-numeric:tabular-nums}
+.vbskey .mb-chip i{display:inline-block;width:var(--s-4);border-top:var(--s-1) solid var(--k);border-radius:var(--radius-sm)}
 .calbanner{background:var(--accent);color:var(--accent-fg);text-align:center;font-weight:var(--w-bold);
   padding:var(--s-3);border-radius:var(--radius-md)}
 .calmonth .caltitle{padding:var(--s-3) 0}
@@ -717,6 +740,7 @@ main.mb-scroll:has(> #main.mv-r),main.mb-scroll:has(> #main.mv-l){overflow-x:hid
 .setup .sufield{display:flex;align-items:center;gap:var(--s-2);font-size:var(--f-2);color:var(--text-2)}
 .setup .sufield .mb-input{width:4.5em;min-width:0;text-align:center}
 .setup .ico{margin-left:auto}
+.trackbox > .suline{margin-top:var(--s-3)}
 .sulist .ico{color:var(--text-muted)}
 
 /* ── the card: a session, a week or a profile, made to be shared ──
@@ -862,7 +886,9 @@ main.mb-scroll:has(> #main.mv-r),main.mb-scroll:has(> #main.mv-l){overflow-x:hid
 /* Eight weeks of sets per muscle. Read-only: a cell is too small to be a
    target, so the arrows above are how a week is opened. */
 .heat{display:grid;gap:var(--s-1);align-items:center;font-size:var(--f-1)}
-.heat .hn{color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+/* a muscle name wraps onto a second line, never cut off (2026-11-16:
+   "Forearm Extensors" was longer than any old group name) */
+.heat .hn{color:var(--text-2);overflow-wrap:anywhere;line-height:1.15;
   display:flex;align-items:center;gap:var(--s-2);min-width:0}
 .heat .hh{text-align:center;color:var(--text-muted)}
 .heat .hh.on{color:var(--accent);font-weight:var(--w-bold)}
@@ -1116,7 +1142,7 @@ TRAIN.newId = function () {
 TRAIN.idx = { byDate: {}, byEx: {}, built: 0 };
 
 TRAIN.reindex = function () {
-  var byDate = {}, byEx = {}, sw = TRAIN.splitWeights();
+  var byDate = {}, byEx = {}, neg = {}, sw = TRAIN.splitWeights();
   var all = Rec.all('set');
   for (var i = 0; i < all.length; i++) {
     var r = all[i], p = r.payload;
@@ -1135,13 +1161,15 @@ TRAIN.reindex = function () {
     if (rec.split) rec.er = TRAIN.effReps(rec.split, p.r, sw);
     (byDate[r.date] || (byDate[r.date] = [])).push(rec);
     (byEx[p.ex] || (byEx[p.ex] = [])).push(rec);
+    /* a lift logged below zero is read against bodyweight: TRAIN.goesBelow */
+    if ((+p.kg || 0) < 0) neg[p.ex] = 1;
   }
   var k;
   for (k in byDate) byDate[k].sort(function (a, b) { return (a.ord || 0) - (b.ord || 0); });
   for (k in byEx) byEx[k].sort(function (a, b) {
     return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.ord || 0) - (b.ord || 0);
   });
-  TRAIN.idx = { byDate: byDate, byEx: byEx, built: Date.now() };
+  TRAIN.idx = { byDate: byDate, byEx: byEx, neg: neg, built: Date.now() };
   return TRAIN.idx;
 };
 
@@ -1151,7 +1179,7 @@ TRAIN.historyOf = function (exId) { return TRAIN.idx.byEx[exId] || []; };
    Held until the store announces a change, which it does on every write. */
 TRAIN._catC = null; TRAIN._exC = null;
 TRAIN.cats = function () { return TRAIN._catC || (TRAIN._catC = Rec.map('excat')); };
-Rec.on(function () { TRAIN._catC = null; TRAIN._exC = null; });
+Rec.on(function () { TRAIN._catC = null; TRAIN._exC = null; TRAIN._bw = null; });
 
 /* ── the muscle groups you start with ──
    Categories only ever arrived with a FitNotes import. Without one there were
@@ -1181,7 +1209,11 @@ TRAIN.DEFAULT_CATS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Forear
   'Core', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Lower Back', 'Cardio'];
 TRAIN.CAT_SLOT = { Chest: 0, Back: 1, Shoulders: 2, Quads: 3, Biceps: 4, Core: 5, Cardio: 6,
   Forearms: 7, Calves: 8, Hamstrings: 9, Glutes: 10, 'Lower Back': 11, Triceps: 6 };
-TRAIN.catSlot = function (nm) { return TRAIN.CAT_SLOT[nm] != null ? TRAIN.CAT_SLOT[nm] : 0; };
+TRAIN.catSlot = function (nm) {
+  if (TRAIN.CAT_SLOT[nm] != null) return TRAIN.CAT_SLOT[nm];
+  var s = window.Muscles ? Muscles.slotOf(nm) : null;
+  return s != null ? s : 0;
+};
 /* The two groups a fresh TRAIN made until 1.0.58. Only rows keyed `legs` and
    `arms` are these; a group a FitNotes import named Legs is keyed `fn<id>`
    and is the person's own. */
@@ -1297,6 +1329,19 @@ TRAIN.DEFAULT_EX = {
 /* Made once, and only when there are none: an import brings its own and must
    not find these sitting in the way. */
 TRAIN.seedCats = function () {
+  if (Object.keys(TRAIN.cats()).length) return 0;
+  var r = TRAIN.seedCatsOld();
+  /* Tom, 2026-11-16: a new log starts in the muscle groups, not the old
+     broad ones. The starters are seeded as before, then sorted with no
+     sheet: nothing has been logged, so nothing of his is being moved. */
+  if (r && !CLIENT) {
+    TRAIN._catC = null; TRAIN._exC = null; TRAIN._musC = null;
+    var p = TRAIN.sortProposals();
+    if (p.length) TRAIN.applySort(p);
+  }
+  return r;
+};
+TRAIN.seedCatsOld = function () {
   if (Object.keys(TRAIN.cats()).length) return 0;
   var made = 0;
   TRAIN.DEFAULT_CATS.forEach(function (nm, i) {
@@ -1444,22 +1489,34 @@ TRAIN.catByWord = function (nm, also) {
   };
   return hit([w]) || (also && TRAIN.CAT_ALSO[w] ? hit(TRAIN.CAT_ALSO[w]) : null);
 };
+/* Tom, 2026-11-16: split Back into its parts, no Core and no Legs groups,
+   add Prehab. Every movement is offered a move to the group the suite's
+   master list files it under (`TRAIN.musOf(id).group`): a muscle, or
+   Prehab. Offered only when the name tells (a lift no rule knows stays),
+   and never for a lift already in a muscle group that its own muscles
+   include, so one he moved by hand from Lats to Upper Back stays put. A
+   lift in a muscle group it does not train at all (a leg curl filed under
+   Biceps) is offered. A group he deleted is made again here: he asked for
+   these groups. Sorted in the master list's order. */
+TRAIN.SORT_MASTER = function () { return (window.Muscles ? Muscles.GROUP_LIST || Muscles.LIST : []).concat(['Prehab', 'Cardio']); };
+TRAIN.isMasterCat = function (nm) {
+  var w = TRAIN.catWord(nm);
+  if (/rehab/.test(w)) return 'Prehab';
+  var hit = null;
+  TRAIN.SORT_MASTER().forEach(function (m) { if (!hit && TRAIN.catWord(m) === w) hit = m; });
+  return hit;
+};
 TRAIN.sortProposals = function () {
-  var ex = TRAIN.exercises(), out = [], to = {}, fine = {};
-  TRAIN.SORT_RULES.forEach(function (r) {
-    var k = TRAIN.catByWord(r[0]);
-    to[r[0]] = k || (Rec.tombstone('excat', null, TRAIN.catId(r[0])) ? false : null);
-    if (k) fine[k] = 1;
-  });
+  if (!window.Muscles) return [];
+  var ex = TRAIN.exercises(), cats = TRAIN.cats(), out = [], M = TRAIN.SORT_MASTER();
   Object.keys(ex).forEach(function (id) {
-    var e = ex[id];
-    if (fine[e.cat]) return;
-    for (var i = 0; i < TRAIN.SORT_RULES.length; i++) {
-      var g = TRAIN.SORT_RULES[i][0];
-      if (!TRAIN.SORT_RULES[i][1].test(e.name || '')) continue;
-      if (to[g] !== false) out.push({ id: id, name: e.name, from: e.cat, group: g, to: to[g], gi: i });
-      break;
-    }
+    var e = ex[id], cur = cats[e.cat], mu = TRAIN.musOf(id);
+    if (mu.src === 'group' || !mu.group) return;
+    var curM = cur ? TRAIN.isMasterCat(cur.name) : null;
+    if (curM === mu.group) return;
+    if (curM && (mu.share[curM] || curM === 'Prehab')) return;
+    var k = mu.group === 'Prehab' ? TRAIN.catByWord('Prehab') || TRAIN.catByWord('P/Rehab') : TRAIN.catByWord(mu.group);
+    out.push({ id: id, name: e.name, from: e.cat, group: mu.group, to: k || null, gi: M.indexOf(mu.group) });
   });
   return out.sort(function (a, b) { return a.gi - b.gi || String(a.name).localeCompare(b.name); });
 };
@@ -1471,29 +1528,76 @@ TRAIN.sortSkip = function () {
    what it did so UNDO can put every one back. UNDO leaves a group it made:
    `fillCats` would have made that same group on the next open, and deleting
    it would leave a tombstone that keeps it away for good. */
+/* Moves the ones switched on, makes any group that is missing (Prehab is
+   made as P/Rehab, the name TRAIN gives it), and then deletes any group
+   left empty that is not a muscle, Prehab or Cardio: an emptied Back, Legs
+   or Shoulders. Hands back what it did so UNDO puts every lift back and
+   brings back every group it deleted. UNDO leaves a group it made. */
 TRAIN.applySort = function (moves) {
-  var cats = TRAIN.cats(), ord = 0, made = {}, done = [];
+  var cats = TRAIN.cats(), ord = 0, made = {}, done = [], gone = [];
   Object.keys(cats).forEach(function (k) { if ((cats[k].ord | 0) > ord) ord = cats[k].ord | 0; });
   moves.forEach(function (m) {
     var to = m.to;
     if (!to) {
-      to = TRAIN.catId(m.group);
+      var nm = m.group === 'Prehab' ? 'P/Rehab' : m.group;
+      to = TRAIN.catId(nm);
       if (!made[to] && !TRAIN.cats()[to]) {
-        Rec.set('excat', null, to, { name: m.group, slot: TRAIN.catSlot(m.group), ord: ++ord });
-        made[to] = 1;
+        Rec.set('excat', null, to, { name: nm, slot: TRAIN.catSlot(m.group), ord: ++ord });
+        made[to] = 1; TRAIN._catC = null;
       }
     }
     TRAIN.patchExercise(m.id, { cat: to });
     done.push({ id: m.id, from: m.from });
   });
-  return { moved: done, made: Object.keys(made) };
+  TRAIN._catC = null; TRAIN._exC = null; TRAIN._musC = null;
+  var ex = TRAIN.exercises(), used = {};
+  Object.keys(ex).forEach(function (id) { if (ex[id].cat) used[ex[id].cat] = 1; });
+  var now = TRAIN.cats();
+  if (done.length) Object.keys(now).forEach(function (k) {
+    if (used[k] || made[k] || TRAIN.isMasterCat(now[k].name)) return;
+    gone.push({ key: k, row: JSON.parse(JSON.stringify(now[k])) });
+    Rec.del('excat', null, k);
+  });
+  TRAIN._catC = null;
+  return { moved: done, made: Object.keys(made), gone: gone };
 };
 TRAIN.undoSort = function (did) {
+  (did.gone || []).forEach(function (g) { Rec.set('excat', null, g.key, g.row); });
   did.moved.forEach(function (m) { TRAIN.patchExercise(m.id, { cat: m.from }); });
+  TRAIN._catC = null; TRAIN._exC = null; TRAIN._musC = null;
 };
 
 TRAIN.seedId = function (name) {
   return 'seed-' + String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+};
+
+/* A lift that still has sets is never left deleted (1.0.92). Deleting a lift
+   here deletes its sets with it, so a live set under a dead lift only comes
+   from two devices: the importer's clearSeed on one removed starters it saw
+   no sets for, while the phone was logging into them (5 Oct 2026, a "seed
+   hammer curl" showing by its id). The lift comes back: a starter with its
+   starter name and group, anything else as "Unnamed lift" in no group, which
+   Tidy Movements puts first. */
+TRAIN.reviveLifts = function () {
+  var ex = TRAIN.exercises(), seen = {}, made = 0, starter = {};
+  Object.keys(TRAIN.DEFAULT_EX).forEach(function (g) {
+    TRAIN.DEFAULT_EX[g].forEach(function (row, j) { starter[TRAIN.seedId(row[0])] = { g: g, name: row[0], kind: row[1], ord: j }; });
+  });
+  Rec.all('set').forEach(function (r) {
+    var id = r.payload && r.payload.ex;
+    var q = r.payload;
+    if (!id || ex[id] || seen[id]) return;
+    if (!q.r && !q.kg && !q.dur && !q.dist && !String(q.note || '').trim()) return;   /* an empty set is no reason */
+    seen[id] = 1;
+    var s = starter[id];
+    Rec.set('exercise', null, id, s
+      ? { name: s.name, cat: TRAIN.catByWord(s.g) || null, kind: s.kind, inc: s.kind === 0 ? 2.5 : 1,
+          rest: 0, unit: 0, fav: 0, note: '', graph: 0, ord: s.ord }
+      : { name: 'Unnamed lift', cat: null, kind: 'wr', inc: 2.5, rest: 0, fav: 0, note: '', graph: 0 });
+    made++;
+  });
+  if (made) { TRAIN._exC = null; TRAIN._musC = null; TRAIN.reindex(); }
+  return made;
 };
 
 /* ── folding the copies back into one ──
@@ -1644,7 +1748,7 @@ TRAIN.dayGroups = function (date) {
    displayed, so switching units never changes the number underneath. */
 TRAIN.volume = function (sets) {
   var v = 0;
-  for (var i = 0; i < sets.length; i++) v += (sets[i].kg || 0) * (sets[i].r || 0);
+  for (var i = 0; i < sets.length; i++) v += TRAIN.volS(sets[i]);
   return v;
 };
 
@@ -2191,7 +2295,7 @@ TRAIN.importFitNotes = function (buf, onProgress, opts) {
     /* FitNotes' flags arrive as it set them; TRAIN's rule keeps split sets
        apart, so they are worked out again once everything is in. */
     TRAIN.recomputePRs();
-    Rec.setting(APP.id, 'prRule', 3);
+    Rec.setting(APP.id, 'prRule', 5);
     Object.keys(days).forEach(TRAIN.assertTick);
     return stats;
   }
@@ -3953,7 +4057,7 @@ function drawList(host, q, cats, exs) {
   if (!q && !TRAIN.picking) {
     /* Offered here once; after that it lives in More. Not on a client's
        profile, where the groups are theirs to keep. */
-    if (!CLIENT && !TRAIN.pickInto && Rec.setting(APP.id, 'sortSeen') !== 1) {
+    if (!CLIENT && !TRAIN.pickInto && Rec.setting(APP.id, 'sortSeen') !== 2) {
       var skip = TRAIN.sortSkip(), props = TRAIN.sortProposals().filter(function (p) { return !skip[p.id]; });
       if (props.length) host.appendChild(sortOffer(props));
     }
@@ -4026,11 +4130,12 @@ function sortOffer(props) {
   var said = groups.length > 1 ? groups.slice(0, -1).join(', ') + ' or ' + groups[groups.length - 1] : groups[0];
   var box = UI.el('div', 'sortoffer');
   var msg = UI.el('div', 'msg');
-  msg.textContent = props.length + (props.length === 1 ? ' exercise fits ' : ' exercises fit ') + said + '.';
+  msg.textContent = props.length + (props.length === 1 ? ' exercise can move into the muscle it trains' : ' exercises can move into the muscles they train') +
+    (groups.length <= 3 ? ': ' + said + '.' : ', ' + groups.length + ' groups.');
   var no = UI.el('button', 'mb-btn mb-press mb-tap');
   no.type = 'button'; no.textContent = 'NOT NOW';
   no.onclick = function () {
-    Rec.setting(APP.id, 'sortSeen', 1);
+    Rec.setting(APP.id, 'sortSeen', 2);
     draw();
     UI.toast('Kept in More, Sort Into Groups');
   };
@@ -4108,7 +4213,8 @@ TRAIN.exerciseDialog = function (exId, prefill) {
   /* No categories is not a reason to refuse — it is a reason to make some. */
   if (!Object.keys(cats).length) { TRAIN.seedCats(); cats = TRAIN.cats(); }
   var kind = cur ? TRAIN.kindOf(exId) : 'wr';
-  var nameEl = null, sel = null, inc = null, rest = null, also = {}, barSw = null, barOn = null;
+  var nameEl = null, sel = null, inc = null, rest = null, also = {}, barSw = null, barOn = null, asOn = null;
+  var mus = {}, musTouched = false, musReset = false, catTouched = false;
   var wu = cur && (cur.wu === 'kg' || cur.wu === 'lb') ? cur.wu : '';
   if (cur && cur.also) Object.keys(cur.also).forEach(function (k) { also[k] = cur.also[k]; });
 
@@ -4135,7 +4241,7 @@ TRAIN.exerciseDialog = function (exId, prefill) {
       newCat.textContent = 'NEW CATEGORY';
       newCat.onclick = function (ev) {
         ev.preventDefault();
-        TRAIN.categoryDialog(null, function (key) { fillCats(key); paintAlso(); });
+        TRAIN.categoryDialog(null, function (key) { fillCats(key); catTouched = true; });
       };
       b.appendChild(newCat);
 
@@ -4167,36 +4273,76 @@ TRAIN.exerciseDialog = function (exId, prefill) {
       /* Read off the name until switched here, then his switch stands. */
       barSw = UI.toggle(TRAIN.isBarbell(cur || { name: prefill || '' }), function (v) { barOn = v ? 1 : 0; });
       b.appendChild(UI.row('Plates each side', 'Shown above the weight on a barbell lift', barSw));
+      /* An assisted machine: the weight is help, so less is stronger. Read
+         off the name until switched here (1.0.83). */
+      b.appendChild(UI.row('Assisted', 'The weight is help, so less is stronger',
+        UI.toggle(TRAIN.isAssisted(cur || { name: prefill || '' }), function (v) { asOn = v ? 1 : 0; })));
       rest = UI.field('number', {
         value: cur && cur.rest ? String(cur.rest) : '',
         placeholder: String(Rec.setting(APP.id, 'restSeconds') || 120),
       });
       b.appendChild(UI.row('Rest time', 'Seconds. Blank uses the default', rest));
 
-      /* Tom, 2026-09-05: "1 set of pull ups as 1/2 a set of biceps." A set
-         adds one to its own group and this fraction to each group here. */
-      var SHARES = [0.25, 0.5, 0.75];
-      var aw = UI.el('div', CHIPS);
-      var paintAlso = function () {
-        aw.innerHTML = '';
-        TRAIN.catsSorted().forEach(function (id) {
-          if (id === sel.value) return;
-          var v = also[id] || 0;
-          var c = UI.el('button', CHIP + ' mb-press' + (v ? ' on' : ''),
-            UI.esc(TRAIN.cats()[id].name) + (v ? ' <b>' + v + '</b>' : ''));
+      /* What it trains (Tom, 2026-11-16: when people put a new movement
+         "they're meant to put what muscle groups it hits and also what are
+         the side muscles"). Filled from the name by the suite's master list
+         until he changes something; then `mus` on the row is his and wins
+         everywhere, TRAIN, FORGE and COACH alike. A side muscle steps
+         0.5, 0.75, 1, 0.25, then off. */
+      var LIST = window.Muscles ? Muscles.LIST : [];
+      var fromName = function () {
+        var r = window.Muscles ? Muscles.forLift(String(nameEl.value || ''), null, null, sel.value && TRAIN.cats()[sel.value] ? TRAIN.cats()[sel.value].name : null) : { share: {} };
+        return JSON.parse(JSON.stringify(r.share || {}));
+      };
+      /* a lift saved with an old muscle name (Forearm Flexors) shows it as the new one */
+      mus = cur && cur.mus ? (function () { var o = {}, OLD = window.Muscles && Muscles.OLD || {};
+        Object.keys(cur.mus).forEach(function (k) { o[OLD[k] || k] = cur.mus[k]; }); return o; })()
+        : (cur ? JSON.parse(JSON.stringify(TRAIN.musOf(exId).share)) : fromName());
+      var mainSel = document.createElement('select');
+      mainSel.className = SEL;
+      var mwrap = UI.el('div', CHIPS), mnote = UI.el('div', 'empty');
+      var paintMus = function () {
+        var main = window.Muscles ? Muscles.mainOf(mus) : null;
+        mainSel.innerHTML = '';
+        var o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'Pick one'; mainSel.appendChild(o0);
+        LIST.forEach(function (m) { var o = document.createElement('option'); o.value = m; o.textContent = m; mainSel.appendChild(o); });
+        mainSel.value = main && LIST.indexOf(main) >= 0 ? main : '';
+        mwrap.innerHTML = '';
+        LIST.forEach(function (m) {
+          if (m === main) return;
+          var v = mus[m] || 0;
+          var c = UI.el('button', CHIP + ' mb-press' + (v ? ' on' : ''), UI.esc(m) + (v ? ' <b>' + v + '</b>' : ''));
           c.onclick = function (e) {
             e.preventDefault();
-            var i = SHARES.indexOf(v);
-            var next = v === 0 ? SHARES[1] : (i === SHARES.length - 1 ? 0 : SHARES[i + 1]);
-            if (next) also[id] = next; else delete also[id];
-            paintAlso(); Mobile.haptic('select');
+            var STEP = [0, 0.5, 0.75, 1, 0.25], i = STEP.indexOf(v), n = STEP[(i < 0 ? 0 : i + 1) % STEP.length];
+            if (n) mus[m] = n; else delete mus[m];
+            musTouched = true; paintMus(); Mobile.haptic('select');
           };
-          aw.appendChild(c);
+          mwrap.appendChild(c);
         });
+        mnote.textContent = musTouched || (cur && cur.mus) ? 'Set by you. This wins over the name everywhere.' : 'Read from the name. Change anything to set it yourself.';
       };
-      paintAlso();
-      sel.addEventListener('change', paintAlso);
-      b.appendChild(UI.row('Also works', 'Tap for a half, again for three quarters, a quarter, then off', aw));
+      mainSel.onchange = function () {
+        var old = window.Muscles ? Muscles.mainOf(mus) : null;
+        if (old && old !== mainSel.value) delete mus[old];
+        if (mainSel.value) mus[mainSel.value] = 1;
+        musTouched = true;
+        /* the group it files under: Adductors sits in Glutes (Muscles.fileOf) */
+        if (!catTouched && mainSel.value) { var k = TRAIN.catByWord(window.Muscles && Muscles.fileOf ? Muscles.fileOf(mainSel.value) : mainSel.value); if (k) sel.value = k; }
+        paintMus();
+      };
+      sel.addEventListener('change', function () { catTouched = true; });
+      nameEl.addEventListener('input', function () { if (!musTouched && !(cur && cur.mus)) { mus = fromName(); paintMus(); } });
+      paintMus();
+      b.appendChild(UI.row('Main muscle', 'Counts one set for every set', mainSel));
+      b.appendChild(UI.row('Side muscles', 'Tap for a half, again for three quarters, a full set, a quarter, then off', mwrap));
+      b.appendChild(mnote);
+      if (cur && cur.mus) {
+        var back = UI.el('button', 'mb-btn mb-press mb-tap');
+        back.textContent = 'GO BACK TO THE NAME';
+        back.onclick = function (ev) { ev.preventDefault(); musReset = true; musTouched = false; cur = Object.assign({}, cur, { mus: null }); mus = fromName(); paintMus(); };
+        b.appendChild(back);
+      }
 
       if (cur) {
         var del = UI.el('button', 'mb-btn bad mb-press mb-tap');
@@ -4230,8 +4376,15 @@ TRAIN.exerciseDialog = function (exId, prefill) {
           wu: wu || null,
         };
         if (barOn !== null) changes.bar = barOn;
+        if (asOn !== null) changes.assist = asOn;
+        if (musTouched && Object.keys(mus).length) changes.mus = mus;
+        else if (musReset) changes.mus = null;
+        TRAIN._musC = null;
         if (exId) {
           TRAIN.patchExercise(exId, changes);
+          /* a rename or the Assisted switch can turn which way records go */
+          TRAIN._exC = null; TRAIN._prK = null;
+          TRAIN.recomputePRs([exId]);
         } else {
           changes.note = ''; changes.fav = 0; changes.unit = null; changes.graph = null;
           Rec.set('exercise', null, TRAIN.newId(), changes);
@@ -4284,19 +4437,40 @@ function drawTrack(m) {
      load. */
   var vs = TRAIN.vsFor(date, exId, TRAIN.compareCtx(date));
   var then = vs ? workOn(vs.date, exId) : [];
+  /* Last time and the coach's line sit under SAVE since 1.0.88 (Tom,
+     2026-11-16: "Move the faded last time numbers below save"); built here,
+     placed after the setup line. */
+  var below = [];
   if (then.length) {
     var vsName = (Rec.get('session', vs.date, '') || {}).name;
-    /* A faded line above the steppers, not a card of its own: FitNotes has
+    /* A faded line under SAVE (above the steppers until 1.0.88), not a card: FitNotes has
        nothing here, so this has to cost as little room as a line can. Tom,
        2026-09-22: "small, faded, and unintrusive, maintain the fitnotes
        layout". One line, cut off with an ellipsis rather than wrapping. */
+    /* Each set is a press (Tom, 2026-11-09: "if I click last sessions
+       numbers let them show up as ghosts on the left"): its numbers load
+       into the steppers as ghosts, the way a suggestion's do, and nothing
+       is saved until SAVE. Drawn as the same words, a dotted line under
+       each so it reads as pressable, and mb-tap catches 44 x 44. */
     var card = UI.el('div', 'lastline');
     card.innerHTML = '<div class="lasttime">' + (vsName ? UI.esc(vsName) + ' · ' : '') +
       UI.esc(dayY(vs.date, date)) + ' · ' +
-      then.map(function (s) {
-        return lastBit(s, f) + (s.split ? ' (' + UI.esc(s.split.text) + (TRAIN.sr(s) !== s.r ? ', counts as ' + TRAIN.showReps(TRAIN.sr(s)) : '') + ')' : '');
+      then.map(function (s, i) {
+        return '<button type="button" class="lastset mb-press mb-tap" data-i="' + i + '" aria-label="Load set ' + (i + 1) + ' from last time">' +
+          lastBit(s, f) + (s.split ? ' (' + UI.esc(s.split.text) + (TRAIN.sr(s) !== s.r ? ', counts as ' + TRAIN.showReps(TRAIN.sr(s)) : '') + ')' : '') +
+          '</button>';
       }).join(', ') + '</div>';
-    m.appendChild(card);
+    card.querySelectorAll('.lastset').forEach(function (bt) {
+      bt.onclick = function () {
+        var s = then[+bt.dataset.i];
+        if (!s) return;
+        Mobile.feedback('select');
+        TRAIN.sel = null;
+        loadDraft(s, true);
+        draw();
+      };
+    });
+    below.push(card);
   }
   /* The coach's target, when this was started from a routine a coach sent:
      the same faded line, under last time. Stated, never checked against. */
@@ -4304,14 +4478,21 @@ function drawTrack(m) {
   if (coachSays) {
     var pl = UI.el('div', 'lastline');
     pl.innerHTML = '<div class="lasttime">Coach · ' + UI.esc(coachSays) + '</div>';
-    m.appendChild(pl);
+    below.push(pl);
   }
   /* Setup lives in each set's comment box now, the way FitNotes keeps
      everything that is not a number. Tom, 2026-09-22: "put our extra input
      features in the comments part of fitnotes because train feels
-     claustrophobic now". The next set still carries the last setup, because
-     draftSU is primed here exactly as setupCard primed it. */
-  if (TRAIN.suFor !== exId) { TRAIN.suFor = exId; TRAIN.draftSU = TRAIN.lastSetup(exId, date); }
+     claustrophobic now". Since 1.0.84 one line of it is on TRACK, only on an
+     exercise that has setup (Tom, 2026-11-15, "How setup works also a bit
+     unintuitive"), under SAVE since 1.0.86: it is exactly what SAVE records.
+     A set loaded from the list shows its own; once none is loaded, the
+     carried setup comes back. */
+  if (TRAIN.suFor !== exId || (!TRAIN.sel && TRAIN.suFromSel)) {
+    TRAIN.suFor = exId;
+    TRAIN.draftSU = TRAIN.lastSetup(exId, date);
+    TRAIN.suFromSel = false;
+  }
 
   var pad = UI.el('div', 'trackbox');
   var inputs = {};
@@ -4359,6 +4540,13 @@ function drawTrack(m) {
   };
   bar.appendChild(save); bar.appendChild(clear);
   pad.appendChild(bar);
+  /* Setup sits under SAVE, never above the weight (Tom, 2026-11-16: "We
+     want as little data as possible before the input for weight and reps.
+     put the settings between the save button and the actual save"). It is
+     still what the next SAVE records. */
+  var suLine = setupLine(exId, ex);
+  if (suLine) pad.appendChild(suLine);
+  below.forEach(function (el) { pad.appendChild(el); });
   m.appendChild(pad);
 
   if (mine.length) {
@@ -4374,10 +4562,25 @@ function drawTrack(m) {
           if (d) d.volUp = TRAIN.volUp(s, then[n - 1], kind, d);
         }
       }
-      /* setup only when it changed from the set before (Tom, 2026-10-18) */
-      var su = JSON.stringify(s.su || {});
-      listCard.appendChild(trainingSetRow(s, s.warm ? 0 : n, date, showChk, d, su === prevSu));
-      prevSu = su;
+      /* Setup says only what CHANGED from the set before, never the parts
+         that held (Tom, 2026-11-16: "I don't want the setup settings to
+         repeat per set ... unless anything changes, then it just holds on
+         from the last set", so the room goes to comments). The day's first
+         set says its whole setup, so a day reads on its own. A suggestion
+         not taken yet says nothing and is not "the set before". */
+      var suSaid = '';
+      if (!TRAIN.pending(s)) {
+        suSaid = setupDiff(prevSu, s.su, exId);
+        prevSu = s.su || {};
+      }
+      /* Last session's comment on the same working set, faded, until he
+         writes one of his own (Tom, 2026-11-16: "last set's notes to show
+         up as faded out text so it's clear that this is last session's
+         notes ... unless anything is written, just keep it there"). Never
+         stored on today's set. */
+      var ghost = '';
+      if (!s.warm && !String(s.note || '').trim() && then[n - 1]) ghost = String(then[n - 1].note || '').trim();
+      listCard.appendChild(trainingSetRow(s, s.warm ? 0 : n, date, showChk, d, suSaid, ghost));
     });
     /* Hold a set and drag it to put it in another place; let go without
        moving and its menu opens, as the hold always did. The numbers follow
@@ -4440,7 +4643,8 @@ function stepper(kind, value, step, onChange, ghost) {
     return isNaN(n) ? 0 : n;
   };
   var write = function (n) {
-    if (n < 0) n = 0;
+    /* weight may go below zero: -20 lb on a pull-up is 20 lb of help (1.0.85) */
+    if (n < 0 && kind !== 'w') n = 0;
     input.value = kind === 'r' ? TRAIN.showReps(n)
       : kind === 't' ? fmtSecs(Math.round(n))
       : String(Math.round(n * 1000) / 1000);
@@ -4520,7 +4724,7 @@ function commitSet(inputs) {
     if (was && was.plan && !was.done) afterSave(exId, date);
   } else {
     var key = TRAIN.addSet(exId, date, fields);
-    if (Rec.setting(APP.id, 'trackPRs') !== 0 && fields.kg > 0 && fields.r > 0) TRAIN.recomputePRs([exId]);
+    if (Rec.setting(APP.id, 'trackPRs') !== 0 && (fields.kg !== 0 || TRAIN.goesBelow(exId)) && fields.r > 0) TRAIN.recomputePRs([exId]);
     /* A record at the moment it was lifted: all-time, or only in this
        training block, which starts its records again. */
     recordCheer(exId, date, key, fields.kg);
@@ -4598,7 +4802,7 @@ function fitNotes(box) {
     }
   });
 }
-function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
+function trainingSetRow(s, n, date, showChk, delta, suSaid, ghost) {
   var row = UI.el('div', 'tset' + (TRAIN.sel === s.key ? ' sel' : '') + (s.warm ? ' warm' : '') +
     (TRAIN.pending(s) ? ' plan' : ''));
   row.dataset.key = s.key;
@@ -4606,7 +4810,7 @@ function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
   var bub = UI.el('button', 'bub nohold mb-tap' + (s.note || s.rir != null || s.q ? ' on' : ''));
   bub.innerHTML = BUBBLE;
   bub.setAttribute('aria-label', s.note ? 'Edit comment' : 'Add comment');
-  bub.onclick = function (e) { e.stopPropagation(); commentDialog(s, date); };
+  bub.onclick = function (e) { e.stopPropagation(); commentDialog(s, date, ghost); };
   row.appendChild(bub);
 
   var idx = UI.el('span', 'idx');
@@ -4616,10 +4820,27 @@ function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
   /* The comment and the setup, in the gap between the number and the
      weight. Tom, 2026-10-18: "Put comments and setup in this blank space,
      smaller but readable font". Never cut off: see fitNotes. */
-  var said = [String(s.note || '').trim(), sameSetup ? '' : setupText(s.su, s.ex)].filter(Boolean).join(' · ');
+  var said = [String(s.note || '').trim(), suSaid || ''].filter(Boolean).join(' · ');
   var tn = UI.el('span', 'tnote');
-  tn.textContent = said;
-  if (said) tn.title = said;
+  if (ghost) {
+    /* last session's words, faded and slanted so they never read as today's */
+    var gh = UI.el('span', 'ghostnote');
+    gh.textContent = ghost;
+    tn.appendChild(gh);
+    if (said) tn.appendChild(document.createTextNode(' · ' + said));
+    said = said ? ghost + ' · ' + said : ghost;
+  } else tn.textContent = said;
+  if (said) {
+    tn.title = said;
+    /* The words are a way into editing them (Tom, 2026-11-16: "edit the
+       text by clicking on the text, not just the text box"): a tap on a
+       set's comment or setup opens its comment box, as the bubble does.
+       The rest of the row still loads the set; a hold still lifts it. */
+    tn.classList.add('tedit');
+    tn.setAttribute('role', 'button');
+    tn.setAttribute('aria-label', ghost ? 'Add comment, last time: ' + ghost : 'Edit comment: ' + said);
+    tn.onclick = function (e) { e.stopPropagation(); commentDialog(s, date, ghost); };
+  }
   row.appendChild(tn);
 
   var body = UI.el('span', 'grow');
@@ -4661,7 +4882,12 @@ function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
     chk.setAttribute('aria-label', s.done ? 'Mark not done' : 'Mark done');
     chk.onclick = function (e) {
       e.stopPropagation();
-      TRAIN.patchSet(s.key, date, { done: s.done ? 0 : 1 });
+      var tick = { done: s.done ? 0 : 1 };
+      if (tick.done && TRAIN.pending(s) && !s.su && ((TRAIN.exercises()[s.ex] || {}).setup || []).length) {
+        var csu = TRAIN.carriedSetup(s.ex, date);
+        if (csu) tick.su = csu;
+      }
+      TRAIN.patchSet(s.key, date, tick);
       Mobile.feedback(s.done ? 'untick' : 'tick');
       if (!s.done) afterSave(s.ex, date, true);
       if (TRAIN.pendingJump) {
@@ -4726,13 +4952,27 @@ function setMenu(s, date, e) {
 }
 
 /* FitNotes shows a comment in a small box with Edit and Done. Same shape. */
-function commentDialog(s, date) {
-  var noteEl = null;
+function commentDialog(s, date, ghost) {
+  var noteEl = null, warmSet = false;
   UI.dialog({
     title: 'COMMENT', width: 420,
     body: function (b, h) {
-      var i = noteEl = UI.field('note', { value: s.note || '', placeholder: 'Comment Text ...' });
+      /* last session's comment as the placeholder: faded, never saved */
+      var i = noteEl = UI.field('note', { value: s.note || '', placeholder: ghost ? 'Last time: ' + ghost : 'Comment Text ...' });
       b.appendChild(i);
+      /* Warmup as a switch (Tom, 2026-11-09: "warmup designation should
+         also be a toggle in set details button"). It starts as TRAIN reads
+         the set, its mark else its comment, and writes the mark: 1 or 0,
+         which beats the comment either way. */
+      var wr = UI.row('Warmup', 'Counts in totals, never a record', UI.toggle(s.warm ? 1 : 0, function (v) {
+        warmSet = true;
+        TRAIN.patchSet(s.key, date, { warm: v ? 1 : 0 });
+        s.warm = v ? 1 : 0;
+        TRAIN.recomputePRs([s.ex]);
+        draw();
+      }));
+      wr.classList.add('warmrow');
+      b.appendChild(wr);
       var rt = rateFor(s, date);
       if (rt) b.appendChild(rt);
       b.appendChild(setupFor(s, date));
@@ -4748,7 +4988,8 @@ function commentDialog(s, date) {
     /* The comment decides whether it is a warmup or a split set, so a changed
        comment hands that back to it and the records are worked out again. */
     var note = (i.value || '').trim(), ch = { note: note };
-    if (TRAIN.noteWarm(note) !== TRAIN.noteWarm(s.note)) ch.warm = undefined;
+    /* a warmup switched in this box stays as switched */
+    if (!warmSet && TRAIN.noteWarm(note) !== TRAIN.noteWarm(s.note)) ch.warm = undefined;
     TRAIN.patchSet(s.key, date, ch);
     TRAIN.recomputePRs([s.ex]);
     h.close();
@@ -4837,7 +5078,7 @@ function drawGraph(m) {
     var e = UI.el('div', 'empty'); e.textContent = 'No sets recorded'; m.appendChild(e);
     return;
   }
-  if (TRAIN.graphEx !== exId) { TRAIN.graphEx = exId; TRAIN.graphType = null; TRAIN.graphPer = null; }
+  if (TRAIN.graphEx !== exId) { TRAIN.graphEx = exId; TRAIN.graphType = null; TRAIN.graphPer = null; TRAIN.vbsPick = null; }
   var ex = TRAIN.exercises()[exId] || {}, f = TRAIN.fieldsOf(exId), U = TRAIN.unit(exId);
   var W = function (kg) { return TRAIN.toUnit(kg || 0, U); };
   var D = function (km) { return TRAIN.distUnit() === 'mi' ? (km || 0) / KM_PER_MI : (km || 0); };
@@ -4848,10 +5089,21 @@ function drawGraph(m) {
      about 1rms". Then FitNotes' graphs for the type of exercise on screen. */
   var G = [], sv = TRAIN.setVolume(exId);
   if (sv) G.push({ id: 'setvol', name: 'Top 3 Sets & Total Work', u: sv.reps ? 'reps' : U + 's' });
+  /* weight and reps only: a set's volume is weight x reps (1.0.90) */
+  if (f.length === 2 && f[0] === 'w' && f[1] === 'r') G.push({ id: 'byset', name: 'Volume By Set', u: U + 's' });
   if (f.indexOf('w') > -1) {
-    G.push({ id: 'e1rm', name: 'Estimated 1RM', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return TRAIN.e1rm(x.kg, TRAIN.sr(x)); })); } });
-    G.push({ id: 'maxw', name: 'Max Weight', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return x.kg || 0; })); } });
-    if (f.indexOf('r') > -1) G.push({ id: 'vol', name: 'Session Volume', u: U + 's', v: function (ss) { return W(sum(ss, function (x) { return (x.kg || 0) * (x.r || 0); })); } });
+    var noLoad = TRAIN.goesBelow(exId) && !TRAIN.bwList().length;
+    if (!noLoad) G.push({ id: 'e1rm', name: 'Estimated 1RM', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return TRAIN.e1rmS(x); })); } });
+    if (TRAIN.isAssisted(exId)) G.push({ id: 'maxw', name: 'Least Help', u: U + 's', v: function (ss) {
+      var lo = ss.reduce(function (a, x) { return x.warm || !TRAIN.weighed(x) ? a : a === null ? x.kg || 0 : Math.min(a, x.kg || 0); }, null);
+      return W(lo === null ? 0 : lo);
+    } });
+    else G.push({ id: 'maxw', name: 'Max Weight', u: U + 's', v: function (ss) {
+      /* a lift below zero has a max below zero, so no floor at 0 (1.0.85) */
+      var hi = ss.reduce(function (a, x) { return x.warm || !TRAIN.weighed(x) ? a : a === null ? +x.kg || 0 : Math.max(a, +x.kg || 0); }, null);
+      return W(hi === null ? 0 : hi);
+    } });
+    if (f.indexOf('r') > -1 && !noLoad) G.push({ id: 'vol', name: 'Session Volume', u: U + 's', v: function (ss) { return W(sum(ss, function (x) { return TRAIN.volS(x); })); } });
   }
   if (f.indexOf('r') > -1) {
     G.push({ id: 'maxr', name: 'Max Reps', u: 'reps', v: function (ss) { return max(ss, TRAIN.sr); } });
@@ -4888,6 +5140,7 @@ function drawGraph(m) {
 
   var range = TRAIN.periodRange(per), byDay = {}, order = [];
   if (gid === 'setvol') return drawSetVolume(m, ex, exId, per, range);
+  if (gid === 'byset') return drawVolBySet(m, ex, exId, per, range);
   all.forEach(function (x) {
     if (x.date < range.from || x.date > range.to) return;
     if (!byDay[x.date]) { byDay[x.date] = []; order.push(x.date); }
@@ -5019,8 +5272,10 @@ TRAIN.setVolume = function (exId, range) {
   if (f.indexOf('r') < 0) return null;
   var hist = TRAIN.historyOf(exId).filter(TRAIN.counts);
   if (!hist.length) return null;
-  var loaded = hist.filter(function (s) { return (s.kg || 0) > 0; }).length;
-  var reps = f.indexOf('w') < 0 || loaded * 2 < hist.length, U = TRAIN.unit(exId);
+  var loaded = hist.filter(function (s) { return (s.kg || 0) !== 0; }).length;
+  /* an assisted lift is read in reps until a bodyweight says what it lifted */
+  var reps = f.indexOf('w') < 0 || loaded * 2 < hist.length ||
+    (TRAIN.isAssisted(exId) && !TRAIN.bwList().length), U = TRAIN.unit(exId);
   var byDay = {};
   hist.forEach(function (s) {
     if ((range.from && s.date < range.from) || (range.to && s.date > range.to)) return;
@@ -5028,10 +5283,10 @@ TRAIN.setVolume = function (exId, range) {
   });
   var days = Object.keys(byDay).sort().map(function (d) {
     var v = byDay[d].sort(function (a, b) { return (a.ord || 0) - (b.ord || 0) || TRAIN.setStamp(a) - TRAIN.setStamp(b); })
-      .map(function (s) { return reps ? (s.r || 0) : TRAIN.toUnit((s.kg || 0) * (s.r || 0), U); });
+      .map(function (s) { return reps ? (s.r || 0) : TRAIN.toUnit(TRAIN.volS(s), U); });
     /* the best sets are a strength measure, so a split set counts its
        effective reps there (1.0.70); the set lines and the total, every rep */
-    var str = byDay[d].map(function (s) { return reps ? TRAIN.sr(s) : TRAIN.toUnit((s.kg || 0) * TRAIN.sr(s), U); });
+    var str = byDay[d].map(function (s) { return reps ? TRAIN.sr(s) : TRAIN.toUnit((TRAIN.load(s) || 0) * TRAIN.sr(s), U); });
     return { date: d, sets: v, str: str, total: v.reduce(function (a, x) { return a + x; }, 0) };
   }).filter(function (x) { return x.total > 0; });
   days.forEach(function (x) { x.top3 = TRAIN.top3(x.str); });
@@ -5214,6 +5469,134 @@ function drawSetVolume(m, ex, exId, per, range) {
   m.appendChild(list);
 }
 
+/* ── Volume By Set (Tom, 2026-11-16: "x axis set y axis volume"; 1.0.90) ──
+   One line per session across its working sets: set 1, 2, 3 along the
+   bottom, that set's weight x reps up the side, from zero. Only sets that
+   count (TRAIN.counts), warmups out by TRAIN's rule (`warm` on the index),
+   numbered in the order done that day. The weight is TRAIN.load, so an
+   assisted or below-zero lift is what the body moved; a set with no load
+   answer (no weigh-in) is left out and keeps its number. Every rep counts
+   (`r`), as in every volume. The last TRAIN.VBS_MAX sessions in the period:
+   the newest the accent, the one before it the second colour, the rest
+   faded. A chip per session picks which line a tap or drag reads, because
+   the drag finds the nearest set number and every session has a set 1. */
+TRAIN.VBS_MAX = 8;
+TRAIN.volBySet = function (exId, range) {
+  range = range || {};
+  var U = TRAIN.unit(exId), byDay = {};
+  TRAIN.historyOf(exId).forEach(function (s) {
+    if (!TRAIN.counts(s) || s.warm) return;
+    if ((range.from && s.date < range.from) || (range.to && s.date > range.to)) return;
+    (byDay[s.date] = byDay[s.date] || []).push(s);
+  });
+  var days = Object.keys(byDay).sort().map(function (d) {
+    var sets = [];
+    byDay[d].sort(function (a, b) { return (a.ord || 0) - (b.ord || 0) || TRAIN.setStamp(a) - TRAIN.setStamp(b); })
+      .forEach(function (s, i) {
+        var l = TRAIN.load(s);
+        if (l == null) return;
+        sets.push({ n: i + 1, s: s, kg: l, v: TRAIN.toUnit(l * (+s.r || 0), U) });
+      });
+    return { date: d, sets: sets, total: sets.reduce(function (a, x) { return a + x.v; }, 0),
+             note: String((Rec.get('session', d, '') || {}).note || '').trim() };
+  }).filter(function (x) { return x.total > 0; });
+  return { u: U + 's', days: days.slice(-TRAIN.VBS_MAX) };
+};
+function drawVolBySet(m, ex, exId, per, range) {
+  var vb = TRAIN.volBySet(exId, range), days = vb.days, u = vb.u;
+  if (days.length < 2) {
+    var e = UI.el('div', 'empty');
+    e.textContent = days.length ? 'Only one session in this period' : 'No sessions in this period';
+    m.appendChild(e);
+    return;
+  }
+  var num = function (v) { return Math.round(v).toLocaleString(); };
+  var sign = function (v) { return v > 0 ? '+' : v < 0 ? '−' : ''; };
+  var last = days[days.length - 1], prev = days[days.length - 2];
+  var diff = last.total - prev.total, pct = prev.total ? diff / prev.total * 100 : null;
+  var pd = days.filter(function (d) { return d.date === TRAIN.vbsPick; })[0] || last;
+
+  var card = UI.el('div', 'exblock pad');
+  card.innerHTML = '<div class="fieldlabel">VOLUME BY SET (' + UI.esc(u) + ')</div>';
+  /* the answer first: the newest session's volume and its change, numbers only */
+  var head = Chart.header({
+    value: num(last.total), unit: u,
+    sub: 'Session total, ' + sign(Math.round(diff)) + num(Math.abs(diff)) + ' ' + u +
+      (pct != null ? ' · ' + sign(Math.round(pct * 10)) + Math.abs(pct).toFixed(1) + '%' : '') +
+      ' vs ' + Day.label(prev.date),
+    when: Day.label(last.date),
+  });
+  card.appendChild(head.el);
+  var box = UI.el('div', 'chartbox vbs');
+  card.appendChild(box);
+
+  var wOf = function (x) { return TRAIN.showWeight(x.kg, x.kg === +x.s.kg ? x.s.u : null, exId); };
+  var setAt = function (n) { return pd.sets.filter(function (y) { return y.n === n; })[0]; };
+  var n = 0, vals = [];
+  days.forEach(function (d) { d.sets.forEach(function (x) { n = Math.max(n, x.n); vals.push(x.v); }); });
+  var ptsOf = function (d) {
+    return d.sets.map(function (x) {
+      return [x.n, x.v, Day.label(d.date) + ', set ' + x.n + ': ' + num(x.v) + ' ' + u];
+    });
+  };
+  Chart.mount(box, { label: 'Volume by set (' + u + ')' }, function (c) {
+    c.xLinear(n > 1 ? 0.75 : 0.5, n > 1 ? n + 0.25 : 1.5);
+    fitY(c, vals, true);
+    c.grid(function (v) { return v >= 10000 ? Math.round(v / 1000) + 'k' : Math.round(v).toLocaleString(); });
+    var labs = [];
+    for (var i = 1; i <= n; i++) labs.push([i, String(i)]);
+    c.labels(labs);
+    /* oldest first, so the newest lies on top */
+    days.forEach(function (d, k) {
+      var age = days.length - 1 - k, cls = age === 0 ? 'vbs-new' : age === 1 ? 'vbs-prev' : 'vbs-old';
+      var pts = ptsOf(d);
+      c.line(pts, 'mb-line ' + cls);
+      if (age < 2 || d === pd || pts.length === 1) c.dots(pts, 'mb-dot ' + cls, age === 0 ? 3.5 : 3);
+    });
+    var lp = ptsOf(last);
+    c.end(lp[lp.length - 1], num(lp[lp.length - 1][1]));
+    c.scrub(ptsOf(pd), {
+      fmt: function (p) {
+        var x = setAt(p[0]);
+        return Day.short(pd.date) + ' · set ' + x.n + ': ' + wOf(x) + ' × ' + TRAIN.showReps(x.s.r || 0) + ' = ' + num(x.v);
+      },
+      onMove: function (p) {
+        var x = setAt(p[0]), nt = String(x.s.note || '').trim();
+        head.set(num(x.v), 'Set ' + x.n + ' · ' + wOf(x) + ' ' + TRAIN.unitLabel(exId) + ' × ' + TRAIN.showReps(x.s.r || 0) +
+          (nt ? ' · ' + nt : '') + (pd.note ? ' · Session: ' + pd.note : ''), Day.label(pd.date));
+      },
+      onLeave: head.reset,
+    });
+  });
+
+  /* which line is which, newest first; a tap picks the line a drag reads */
+  var key = UI.el('div', 'mb-chips vbskey');
+  days.slice().reverse().forEach(function (d, age) {
+    var b = UI.el('button', 'mb-chip mb-press' + (d === pd ? ' on' : ''));
+    b.type = 'button';
+    b.setAttribute('aria-pressed', d === pd ? 'true' : 'false');
+    b.innerHTML = '<i style="--k:' + (age === 0 ? 'var(--accent)' : age === 1 ? 'var(--data-2)' : 'var(--text-muted)') + '"></i>' +
+      UI.esc(Day.short(d.date)) + ' · ' + num(d.total);
+    b.onclick = function () { Mobile.feedback('select'); TRAIN.vbsPick = d.date; draw(); };
+    key.appendChild(b);
+  });
+  card.appendChild(key);
+  var foot = UI.el('div', 'lasttime');
+  foot.style.marginTop = 'var(--s-3)';
+  foot.textContent = 'Each line is one session, working sets only, set 1 on the left.';
+  card.appendChild(foot);
+  var dflt = UI.el('button', 'mb-btn mb-press mb-tap');
+  dflt.style.width = '100%';
+  dflt.style.marginTop = 'var(--s-3)';
+  dflt.textContent = 'SET AS DEFAULT GRAPH';
+  dflt.onclick = function () {
+    TRAIN.patchExercise(exId, { gdef: { type: 'byset', per: per } });
+    UI.toast('Default graph saved');
+  };
+  card.appendChild(dflt);
+  m.appendChild(card);
+}
+
 /* ═════════════════ THE DAY'S EXERCISES DRAWER ═════════════════ */
 TRAIN.openDrawer = function () {
   var wrap = document.getElementById('dwrap');
@@ -5362,6 +5745,10 @@ function holdToMove(list, opts) {
     d.live = true;
     d.lx = d.x; d.ly = d.y;
     d.row.classList.add('lifted');
+    /* a row landing from sync while a row is up used to redraw this list
+       out from under the finger and lose the move (2026-11-16): the redraw
+       waits until the row is put down */
+    TRAIN.holding = true;
     Mobile.haptic('heavy');
     try { list.setPointerCapture(d.id); } catch (x) {}
     requestAnimationFrame(edge);
@@ -5404,6 +5791,8 @@ function holdToMove(list, opts) {
     d = null;
     clearTimeout(was.t);
     if (!was.live) return;
+    TRAIN.holding = false;
+    if (TRAIN.holdOwed) { TRAIN.holdOwed = false; setTimeout(function () { TRAIN.reindex(); draw(); }, 0); }
     eatUntil = Date.now() + 500;
     try { list.releasePointerCapture(was.id); } catch (x) {}
     was.row.classList.remove('lifted');
@@ -5480,8 +5869,10 @@ function closeDrawer(fromBack) {
    is printed.
    ═════════════════════════════════════════════════════════════════════════ */
 
-/* Brzycki, which is what FitNotes uses. It falls apart at high rep counts,
-   which is why the app lets you cap the reps that count towards it. */
+/* Brzycki, which is what FitNotes uses, through the suite's one formula
+   (shared/e1rm.js, decision D4, 2026-11-18): reps in reserve added when
+   the set carries them, reps counted at most 12. The app's own cap
+   (`e1rmMaxReps`, from a FitNotes import) still leaves out sets above it. */
 /* Reps may carry a fraction: a half rep is 8.5 (Tom, 2026-09-25: "let it
    add fractions for reps"). Kept to two places, so stepping and adding up
    never print 9.499999. A comma is read as the point. */
@@ -5490,13 +5881,103 @@ TRAIN.readReps = function (v) {
   return isNaN(n) ? NaN : Math.round(n * 100) / 100;
 };
 TRAIN.showReps = function (n) { return String(Math.round((+n || 0) * 100) / 100); };
-TRAIN.e1rm = function (kg, reps) {
+TRAIN.e1rm = function (kg, reps, rir) {
   if (!kg || !reps) return 0;
   var cap = Rec.setting(APP.id, 'e1rmMaxReps') || 0;
   if (cap && reps > cap) return 0;
-  if (reps >= 37) return 0;
-  return kg * 36 / (37 - reps);
+  return E1RM.calc(kg, reps, rir);
 };
+
+/* ── assisted lifts, the right way up (1.0.83) ──
+   Tom, 2026-11-16: "more weight there means more assist." On an assisted
+   pull-up or dip machine the weight logged is the HELP, so less weight at
+   the same reps is stronger. An exercise is assisted when its name says
+   "assist" unless its own switch in Edit Exercise says otherwise
+   (`exercise.assist`, 1 or 0; none reads the name).
+
+   Three readings follow from it, and every reader of weight goes through
+   one of them:
+   - TRAIN.wk(s): the weight as a number where bigger is stronger, rounded
+     the way records compare. The help, negated, on an assisted lift. Every
+     record rule (still standing, the five kinds, the session's records,
+     rep maxes, goals) compares this, so records need no bodyweight.
+   - TRAIN.load(s): what the body moved. The weight, or on an assisted lift
+     bodyweight minus help, when a bodyweight is known; else null.
+   - TRAIN.e1rmS(s) and TRAIN.volS(s) read the load. An assisted lift with
+     no bodyweight has no estimated 1RM (blank, never a guess) and adds
+     nothing to volume.
+   Bodyweight is STATUS's (`ev` weight, in its field's unit) for Tom and
+   CHECK IN's (`cval` <pid>|weight, in the client's unit) on a client's
+   profile: the weigh-in on or before the set's day, else the first after. */
+TRAIN.isAssisted = function (ex) {
+  if (ex && typeof ex !== 'object') ex = TRAIN.exercises()[ex];
+  if (!ex) return false;
+  if (ex.assist === 1 || ex.assist === 0) return ex.assist === 1;
+  return /assist/i.test(ex.name || '');
+};
+TRAIN.bwList = function () {
+  if (TRAIN._bw) return TRAIN._bw;
+  var list = [];
+  try {
+    if (CLIENT) {
+      var pu = (Rec.get('cperson', null, CLIENT) || {}).unit || 'lb', want = CLIENT + '|weight';
+      Rec.all('cval').forEach(function (r) {
+        var v = r && r.key === want && r.date && r.payload ? +r.payload.v : 0;
+        if (v > 0) list.push([r.date, TRAIN.toKg(v, pu)]);
+      });
+    } else {
+      var fu = (Rec.map('field').weight || {}).unit || 'lb';
+      Rec.all('ev').forEach(function (r) {
+        var e = r && r.key === 'weight' && r.date && r.payload ? r.payload.e : null;
+        var v = e && e.length ? +e[e.length - 1].v : 0;
+        if (v > 0) list.push([r.date, TRAIN.toKg(v, fu)]);
+      });
+    }
+  } catch (err) { list = []; }
+  list.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+  return (TRAIN._bw = list);
+};
+TRAIN.bwOn = function (date) {
+  var L = TRAIN.bwList();
+  if (!L.length) return null;
+  var lo = 0, hi = L.length - 1, at = -1;
+  while (lo <= hi) { var mid = (lo + hi) >> 1; if (L[mid][0] <= date) { at = mid; lo = mid + 1; } else hi = mid - 1; }
+  return L[at < 0 ? 0 : at][1];
+};
+TRAIN.wk = function (s) {
+  var w = Math.round((+s.kg || 0) * TRAIN.PR_SCALE) / TRAIN.PR_SCALE;
+  return TRAIN.isAssisted(s.ex) ? -w : w;
+};
+/* ── weight below zero (1.0.85) ──
+   Tom, 2026-11-16: "the option to put negative weight for something like
+   pull ups or negative weight anywhere actually." -20 lb on a pull-up is
+   20 lb of help, so the plain number already reads the right way up: -10
+   beats -20, 0 beats -10, +10 beats 0, and TRAIN.wk needs nothing. A lift
+   with any set below zero is read against bodyweight (TRAIN.goesBelow), so
+   its 0 is a real weight (bodyweight alone, a record over -10) and its load
+   is bodyweight plus the number, for every set of it, the way an assisted
+   lift's is bodyweight minus help. The weight stepper goes below zero on
+   every lift. */
+TRAIN.goesBelow = function (exId) {
+  return TRAIN.isAssisted(exId) || !!(TRAIN.idx && TRAIN.idx.neg && TRAIN.idx.neg[exId]);
+};
+/* A set that has a weight for the strength readings: anything but 0, and 0
+   too on a lift that goes below zero. Every record rule asks this, never
+   `kg > 0`. */
+TRAIN.weighed = function (s) {
+  var kg = +(s && s.kg) || 0;
+  return kg !== 0 || (!!s && TRAIN.goesBelow(s.ex));
+};
+TRAIN.load = function (s) {
+  var kg = +s.kg || 0, a = TRAIN.isAssisted(s.ex);
+  if (!a && !(TRAIN.idx && TRAIN.idx.neg && TRAIN.idx.neg[s.ex])) return kg;
+  var bw = TRAIN.bwOn(s.date || Day.today());
+  return bw ? Math.max(0, a ? bw - kg : bw + kg) : null;
+};
+TRAIN.e1rmS = function (s) { var l = s ? TRAIN.load(s) : 0; return l ? TRAIN.e1rm(l, TRAIN.sr(s), s.rir) : 0; };
+TRAIN.volS = function (s) { var l = s ? TRAIN.load(s) : 0; return l ? l * (+s.r || 0) : 0; };
+/* "Heaviest" says the wrong thing about a lift where less is better */
+TRAIN.heavyWord = function (exId) { return TRAIN.isAssisted(exId) ? 'Least help' : 'Heaviest'; };
 
 /* ── personal records, as FitNotes decides them ──
    Read off his own file rather than guessed. A set is a record while nothing
@@ -5511,17 +5992,33 @@ TRAIN.e1rm = function (kg, reps) {
    22.05 lb set drifted into a tie with a 10 kg one that FitNotes had told
    apart. Checked 2026-09-14 against his 12,370 sets and FitNotes' own flags.
 
-   A warmup is never a record. */
+   A warmup is never a record, and neither is a suggestion still waiting
+   (TRAIN.counts): until 1.0.82 a waiting plan set could be stored as one.
+
+   A MOVEMENT'S FIRST SESSION EARNS NO RECORDS (Tom, 2026-11-09: "Don't
+   count PRs for a new movements first session"). Its sets still set the
+   bar: a later set has to beat them. TRAIN.firstDay is that day. */
 TRAIN.PR_SCALE = 1000;
+/* The first day this movement has a working set that counts. */
+TRAIN.firstDay = function (exId) {
+  var c = TRAIN._first;
+  if (!c || c.built !== TRAIN.idx.built) c = TRAIN._first = { built: TRAIN.idx.built, ex: {} };
+  if (c.ex[exId] !== undefined) return c.ex[exId];
+  var d = null;
+  TRAIN.historyOf(exId).forEach(function (x) {
+    if (!x.warm && TRAIN.counts(x) && (d === null || x.date < d)) d = x.date;
+  });
+  return (c.ex[exId] = d);
+};
 TRAIN.recomputePRs = function (only) {
   var exs = TRAIN.exercises(), changed = 0;
   var ids = only && only.length ? only.filter(function (id) { return exs[id]; }) : Object.keys(exs);
   var rd = function (kg) { return Math.round((kg || 0) * TRAIN.PR_SCALE) / TRAIN.PR_SCALE; };
   ids.forEach(function (id) {
-    var list = TRAIN.historyOf(id);
-    var work = list.filter(function (x) { return !x.warm && (x.kg || 0) > 0 && (x.r || 0) > 0; })
+    var list = TRAIN.historyOf(id), first = TRAIN.firstDay(id);
+    var work = list.filter(function (x) { return !x.warm && TRAIN.weighed(x) && (x.r || 0) > 0 && TRAIN.counts(x); })
       .sort(function (a, b) {
-        return rd(b.kg) - rd(a.kg) || TRAIN.sr(b) - TRAIN.sr(a) ||
+        return TRAIN.wk(b) - TRAIN.wk(a) || TRAIN.sr(b) - TRAIN.sr(a) ||
           (a.date < b.date ? -1 : a.date > b.date ? 1 : TRAIN.setStamp(a) - TRAIN.setStamp(b));
       });
     /* Heaviest first: a set is beaten exactly when something ahead of it in
@@ -5535,7 +6032,7 @@ TRAIN.recomputePRs = function (only) {
     var isPr = {}, maxR = 0;
     work.forEach(function (x) {
       var r = TRAIN.sr(x);
-      if (r > maxR) { isPr[x.key] = 1; maxR = r; }
+      if (r > maxR) { if (x.date !== first) isPr[x.key] = 1; maxR = r; }
     });
     list.forEach(function (x) {
       var want = isPr[x.key] ? 1 : 0;
@@ -5569,23 +6066,26 @@ TRAIN.recordsFor = function (exId, range) {
     if ((range.from && s.date < range.from) || (range.to && s.date > range.to)) return;
     /* a warmup counts as a set, as it does everywhere in TRAIN since
        2026-10-05, and is never a record */
+    /* a suggestion still waiting is not training (TRAIN.counts, 1.0.82) */
+    if (!TRAIN.counts(s)) return;
     r.sets++;
     days[s.date] = 1;
     if (s.warm) return;
     var sr = TRAIN.sr(s), n = Math.floor(sr);
     if (s.split) {
       r.split.sets++;
-      if (s.kg > 0 && (!r.split.maxWeight || s.kg > r.split.maxWeight.kg)) r.split.maxWeight = s;
-      if (s.kg > 0 && n >= 1 && (!r.split.byReps[n] || s.kg > r.split.byReps[n].kg)) r.split.byReps[n] = s;
+      if (TRAIN.weighed(s) && (!r.split.maxWeight || TRAIN.wk(s) > TRAIN.wk(r.split.maxWeight))) r.split.maxWeight = s;
+      if (TRAIN.weighed(s) && n >= 1 && (!r.split.byReps[n] || TRAIN.wk(s) > TRAIN.wk(r.split.byReps[n]))) r.split.byReps[n] = s;
     }
-    var vol = (s.kg || 0) * (s.r || 0), e = TRAIN.e1rm(s.kg, sr);
-    /* the heaviest at the most reps it was done for */
-    if (s.kg > 0 && (!r.maxWeight || s.kg > r.maxWeight.kg ||
-        (Math.abs(s.kg - r.maxWeight.kg) < 0.0005 && sr > TRAIN.sr(r.maxWeight)))) r.maxWeight = s;
+    var vol = TRAIN.volS(s), e = TRAIN.e1rmS(s);
+    /* the heaviest at the most reps it was done for; on an assisted lift
+       the least help (TRAIN.wk) */
+    if (TRAIN.weighed(s) && (!r.maxWeight || TRAIN.wk(s) > TRAIN.wk(r.maxWeight) ||
+        (TRAIN.wk(s) === TRAIN.wk(r.maxWeight) && sr > TRAIN.sr(r.maxWeight)))) r.maxWeight = s;
     if (sr > 0 && (!r.maxReps || sr > TRAIN.sr(r.maxReps))) r.maxReps = s;
-    if (vol > 0 && (!r.maxVolume || vol > (r.maxVolume.kg * r.maxVolume.r))) r.maxVolume = s;
-    if (e > 0 && (!r.max1rm || e > TRAIN.e1rm(r.max1rm.kg, TRAIN.sr(r.max1rm)))) r.max1rm = s;
-    if (n >= 1 && s.kg > 0 && (!r.byReps[n] || s.kg > r.byReps[n].kg)) r.byReps[n] = s;
+    if (vol > 0 && (!r.maxVolume || vol > (TRAIN.volS(r.maxVolume)))) r.maxVolume = s;
+    if (e > 0 && (!r.max1rm || e > TRAIN.e1rmS(r.max1rm))) r.max1rm = s;
+    if (n >= 1 && TRAIN.weighed(s) && (!r.byReps[n] || TRAIN.wk(s) > TRAIN.wk(r.byReps[n]))) r.byReps[n] = s;
   });
   r.workouts = Object.keys(days).length;
   return r;
@@ -5607,6 +6107,34 @@ TRAIN.recordsFor = function (exId, range) {
    Sets can be fractional now. That is the honest shape: pretending a pull-up
    gives biceps a whole set or none of one is the thing that made the number
    not mean anything. */
+/* What a lift trains, read by the suite's one rule (`shared/muscles.js`,
+   Muscles.forLift): its own correction (`exercise.mus`), FORGE's tag for
+   the name, the master list, else the group it is filed in. FORGE and COACH
+   ask the same function with the same rows, so none of the three can
+   disagree (Tom, 2026-11-16). Cached per exercise until the rows change. */
+TRAIN.musOf = function (exId) {
+  var exs = TRAIN.exercises(), ex = exs[exId];
+  var c = TRAIN._musC;
+  if (!c || c.ex !== exs) c = TRAIN._musC = { ex: exs, m: {} };
+  if (c.m[exId]) return c.m[exId];
+  var cats = TRAIN.cats(), gname = ex && ex.cat && cats[ex.cat] ? cats[ex.cat].name : null, also = null;
+  if (ex && ex.also) { also = {}; Object.keys(ex.also).forEach(function (k) { if (cats[k]) also[cats[k].name] = ex.also[k]; }); }
+  var tag = null;
+  if (ex && ex.name && !CLIENT) { var t = Rec.get('ftag', null, String(ex.name).trim().toLowerCase()); tag = t && t.mus; }
+  var r = window.Muscles ? Muscles.forLift(ex ? ex.name : '', ex && ex.mus, tag, gname, also)
+    : { share: gname ? (function () { var o = {}; o[gname] = 1; return o; })() : {}, main: gname, group: gname, src: 'group' };
+  return (c.m[exId] = r);
+};
+TRAIN.musSlot = function (m) {
+  var s = window.Muscles ? Muscles.slotOf(m) : null;
+  if (s != null) return s;
+  var k = TRAIN.catByWord(m); return k && TRAIN.cats()[k] ? TRAIN.cats()[k].slot : 0;
+};
+/* The two muscle views (Tom, 2026-11-16). DIRECT counts each real set once,
+   toward the lift's main muscle: whole numbers. VOLUME counts every muscle a
+   set trains by its share, so a chin up is 1 set of biceps and 0.8 of lats:
+   that is where the decimals live. */
+TRAIN.musView = function () { return Rec.setting(APP.id, 'musView') === 'volume' ? 'volume' : 'direct'; };
 TRAIN.breakdown = function (from, to, by, off) {
   var exs = TRAIN.exercises(), cats = TRAIN.cats(), out = {}, days = {};
   Object.keys(TRAIN.idx.byDate).forEach(function (d) {
@@ -5614,13 +6142,17 @@ TRAIN.breakdown = function (from, to, by, off) {
     TRAIN.idx.byDate[d].forEach(function (s) {
       if (!TRAIN.counts(s) || (off && off[s.ex])) return;
       var ex = exs[s.ex];
-      var vol = (s.kg || 0) * (s.r || 0);
+      var vol = TRAIN.volS(s);
       var put = function (key, share) {
         var o = out[key] || (out[key] = { sets: 0, reps: 0, vol: 0, days: {} });
         o.sets += share; o.reps += (s.r || 0) * share; o.vol += vol * share;
         o.days[d] = 1;
       };
-      if (by === 'category') {
+      if (by === 'direct' || by === 'volume') {
+        var mu = TRAIN.musOf(s.ex);
+        if (by === 'direct') put(mu.main || '?', 1);
+        else Object.keys(mu.share).forEach(function (m) { put(m, mu.share[m]); });
+      } else if (by === 'category') {
         put(ex && ex.cat ? ex.cat : '?', 1);
         var also = (ex && ex.also) || null;
         if (also) Object.keys(also).forEach(function (c) {
@@ -5634,14 +6166,15 @@ TRAIN.breakdown = function (from, to, by, off) {
   });
   var rows = Object.keys(out).map(function (k) {
     var o = out[k];
-    var name = by === 'category'
+    var musc = by === 'direct' || by === 'volume';
+    var name = musc ? (k === '?' ? 'No muscle yet' : k) : by === 'category'
       ? (cats[k] ? cats[k].name : 'Uncategorised')
       : (exs[k] ? exs[k].name : k);
     /* A whole number stays whole; a half set shows as a half. */
     return { key: k, name: name, sets: Math.round(o.sets * 10) / 10,
              reps: Math.round(o.reps), vol: o.vol,
              workouts: Object.keys(o.days).length,
-             slot: by === 'category' && cats[k] ? cats[k].slot : null };
+             slot: musc ? TRAIN.musSlot(k) : by === 'category' && cats[k] ? cats[k].slot : null };
   });
   rows.sort(function (a, b) { return b.vol - a.vol || b.sets - a.sets; });
   return { rows: rows, workouts: Object.keys(days).length };
@@ -5919,7 +6452,7 @@ function drawRecords(m) {
     card.appendChild(head);
 
     var body = UI.el('div', 'sets');
-    body.appendChild(recLine('Heaviest', x.r.maxWeight && x.r.maxWeight.kg
+    body.appendChild(recLine(TRAIN.heavyWord(x.id), x.r.maxWeight && x.r.maxWeight.kg
       ? TRAIN.showWeight(x.r.maxWeight.kg, x.r.maxWeight.u, x.id) + ' ' + TRAIN.unitLabel(x.id) +
         ' × ' + x.r.maxWeight.r : '—',
       x.r.maxWeight && x.r.maxWeight.date));
@@ -5927,12 +6460,12 @@ function drawRecords(m) {
       x.r.maxReps && x.r.maxReps.date));
     if (x.r.maxVolume && x.r.maxVolume.kg) {
       body.appendChild(recLine('Most volume',
-        Math.round(TRAIN.toUnit(x.r.maxVolume.kg * x.r.maxVolume.r, TRAIN.unit(x.id))).toLocaleString() +
+        Math.round(TRAIN.toUnit(TRAIN.volS(x.r.maxVolume), TRAIN.unit(x.id))).toLocaleString() +
         ' ' + TRAIN.unit(x.id), x.r.maxVolume.date));
     }
     if (x.r.max1rm) {
       body.appendChild(recLine('Estimated 1RM',
-        TRAIN.showWeight(TRAIN.e1rm(x.r.max1rm.kg, TRAIN.sr(x.r.max1rm)), null, x.id) + ' ' + TRAIN.unitLabel(x.id),
+        TRAIN.showWeight(TRAIN.e1rmS(x.r.max1rm), null, x.id) + ' ' + TRAIN.unitLabel(x.id),
         x.r.max1rm.date));
     }
     var sp = x.r.split.maxWeight;
@@ -5993,7 +6526,7 @@ function drawRepMax(m) {
       if (favOnly && !x.e.fav) return false;
       if (x.sc < 0) return false;
       return TRAIN.historyOf(x.id).some(function (s) {
-        return !s.warm && s.kg > 0 && s.r > 0 &&
+        return !s.warm && TRAIN.weighed(s) && s.r > 0 &&
           (!rr.from || (s.date >= rr.from && s.date <= rr.to));
       });
     })
@@ -6787,11 +7320,22 @@ function drawGoals(m) {
     /* The best set at this many reps or more: a 100 for 5 goal is not met by
        a 100 single. The bar starts from that, which is what he has already
        lifted, and says so. */
-    var bestKg = 0;
+    /* On an assisted lift the goal is help to get down to: the best is the
+       least help at these reps, and the bar fills as it nears the goal. */
+    /* A lift below zero (1.0.85): the best is the biggest number, -10 over
+       -20, and a goal at or below zero fills only when it is met, since a
+       ratio of two numbers either side of zero means nothing. */
+    var best = null, asst = TRAIN.isAssisted(g.ex);
     if (ex) TRAIN.historyOf(g.ex).forEach(function (x) {
-      if (!x.warm && (x.r || 0) >= reps && (x.kg || 0) > bestKg) bestKg = x.kg;
+      if (x.warm || (x.r || 0) < reps || !TRAIN.weighed(x)) return;
+      var v = +x.kg || 0;
+      if (best === null || (asst ? v < best : v > best)) best = v;
     });
-    var pct = g.kg ? Math.max(0, Math.min(100, Math.round((bestKg / g.kg) * 100))) : 0;
+    var bestKg = best === null ? 0 : best;
+    var pct = asst ? (g.kg && bestKg ? Math.max(0, Math.min(100, Math.round((g.kg / bestKg) * 100))) : 0)
+      : g.kg > 0 && bestKg >= 0 ? Math.max(0, Math.min(100, Math.round((bestKg / g.kg) * 100)))
+      : !g.kg && !TRAIN.goesBelow(g.ex) ? 0
+      : best !== null && bestKg >= g.kg ? 100 : 0;
     var card = UI.el('div', 'exblock');
     var head = UI.el('div', 'head mb-press mb-tap');
     head.innerHTML = '<span class="nm">' + UI.esc(g.title || (ex ? ex.name : 'Goal')) + '</span>' +
@@ -6802,8 +7346,8 @@ function drawGoals(m) {
     card.appendChild(head);
     var body = UI.el('div', 'pad');
     body.innerHTML = '<div class="track"><i style="width:' + pct + '%"></i></div>' +
-      '<div class="sub">' + (bestKg
-        ? 'Best at ' + reps + '+ reps: <b>' + TRAIN.showWeight(bestKg, null, g.ex) + ' ' + TRAIN.unitLabel(g.ex) + '</b> · ' + pct + '%'
+      '<div class="sub">' + (best !== null
+        ? (asst ? 'Least help at ' : 'Best at ') + reps + '+ reps: <b>' + TRAIN.showWeight(bestKg, null, g.ex) + ' ' + TRAIN.unitLabel(g.ex) + '</b> · ' + pct + '%'
         : 'No sets at ' + reps + '+ reps yet') +
       (g.to ? ' · by ' + UI.esc(Day.label(g.to)) : '') + '</div>';
     card.appendChild(body);
@@ -7517,7 +8061,7 @@ TRAIN.categoriesDialog = function () {
    a row with a switch, grouped under where it would go, and the switches
    start on except for the ones he turned off last time. */
 TRAIN.sortDialog = function () {
-  Rec.setting(APP.id, 'sortSeen', 1);
+  Rec.setting(APP.id, 'sortSeen', 2);
   var props = TRAIN.sortProposals(), skip = TRAIN.sortSkip(), cats = TRAIN.cats();
   if (!props.length) { UI.toast('Nothing to sort'); draw(); return; }
   var on = {};
@@ -7527,7 +8071,7 @@ TRAIN.sortDialog = function () {
     body: function (b) {
       var note = UI.el('div', 'empty');
       note.style.marginBottom = 'var(--s-3)';
-      note.textContent = 'Each one moves to the group it is under. Past sets move with it.';
+      note.textContent = 'Each one moves to the muscle it trains most, or Prehab. Past sets move with it. Groups left empty, like Legs or Back, are removed.';
       b.appendChild(note);
       var last = null;
       props.forEach(function (p) {
@@ -7535,7 +8079,7 @@ TRAIN.sortDialog = function () {
           last = p.group;
           var n = props.filter(function (x) { return x.group === p.group; }).length;
           var h = UI.el('div', 'mb-group');
-          h.textContent = (p.to ? cats[p.to].name : p.group + ', new group').toUpperCase() + ' · ' + n;
+          h.textContent = (p.to && cats[p.to] ? cats[p.to].name : p.group + ', new group').toUpperCase() + ' · ' + n;
           b.appendChild(h);
         }
         var from = cats[p.from];
@@ -7579,11 +8123,13 @@ TRAIN.sortDialog = function () {
    as another brand or as an unbranded one, since a kilo on one is not a
    kilo on another. */
 TRAIN.TIDY_PLUS = ['Front Delts', 'Side Delts', 'Rear Delts', 'Quads', 'Hamstrings', 'Glutes', 'Calves',
-  'P/Rehab', 'Cardio', 'Traps', 'Adductors', 'Lower Back', 'Neck', 'Mobility', 'Plyo'];
+  'P/Rehab', 'Cardio', 'Traps', 'Lower Back', 'Neck', 'Mobility', 'Plyo'];
+/* every muscle on the master list may be offered too (2026-11-16) */
+if (window.Muscles) (Muscles.GROUP_LIST || Muscles.LIST).forEach(function (m) { if (TRAIN.TIDY_PLUS.indexOf(m) < 0) TRAIN.TIDY_PLUS.push(m); });
 /* other names a group goes by, as `catWord` reads them */
 TRAIN.TIDY_ALSO = { 'P/Rehab': ['prehab', 'rehab'], Core: ['core', 'ab', 'abdominal'], Calves: ['calf'],
   Hamstrings: ['hamstring', 'ham'], Quads: ['quadricep'], Traps: ['trapezius'], Plyo: ['plyometric'],
-  Adductors: ['adductor'], 'Front Delts': ['frontshoulder'], 'Rear Delts': ['rearshoulder'],
+  'Front Delts': ['frontshoulder'], 'Rear Delts': ['rearshoulder'],
   'Side Delts': ['lateraldelt', 'sideshoulder'] };
 /* a group too wide to say much: its movements are asked about */
 TRAIN.TIDY_COARSE = ['shoulder', 'leg', 'arm', 'other', 'misc', 'general', 'uncategorized', 'uncategorised'];
@@ -7593,8 +8139,7 @@ TRAIN.TIDY_COARSE = ['shoulder', 'leg', 'arm', 'other', 'misc', 'general', 'unca
 TRAIN.TIDY_RULES = [
   ['P/Rehab', /\b(external|internal) rotat|rotator cuff/],
   ['Calves', /\bcalf|calves/],
-  ['Adductors', /adduct/],
-  ['Glutes', /hip thrust|glute(?![- ]?ham)|abduct|\bbridge/],
+  ['Glutes', /hip thrust|glute(?![- ]?ham)|abduct|adduct|\bbridge/],
   ['Hamstrings', /\bsldl?s?\b|stiff[- ]?leg|romanian|\brdls?\b|leg curl|hamstring|good ?morning|nordic|glute[- ]?ham|sumo dead/],
   ['Lower Back', /hyper ?extension|back extension|superman/],
   ['Quads', /squat|leg press|leg ext|lunge|step[- ]?ups?\b|wall sit|pendulum|sissy/],
@@ -7619,6 +8164,14 @@ TRAIN.tidyCatKey = function (nm) {
    this log does not have yet. Null when it reads as nothing, or as a group
    the log lacks and is not offered (Chest, Core). */
 TRAIN.tidySuggest = function (name) {
+  /* The suite's master list first (2026-11-16), so Tidy suggests the same
+     group the sort sheet moves to; its own rules only for what the list
+     does not know. */
+  var mm = window.Muscles ? Muscles.of(name) : null;
+  if (mm && mm.group) {
+    var gk = mm.group === 'Prehab' ? (TRAIN.catByWord('Prehab') || TRAIN.catByWord('P/Rehab')) : TRAIN.catByWord(mm.group);
+    return { name: mm.group === 'Prehab' ? 'P/Rehab' : mm.group, key: gk || null };
+  }
   var s = fold(name), g = null;
   for (var i = 0; i < TRAIN.TIDY_RULES.length; i++) if (TRAIN.TIDY_RULES[i][1].test(s)) { g = TRAIN.TIDY_RULES[i][0]; break; }
   if (!g) g = TRAIN.noteCat(s);
@@ -8427,9 +8980,16 @@ TRAIN.repCounts = function () {
    Actual and Estimated Personal Records. */
 TRAIN.repMax = function (rec, reps, est) {
   if (!est) return rec.byReps[reps] ? rec.byReps[reps].kg : 0;
-  var best = rec.max1rm ? TRAIN.e1rm(rec.max1rm.kg, TRAIN.sr(rec.max1rm)) : 0;
+  var best = rec.max1rm ? TRAIN.e1rmS(rec.max1rm) : 0;
   if (!best || reps >= 37) return 0;
-  return best * (37 - reps) / 36;
+  var load = best * (37 - reps) / 36;
+  /* an assisted lift's rep max is the help it would take: bodyweight less
+     the load; none when no help would be needed */
+  if (rec.max1rm && TRAIN.isAssisted(rec.max1rm.ex)) {
+    var bw = TRAIN.bwOn(rec.max1rm.date || Day.today());
+    return bw && bw - load > 0 ? bw - load : 0;
+  }
+  return load;
 };
 
 function distTimeRecords(exId) {
@@ -8464,11 +9024,11 @@ TRAIN.recordsCard = function (exId) {
     if (dt.dist) cell('Max distance', TRAIN.showDist(dt.dist.dist), du, dt.dist.date);
     if (dt.dur) cell('Max time', fmtSecs(dt.dur.dur), '', dt.dur.date);
   }
-  if (rec.maxWeight) cell('Heaviest', TRAIN.showWeight(rec.maxWeight.kg, rec.maxWeight.u, exId), U + ' × ' + TRAIN.repsText(rec.maxWeight), rec.maxWeight.date);
-  if (rec.max1rm) cell('Estimated 1RM', fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, TRAIN.sr(rec.max1rm)), TRAIN.unit(exId))), U, rec.max1rm.date);
+  if (rec.maxWeight) cell(TRAIN.heavyWord(exId), TRAIN.showWeight(rec.maxWeight.kg, rec.maxWeight.u, exId), U + ' × ' + TRAIN.repsText(rec.maxWeight), rec.maxWeight.date);
+  if (rec.max1rm) cell('Estimated 1RM', fmt1(TRAIN.toUnit(TRAIN.e1rmS(rec.max1rm), TRAIN.unit(exId))), U, rec.max1rm.date);
   if (rec.maxReps) cell('Most reps', rec.maxReps.r, 'reps', rec.maxReps.date);
   if (rec.maxVolume) cell('Most volume',
-    Math.round(TRAIN.toUnit(rec.maxVolume.kg * rec.maxVolume.r, TRAIN.unit(exId))).toLocaleString(), U, rec.maxVolume.date);
+    Math.round(TRAIN.toUnit(TRAIN.volS(rec.maxVolume), TRAIN.unit(exId))).toLocaleString(), U, rec.maxVolume.date);
   var last = TRAIN.historyOf(exId).filter(function (s) { return s.pr; }).slice(-1)[0];
   var card = UI.el('div', 'recap');
   card.innerHTML =
@@ -8501,14 +9061,14 @@ TRAIN.recordsSheet = function (exId) {
         if (dt.pace) body.appendChild(recLine('Best pace',
           fmtSecs(Math.round(dt.pace.dur / (du === 'mi' ? dt.pace.dist / KM_PER_MI : dt.pace.dist))) + ' /' + du, dt.pace.date));
       }
-      if (rec.maxWeight) body.appendChild(recLine('Heaviest',
+      if (rec.maxWeight) body.appendChild(recLine(TRAIN.heavyWord(exId),
         TRAIN.showWeight(rec.maxWeight.kg, rec.maxWeight.u, exId) + ' ' + U + ' × ' + TRAIN.repsText(rec.maxWeight), rec.maxWeight.date));
       if (rec.maxReps) body.appendChild(recLine('Most reps', TRAIN.repsText(rec.maxReps, null, 'reps'), rec.maxReps.date));
       if (rec.maxVolume) body.appendChild(recLine('Most volume',
-        Math.round(TRAIN.toUnit(rec.maxVolume.kg * rec.maxVolume.r, TRAIN.unit(exId))).toLocaleString() + ' ' + U,
+        Math.round(TRAIN.toUnit(TRAIN.volS(rec.maxVolume), TRAIN.unit(exId))).toLocaleString() + ' ' + U,
         rec.maxVolume.date));
       if (rec.max1rm) body.appendChild(recLine('Estimated 1RM',
-        fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, TRAIN.sr(rec.max1rm)), TRAIN.unit(exId))) + ' ' + U, rec.max1rm.date));
+        fmt1(TRAIN.toUnit(TRAIN.e1rmS(rec.max1rm), TRAIN.unit(exId))) + ' ' + U, rec.max1rm.date));
       b.appendChild(body);
       /* what each symbol on a set row means (1.0.73) */
       var kg0 = UI.el('div', 'mb-group'); kg0.textContent = 'SYMBOLS ON A SET'; body.appendChild(kg0);
@@ -8530,10 +9090,10 @@ TRAIN.recordsSheet = function (exId) {
       if (ph && rec.maxWeight) {
         var br = TRAIN.recordsFor(exId, { from: ph.from, to: ph.to || Day.today() });
         var gb = UI.el('div', 'mb-group'); gb.textContent = ph.p.name.toUpperCase(); b.appendChild(gb);
-        if (br.maxWeight) b.appendChild(recLine('Heaviest',
+        if (br.maxWeight) b.appendChild(recLine(TRAIN.heavyWord(exId),
           TRAIN.showWeight(br.maxWeight.kg, br.maxWeight.u, exId) + ' ' + U + ' × ' + TRAIN.repsText(br.maxWeight), br.maxWeight.date));
         if (br.max1rm) b.appendChild(recLine('Estimated 1RM',
-          fmt1(TRAIN.toUnit(TRAIN.e1rm(br.max1rm.kg, TRAIN.sr(br.max1rm)), TRAIN.unit(exId))) + ' ' + U, br.max1rm.date));
+          fmt1(TRAIN.toUnit(TRAIN.e1rmS(br.max1rm), TRAIN.unit(exId))) + ' ' + U, br.max1rm.date));
         if (!br.maxWeight) {
           var nb = UI.el('div', 'empty'); nb.textContent = 'Nothing logged in this block'; b.appendChild(nb);
         }
@@ -8587,7 +9147,7 @@ TRAIN.overviewSheet = function (exId) {
   var hist = TRAIN.historyOf(exId);
   var days = {}, reps = 0, vol = 0, dist = 0, dur = 0;
   hist.forEach(function (s) {
-    days[s.date] = 1; reps += s.r || 0; vol += (s.kg || 0) * (s.r || 0);
+    days[s.date] = 1; reps += s.r || 0; vol += TRAIN.volS(s);
     dist += s.dist || 0; dur += s.dur || 0;
   });
   var dates = Object.keys(days).sort(), kind = TRAIN.kindOf(exId), cat = TRAIN.cats()[ex.cat];
@@ -8626,8 +9186,8 @@ TRAIN.overviewSheet = function (exId) {
 
 /* ═══════════════ CALCULATORS ═══════════════ */
 
-/* FitNotes' Estimated 1RM Calculator. Brzycki is unit-free, so it works in
-   whatever unit is on screen and never converts. */
+/* FitNotes' Estimated 1RM Calculator. Brzycki (shared/e1rm.js) is
+   unit-free, so it works in whatever unit is on screen and never converts. */
 TRAIN.e1rmCalc = function (kg, reps, exId) {
   var w = null, r = null;
   UI.dialog({
@@ -8642,12 +9202,11 @@ TRAIN.e1rmCalc = function (kg, reps, exId) {
       var run = function () {
         var W = parseFloat(w.value), R = TRAIN.readReps(r.value);
         if (!(W > 0) || !(R > 0)) { out.innerHTML = ''; return; }
-        if (R >= 37) { out.innerHTML = '<div class="empty">Too many reps to estimate</div>'; return; }
-        var one = W * 36 / (37 - R);
+        var one = E1RM.calc(W, R);
         var html = '<div class="bigtime">' + fmt1(one) + ' <span class="u">' + TRAIN.unitLabel(exId) + '</span></div>' +
           '<div class="mb-group">REP MAXES</div><div class="rmgrid">';
         [1, 2, 3, 4, 5, 6, 8, 10, 12, 15].forEach(function (n) {
-          html += '<div class="rmcell"><span>' + n + ' RM</span><b>' + fmt1(one * (37 - n) / 36) + '</b></div>';
+          html += '<div class="rmcell"><span>' + n + ' RM</span><b>' + fmt1(E1RM.weightFor(one, n)) + '</b></div>';
         });
         html += '</div><div class="mb-group">PERCENTAGE (%)</div><div class="rmgrid">';
         [100, 95, 90, 85, 80, 75, 70, 65, 60, 50].forEach(function (p) {
@@ -8668,7 +9227,7 @@ TRAIN.setCalc = function (exId) {
   var ex = exId ? TRAIN.exercises()[exId] : null;
   var rec = exId ? TRAIN.recordsFor(exId) : null;
   var U = TRAIN.unit(exId);
-  var maxE = rec && rec.max1rm ? TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, TRAIN.sr(rec.max1rm)), U) : 0;
+  var maxE = rec && rec.max1rm ? TRAIN.toUnit(TRAIN.e1rmS(rec.max1rm), U) : 0;
   var maxW = rec && rec.maxWeight ? TRAIN.toUnit(rec.maxWeight.kg, U) : 0;
   var inc = TRAIN.increment(ex);
   var result = 0;
@@ -9226,7 +9785,18 @@ TRAIN.logFromRoutine = function (key) {
 var COACH_TYPES = ['set', 'session', 'exercise', 'excat', 'phase', 'goal', 'sgroup'];
 /* What the range draws, from any set of rows shaped like TRAIN's. COACH
    hands it a client's rows; TRAIN hands it the store's. */
-TRAIN.rangeFrom = function (sets, phases) { return Range.fromRows(sets, phases, Day.today()); };
+/* range.js multiplies weight by reps and knows no exercise, so an assisted
+   set goes in as what the body moved, or nothing without a bodyweight
+   (TRAIN.load, 1.0.83). */
+TRAIN.rangeFrom = function (sets, phases) {
+  var adj = (sets || []).map(function (r) {
+    var s = r && (r.payload || r);
+    if (!s || !TRAIN.isAssisted(s.ex)) return r;
+    var p = Object.assign({}, s, { kg: TRAIN.load({ ex: s.ex, kg: s.kg, date: r.date || s.date }) || 0 });
+    return r.payload ? Object.assign({}, r, { payload: p }) : p;
+  });
+  return Range.fromRows(adj, phases, Day.today());
+};
 TRAIN.rangeData = function () { return TRAIN.rangeFrom(Rec.all('set'), Rec.all('phase')); };
 
 TRAIN.whoAmI = function () {
@@ -9696,18 +10266,29 @@ function clearGhosts() { TRAIN.ghostW = TRAIN.ghostR = TRAIN.ghostD = TRAIN.ghos
 /* what a stepper box shows: typed, else its ghost */
 TRAIN.shownW = function () { return TRAIN.draftW || TRAIN.ghostW || ''; };
 TRAIN.shownR = function () { return TRAIN.draftR || TRAIN.ghostR || ''; };
-function loadDraft(s) {
+/* asGhost: load a set he did as ghosts, not values. Last time's sets on
+   TRACK use it (1.0.82); a set waiting is always ghosts. */
+function loadDraft(s, asGhost) {
   var v = {
     w: s.kg ? TRAIN.showWeight(s.kg, s.u, s.ex) : '',
     r: s.r ? String(s.r) : '',
     d: s.dist ? TRAIN.showDist(s.dist) : '',
     t: s.dur ? fmtSecs(s.dur) : '',
-  }, ghost = TRAIN.pending(s);
+  }, ghost = asGhost || TRAIN.pending(s);
   Object.keys(v).forEach(function (k) {
     TRAIN[DRAFTS[k]] = ghost ? '' : v[k];
     TRAIN[GHOSTS[k]] = ghost ? v[k] : null;
   });
-  if (s.su) TRAIN.draftSU = copyObj(s.su);
+  /* A set he did loads exactly the setup it was done with, none included,
+     so UPDATE can never stamp the setup line onto a set that had none
+     (1.0.84). A planned set not done yet keeps what carries, and last
+     time's setup is never loaded: today's carries on. drawTrack puts the
+     carried setup back once nothing is selected. */
+  if (!asGhost && (s.su || !TRAIN.pending(s))) {
+    TRAIN.draftSU = copyObj(s.su || {});
+    TRAIN.suFor = s.ex;
+    TRAIN.suFromSel = true;
+  }
 }
 TRAIN.selectNextOpen = function () {
   var nxt = TRAIN.setsOn(TRAIN.date).filter(function (s) { return s.ex === TRAIN.exId && TRAIN.pending(s); })[0];
@@ -10266,9 +10847,14 @@ TRAIN.suggestFill = function (px, date) {
   if (!prev.length) return TRAIN.fillFor(px, date, true);
   var list = prev.map(function (q) { return { kg: q.kg, r: q.r, dist: q.dist, dur: q.dur }; });
   var band = TRAIN.topBand(px, prev.length), first = list[0];
-  if (band && first.kg > 0) {
+  if (band && ((+first.kg || 0) !== 0 || TRAIN.goesBelow(px.ex))) {
     var ex = TRAIN.exercises()[px.ex], step = TRAIN.toKg(TRAIN.increment(ex), TRAIN.unit(px.ex));
-    first.kg = Math.max(0, first.kg + TRAIN.nextSteps(+prev[0].r || 0, band) * step);
+    /* beating the band on an assisted lift takes help away */
+    var dir = TRAIN.isAssisted(px.ex) ? -1 : 1;
+    var nk = (+first.kg || 0) + dir * TRAIN.nextSteps(+prev[0].r || 0, band) * step;
+    /* help never goes below none, and a loaded lift never steps below zero;
+       a lift already below zero steps freely (1.0.85) */
+    first.kg = dir < 0 || (first.kg > 0 && !TRAIN.goesBelow(px.ex)) ? Math.max(0, nk) : nk;
   }
   return list;
 };
@@ -10751,6 +11337,14 @@ TRAIN.volUp = function (a, b, kind, d) {
   var f = KIND_FIELDS[kind] || KIND_FIELDS.wr;
   if (f.indexOf('r') > -1) {
     var r1 = +a.r || 0, r0 = +b.r || 0, k1 = +a.kg || 0, k0 = +b.kg || 0;
+    /* an assisted lift: what the body moved when a bodyweight is known;
+       without one, less or the same help for more reps, or less help for
+       the same reps */
+    if (TRAIN.isAssisted(a.ex)) {
+      var l1 = TRAIN.load(a), l0 = TRAIN.load(b);
+      if (l1 != null && l0 != null) return l1 * r1 > l0 * r0 + 1e-9 || !!(d && d.e1 && d.pct > 0);
+      return k1 <= k0 + 1e-9 && r1 >= r0 && (k1 < k0 - 1e-9 || r1 > r0);
+    }
     var v1 = k1 > 0 || k0 > 0 ? k1 * r1 : r1, v0 = k1 > 0 || k0 > 0 ? k0 * r0 : r0;
     return v1 > v0 + 1e-9 || !!(d && d.e1 && d.pct > 0);
   }
@@ -10766,10 +11360,14 @@ TRAIN.setDelta = function (a, b, kind) {
   var out = { dir: 0, dr: f.indexOf('r') > -1 ? val(a, 'r') - val(b, 'r') : null, pct: null, e1: false };
   var parts = [];
   if (f[0] === 'w' && f[1] === 'r') {
+    /* on an assisted lift the weight is help: more of it is weaker, and the
+       change says "help" so +20 lb is not read as stronger */
+    var asst = TRAIN.isAssisted(a.ex);
     var dk = val(a, 'w') - val(b, 'w'), moved = !same(val(a, 'w'), val(b, 'w'), 'w');
-    if (moved) parts.push(sign(dk) + fmt1(TRAIN.toUnit(Math.abs(dk), TRAIN.unit(a.ex))) + ' ' + TRAIN.unit(a.ex));
+    if (moved) parts.push(sign(dk) + fmt1(TRAIN.toUnit(Math.abs(dk), TRAIN.unit(a.ex))) + ' ' + TRAIN.unit(a.ex) + (asst ? ' help' : ''));
+    if (asst) dk = -dk;
     if (out.dr) parts.push(repWord(out.dr));
-    var ea = TRAIN.e1rm(a.kg, TRAIN.sr(a)), eb = TRAIN.e1rm(b.kg, TRAIN.sr(b));
+    var ea = TRAIN.e1rmS(a), eb = TRAIN.e1rmS(b);
     if (ea > 0 && eb > 0) { out.pct = (ea / eb - 1) * 100; out.e1 = true; }
     else if (!moved && !a.kg && TRAIN.sr(b) > 0) out.pct = (TRAIN.sr(a) / TRAIN.sr(b) - 1) * 100;
     if (out.pct != null && Math.abs(out.pct) < 0.05) out.pct = 0;
@@ -10860,14 +11458,16 @@ TRAIN.dayCompare = function (date, off, mode) {
    session's records are different: what was a record on the day it was
    lifted, against everything before it, and against everything before it
    in this block. The first time an exercise is done, or done in a block, is
-   not a record of anything. A record the same session then beat is dropped. */
+   not a record of anything, and nothing in a movement's first session is
+   (Tom, 2026-11-09). A record the same session then beat is dropped. */
 TRAIN.recordHits = function (exId, date) {
   var f = TRAIN.fieldsOf(exId);
   if (f[0] !== 'w' || f[1] !== 'r') return [];
   var rd = function (kg) { return Math.round((kg || 0) * TRAIN.PR_SCALE) / TRAIN.PR_SCALE; };
+  if (date === TRAIN.firstDay(exId)) return [];
   var ph = TRAIN.phaseOn(date);
   var hist = TRAIN.historyOf(exId).filter(function (x) {
-    return !x.warm && x.kg > 0 && x.r > 0 && x.date <= date && TRAIN.counts(x);
+    return !x.warm && TRAIN.weighed(x) && x.r > 0 && x.date <= date && TRAIN.counts(x);
   });
   var before = function (x, s) {
     return x.date < s.date || (x.date === s.date && x.key !== s.key &&
@@ -10878,15 +11478,15 @@ TRAIN.recordHits = function (exId, date) {
     if (s.date !== date) return;
     var prior = hist.filter(function (x) { return before(x, s); });
     var stands = function (list) {
-      return list.length > 0 && !list.some(function (x) { return rd(x.kg) >= rd(s.kg) && TRAIN.sr(x) >= TRAIN.sr(s); });
+      return list.length > 0 && !list.some(function (x) { return TRAIN.wk(x) >= TRAIN.wk(s) && TRAIN.sr(x) >= TRAIN.sr(s); });
     };
     var all = stands(prior), blk = !!ph && stands(prior.filter(function (x) { return x.date >= ph.from; }));
     if (all || blk) hits.push({ s: s, all: all, block: blk });
   });
   return hits.filter(function (h) {
     return !hits.some(function (o) {
-      return o !== h && rd(o.s.kg) >= rd(h.s.kg) && TRAIN.sr(o.s) >= TRAIN.sr(h.s) &&
-        (rd(o.s.kg) > rd(h.s.kg) || TRAIN.sr(o.s) > TRAIN.sr(h.s));
+      return o !== h && TRAIN.wk(o.s) >= TRAIN.wk(h.s) && TRAIN.sr(o.s) >= TRAIN.sr(h.s) &&
+        (TRAIN.wk(o.s) > TRAIN.wk(h.s) || TRAIN.sr(o.s) > TRAIN.sr(h.s));
     });
   });
 };
@@ -10906,20 +11506,20 @@ TRAIN.sessionRecords = function (date, off) {
    a page of 40 ideas, 2026-10-19):
      Lifetime PR        the stored `pr` flag: all-time, still standing     trophy
      Block PR           the same rule inside the set's own training block  medal
-     Weight PR          the heaviest ever at that many reps               barbell
-     Reps at weight PR  the most reps ever at that exact weight           crown
+     Weight PR          the heaviest ever at that many reps or more       barbell
+     Reps at weight PR  the most reps ever at that weight or heavier      crown
      Volume PR          the most weight x reps in one set                 rising bars
    Weight, reps and volume are what the set was ON THE DAY it was lifted,
    against everything before it, and it keeps its symbol after a later set
-   beats it (his pick A). It needs an earlier set to have beaten: the first
-   8 ever is not a Weight PR at 8. Reps are effective reps
+   beats it (his pick A). It needs an earlier set to have beaten, and a
+   movement's first session is none of them (2026-11-09). Reps are effective reps
    (TRAIN.effReps) everywhere but volume, which is every rep. Working sets
    that count only. A set shows every kind it is (his pick B), small. */
 TRAIN.PR_KINDS = [
   { id: 'life', name: 'Lifetime PR', say: 'Nothing heavier at these reps or more, ever' },
   { id: 'block', name: 'Block PR', say: 'The same, inside this training block' },
-  { id: 'weight', name: 'Weight PR', say: 'Heaviest ever at these reps, when lifted' },
-  { id: 'reps', name: 'Reps at weight PR', say: 'Most reps ever at this weight, when lifted' },
+  { id: 'weight', name: 'Weight PR', say: 'Heaviest ever at these reps or more, when lifted (least help, on an assisted lift)' },
+  { id: 'reps', name: 'Reps at weight PR', say: 'Most reps ever at this weight or heavier, when lifted (this much help or less, on an assisted lift)' },
   { id: 'vol', name: 'Volume PR', say: 'Most weight x reps in one set, when lifted' }
 ];
 /* The five symbols are shared/icons.js roles, pr-<id>, so a theme's stroke
@@ -10933,22 +11533,37 @@ TRAIN.prKinds = function (exId) {
   if (f[0] !== 'w' || f[1] !== 'r') return out;
   var rd = function (kg) { return Math.round((kg || 0) * TRAIN.PR_SCALE) / TRAIN.PR_SCALE; };
   var work = TRAIN.historyOf(exId).filter(function (x) {
-    return !x.warm && (x.kg || 0) > 0 && (x.r || 0) > 0 && TRAIN.counts(x);
+    return !x.warm && TRAIN.weighed(x) && (x.r || 0) > 0 && TRAIN.counts(x);
   });
   var when = function (a, b) {
     return a.date < b.date ? -1 : a.date > b.date ? 1 : ((a.ord || 0) - (b.ord || 0)) || TRAIN.setStamp(a) - TRAIN.setStamp(b);
   };
-  var atReps = {}, atKg = {}, vol = 0, any = false;
+  /* The movement's first session earns nothing (Tom, 2026-11-09), and its
+     sets still set the bar for every set after it. */
+  var first = TRAIN.firstDay(exId);
+  /* Weight and reps are against EVERYTHING before the set, not one rep
+     count or one weight (2026-11-09): until 1.0.82 the barbell asked only
+     sets at exactly these reps and the crown only sets at exactly this
+     weight, so 70 x 7 got a barbell after something heavier for more reps
+     had been done. Weight: some earlier set had at least these reps, and
+     this is heavier than the heaviest of them. Reps: some earlier set was
+     at least this heavy, and these reps beat the most of them. */
+  var prior = [], vol = 0;
   work.slice().sort(when).forEach(function (s) {
-    var k = {}, sr = TRAIN.sr(s), n = Math.floor(sr), w = rd(s.kg), v = s.kg * s.r;
-    if (s.pr) k.life = 1;
-    if (atReps[n] != null && w > atReps[n]) k.weight = 1;
-    if (atKg[w] != null && sr > atKg[w] + 1e-6) k.reps = 1;
-    if (any && v > vol + 1e-6) k.vol = 1;
-    atReps[n] = Math.max(atReps[n] || 0, w);
-    atKg[w] = Math.max(atKg[w] || 0, sr);
+    var k = {}, sr = TRAIN.sr(s), w = TRAIN.wk(s), v = TRAIN.volS(s);
+    var topW = null, topR = null;
+    prior.forEach(function (p) {
+      if (p.r >= sr - 1e-6 && (topW === null || p.w > topW)) topW = p.w;
+      if (p.w >= w && (topR === null || p.r > topR)) topR = p.r;
+    });
+    if (s.date !== first) {
+      if (s.pr) k.life = 1;
+      if (topW !== null && w > topW) k.weight = 1;
+      if (topR !== null && sr > topR + 1e-6) k.reps = 1;
+      if (prior.length && v > vol + 1e-6) k.vol = 1;
+    }
+    prior.push({ w: w, r: sr });
     vol = Math.max(vol, v);
-    any = true;
     out[s.key] = k;
   });
   /* the still-standing rule, one block at a time */
@@ -10959,10 +11574,10 @@ TRAIN.prKinds = function (exId) {
   });
   Object.keys(blocks).forEach(function (b) {
     var maxR = 0;
-    blocks[b].sort(function (a, c) { return rd(c.kg) - rd(a.kg) || TRAIN.sr(c) - TRAIN.sr(a) || when(a, c); })
+    blocks[b].sort(function (a, c) { return TRAIN.wk(c) - TRAIN.wk(a) || TRAIN.sr(c) - TRAIN.sr(a) || when(a, c); })
       .forEach(function (s) {
         var r = TRAIN.sr(s);
-        if (r > maxR) { out[s.key].block = 1; maxR = r; }
+        if (r > maxR) { if (s.date !== first) out[s.key].block = 1; maxR = r; }
       });
   });
   return out;
@@ -11003,7 +11618,7 @@ function spanStats(from, to) {
     if (!w.length) return;
     o.sessions++;
     o.sets += w.length;
-    w.forEach(function (s) { o.reps += s.r || 0; o.vol += (s.kg || 0) * (s.r || 0); });
+    w.forEach(function (s) { o.reps += s.r || 0; o.vol += TRAIN.volS(s); });
   });
   return o;
 }
@@ -11011,8 +11626,8 @@ function musclesHtml(rows, week) {
   if (!rows.length) return '';
   var top = rows[0].sets || 1;
   return '<div>' + (week
-      ? '<div class="mhead"><h3>SETS PER MUSCLE</h3><span>SETS</span><span>HIT</span></div>'
-      : '<h3>SETS PER MUSCLE</h3>') +
+      ? '<div class="mhead"><h3>' + musHead() + '</h3><span>SETS</span><span>HIT</span></div>'
+      : '<h3>' + musHead() + '</h3>') +
     '<div class="musc">' + rows.map(function (r) {
       var col = r.slot != null ? TRAIN.slotColor(r.slot) : 'var(--accent)';
       return '<div class="mrow2' + (week ? ' wk' : '') + '">' +
@@ -11021,8 +11636,9 @@ function musclesHtml(rows, week) {
         '<b>' + r.sets + '</b>' + (week ? '<em>' + r.workouts + '×</em>' : '') + '</div>';
     }).join('') + '</div></div>';
 }
+function musHead() { return TRAIN.musView() === 'volume' ? 'VOLUME PER MUSCLE' : 'SETS PER MUSCLE'; }
 function muscleRows(from, to, off) {
-  return TRAIN.breakdown(from, to, 'category', off).rows
+  return TRAIN.breakdown(from, to, TRAIN.musView(), off).rows
     .filter(function (r) { return r.sets > 0; })
     .sort(function (a, b) { return b.sets - a.sets || b.workouts - a.workouts; });
 }
@@ -11199,7 +11815,9 @@ TRAIN.wentDown = function (date, mode) {
    Otherwise nothing: a shared picture never carries a minus. */
 TRAIN.liftLine = function (date, exId, row) {
   var kind = TRAIN.kindOf(exId), f = TRAIN.fieldsOf(exId), U = TRAIN.unitLabel(exId);
-  var val = function (s, k) { return +({ w: s.kg, r: TRAIN.sr(s), d: s.dist, t: s.dur }[k]) || 0; };
+  /* on an assisted lift less help is the better set (TRAIN.wk) */
+  var asst = TRAIN.isAssisted(exId);
+  var val = function (s, k) { return k === 'w' && asst ? TRAIN.wk(s) : +({ w: s.kg, r: TRAIN.sr(s), d: s.dist, t: s.dur }[k]) || 0; };
   var better = function (a, b) {
     for (var i = 0; i < f.length; i++) {
       var x = val(a, f[i]), y = val(b, f[i]);
@@ -11218,8 +11836,8 @@ TRAIN.liftLine = function (date, exId, row) {
   if (!now) return null;
   var then = row && row.vs ? top(row.vs.date) : null, up = '';
   if (then && f[0] === 'w' && f[1] === 'r') {
-    var dk = (now.kg || 0) - (then.kg || 0), dr = TRAIN.sr(now) - TRAIN.sr(then);
-    if (dk >= 0.005) up = TRAIN.showDelta(dk, exId) + ' ' + U;
+    var dk = val(now, 'w') - val(then, 'w'), dr = TRAIN.sr(now) - TRAIN.sr(then);
+    if (dk >= 0.005) up = asst ? TRAIN.showDelta(-dk, exId) + ' ' + U + ' help' : TRAIN.showDelta(dk, exId) + ' ' + U;
     else if (dk > -0.005 && dr > 0) up = '+' + TRAIN.showReps(dr) + (dr === 1 ? ' rep' : ' reps');
   } else if (then && better(now, then)) {
     var d0 = val(now, f[0]) - val(then, f[0]);
@@ -11239,7 +11857,7 @@ TRAIN.liftLine = function (date, exId, row) {
      first measure where there is no weight. Never below zero. */
   var pct = 0;
   if (then) {
-    var e1n = TRAIN.e1rm(now.kg, TRAIN.sr(now)), e1t = TRAIN.e1rm(then.kg, TRAIN.sr(then));
+    var e1n = TRAIN.e1rmS(now), e1t = TRAIN.e1rmS(then);
     if (e1n > 0 && e1t > 0) pct = (e1n / e1t - 1) * 100;
     else {
       var a0 = val(now, f[0]), b0 = val(then, f[0]);
@@ -11298,7 +11916,7 @@ TRAIN.frameCard = function (date, off, o) {
   if (o.sharePrs) {
     var best = {}, order = [];
     TRAIN.sessionRecords(date, off).forEach(function (x) {
-      var b = best[x.ex], e = TRAIN.e1rm(x.s.kg, TRAIN.sr(x.s));
+      var b = best[x.ex], e = TRAIN.e1rmS(x.s);
       if (!b) { order.push(x.ex); best[x.ex] = x; x.e = e; return; }
       if ((x.all && !b.all) || (x.all === b.all && e > b.e)) { x.e = e; best[x.ex] = x; }
     });
@@ -11373,7 +11991,7 @@ TRAIN.volSessions = function (date) {
   var per = days.map(function (d) {
     var by = {};
     TRAIN.setsOn(d).forEach(function (s) {
-      if (TRAIN.counts(s)) (by[s.ex] = by[s.ex] || []).push((s.kg || 0) * (s.r || 0) || (s.r || 0));
+      if (TRAIN.counts(s)) (by[s.ex] = by[s.ex] || []).push(TRAIN.volS(s) || (s.r || 0));
     });
     var o = {};
     Object.keys(by).forEach(function (ex) { var t = TRAIN.top3(by[ex]); if (t > 0) o[ex] = t; });
@@ -11500,6 +12118,11 @@ function drawWeek(m) {
   nav.appendChild(back); nav.appendChild(t); nav.appendChild(fwd);
   m.appendChild(nav);
 
+  /* Which muscle view the week, its card and the eight weeks use (Tom,
+     2026-11-16): DIRECT, real sets toward each lift's main muscle, first;
+     VOLUME, every muscle a set trains by its share. */
+  m.appendChild(UI.segmented([{ id: 'direct', name: 'DIRECT SETS' }, { id: 'volume', name: 'WEEKLY VOLUME' }],
+    TRAIN.musView(), function (v) { Rec.setting(APP.id, 'musView', v); Mobile.feedback('select'); draw(); }));
   m.appendChild(TRAIN.weekCard(start));
   var sh = UI.el('button', 'mb-btn mb-press mb-tap');
   sh.style.width = '100%';
@@ -11512,16 +12135,18 @@ function drawWeek(m) {
 function weekHeat(start, cur) {
   var endW = Day.shift(start, 21) < cur ? Day.shift(start, 21) : cur, weeks = [];
   for (var i = 7; i >= 0; i--) weeks.push(Day.shift(endW, -7 * i));
-  var cats = TRAIN.cats();
+  var view = TRAIN.musView();
   var per = weeks.map(function (w) {
     var o = {};
-    TRAIN.breakdown(w, Day.shift(w, 6), 'category').rows.forEach(function (r) { o[r.key] = r.sets; });
+    TRAIN.breakdown(w, Day.shift(w, 6), view).rows.forEach(function (r) { o[r.key] = r.sets; });
     return o;
   });
-  var ids = TRAIN.catsSorted().filter(function (k) { return per.some(function (o) { return o[k] > 0; }); });
+  var order = (window.Muscles ? Muscles.LIST : []).slice();
+  per.forEach(function (o) { Object.keys(o).forEach(function (k) { if (order.indexOf(k) < 0) order.push(k); }); });
+  var ids = order.filter(function (k) { return per.some(function (o) { return o[k] > 0; }); });
   var card = UI.el('div', 'exblock pad');
   var lab = UI.el('div', 'fieldlabel');
-  lab.textContent = 'SETS PER MUSCLE · 8 WEEKS';
+  lab.textContent = (view === 'volume' ? 'WEEKLY VOLUME' : 'DIRECT SETS') + ' · 8 WEEKS';
   card.appendChild(lab);
   if (!ids.length) {
     var e = UI.el('div', 'empty'); e.textContent = 'No sessions in these weeks'; card.appendChild(e);
@@ -11537,15 +12162,15 @@ function weekHeat(start, cur) {
     grid.appendChild(hh);
   });
   ids.forEach(function (k) {
-    var c = cats[k], col = TRAIN.slotColor(c.slot);
+    var col = TRAIN.slotColor(TRAIN.musSlot(k));
     var nm = UI.el('span', 'hn');
-    nm.innerHTML = '<i class="dot" style="background:' + col + '"></i>' + UI.esc(c.name);
+    nm.innerHTML = '<i class="dot" style="background:' + col + '"></i>' + UI.esc(k === '?' ? 'No muscle yet' : k);
     grid.appendChild(nm);
     var mx = Math.max.apply(null, per.map(function (o) { return o[k] || 0; })) || 1;
     per.forEach(function (o, j) {
       var v = o[k] || 0;
       var cell = UI.el('span', 'hc' + (weeks[j] === start ? ' on' : ''));
-      cell.textContent = v ? String(Math.round(v)) : '';
+      cell.textContent = v ? String(view === 'volume' ? Math.round(v * 10) / 10 : Math.round(v)) : '';
       if (v) cell.style.background = 'color-mix(in srgb, ' + col + ' ' + Math.round(18 + 42 * v / mx) + '%, var(--surface-2))';
       grid.appendChild(cell);
     });
@@ -11687,14 +12312,20 @@ function recScopeBar(m) {
 
    A new set takes the setup of the set before it today. The first set of a
    session takes the first set of the last session, which is how that
-   session started. */
+   session started.
+
+   "The set before" is the last set DONE, with or without setup: a set with
+   everything off says everything is off. Until 1.0.84 sets with no setup
+   were skipped, so straps taken off on the last set came back on the next
+   open. A planned set not yet done says nothing either way. */
 TRAIN.lastSetup = function (exId, date) {
-  var today = TRAIN.setsOn(date).filter(function (s) { return s.ex === exId && s.su; });
-  if (today.length) return copyObj(today[today.length - 1].su);
+  var did = function (s) { return s.ex === exId && !TRAIN.pending(s); };
+  var today = TRAIN.setsOn(date).filter(did);
+  if (today.length) return copyObj(today[today.length - 1].su || {});
   var h = TRAIN.historyOf(exId), last = null;
-  for (var i = h.length - 1; i >= 0; i--) if (h[i].date < date && h[i].su) { last = h[i].date; break; }
+  for (var i = h.length - 1; i >= 0; i--) if (h[i].date < date && did(h[i])) { last = h[i].date; break; }
   if (!last) return {};
-  return copyObj(h.filter(function (s) { return s.date === last && s.su; })[0].su);
+  return copyObj(h.filter(function (s) { return s.date === last && did(s); })[0].su || {});
 };
 function cleanSetup(exId) {
   var defs = ((TRAIN.exercises()[exId] || {}).setup) || [];
@@ -11707,6 +12338,32 @@ function cleanSetup(exId) {
   });
   return any ? out : null;
 }
+/* What changed between two sets' setup, in words: "Straps" put on, "Straps
+   off", "Seat 5", "Seat off" for a setting emptied. With no set before
+   (`prev` undefined) it is the whole setup. Nothing that held is said. */
+function setupDiff(prev, su, exId) {
+  if (prev === undefined) return setupText(su, exId);
+  var defs = ((TRAIN.exercises()[exId] || {}).setup) || [];
+  var val = function (o, id) { var v = (o || {})[id]; return v == null || v === '' || v === 0 ? '' : String(v); };
+  return defs.map(function (d) {
+    var a = val(prev, d.id), b = val(su, d.id);
+    if (a === b) return '';
+    if (d.kind === 'toggle') return b ? d.name : d.name + ' off';
+    return b ? d.name + ' ' + b : d.name + ' off';
+  }).filter(Boolean).join(' · ');
+}
+/* A suggestion ticked done is a set done with the setup that carried, so it
+   records it, exactly as UPDATE on it would (1.0.87). Until then a ticked
+   suggestion stored none, which reads as everything off: the next set lost
+   its straps and the row would have said "Straps off". */
+TRAIN.carriedSetup = function (exId, date) {
+  if (TRAIN.suFor === exId && !TRAIN.suFromSel) return cleanSetup(exId);
+  var keep = TRAIN.draftSU, keepFor = TRAIN.suFor;
+  TRAIN.suFor = exId; TRAIN.draftSU = TRAIN.lastSetup(exId, date);
+  var out = cleanSetup(exId);
+  TRAIN.draftSU = keep; TRAIN.suFor = keepFor;
+  return out;
+};
 function setupText(su, exId) {
   if (!su) return '';
   var defs = ((TRAIN.exercises()[exId] || {}).setup) || [];
@@ -11766,11 +12423,17 @@ function setupFor(s, date) {
   Object.keys(s.su || {}).forEach(function (k) { su[k] = s.su[k]; });
   var wrap = UI.el('div', 'setup');
   wrap.style.marginTop = 'var(--s-3)';
+  /* The setup line follows this change only where this set is what it
+     shows: the set loaded in the steppers, or, with none loaded, the last
+     set done, which is the one the next set carries. Fixing set 1 after
+     set 3 no longer hands set 1's setup to set 4 (1.0.84). */
   var keep = function () {
     TRAIN.patchSet(s.key, date, { su: Object.keys(su).length ? su : undefined });
     s.su = su;
-    TRAIN.suFor = s.ex;
-    TRAIN.draftSU = JSON.parse(JSON.stringify(su));
+    var shown = TRAIN.sel ? TRAIN.sel === s.key
+      : (TRAIN.setsOn(date).filter(function (x) { return x.ex === s.ex && !TRAIN.pending(x); }).pop() || {}).key === s.key;
+    if (shown && TRAIN.suFor === s.ex) TRAIN.draftSU = copyObj(su);
+    draw();
   };
   defs.forEach(function (d) {
     if (d.kind === 'toggle') {
@@ -11804,19 +12467,16 @@ function setupFor(s, date) {
   return wrap;
 }
 
-function setupCard(exId, ex, date) {
+/* The setup line under SAVE (1.0.84, moved there in 1.0.86): what SAVE or UPDATE will
+   record, changed in place. Toggles are chips, settings small boxes, and
+   the pencil edits the list. Nothing at all on an exercise with no setup,
+   so the screen costs no room for it; Add Setup is in More and in a set's
+   comment box. It changes only the draft: nothing is written until SAVE. */
+function setupLine(exId, ex) {
   var defs = (ex && ex.setup) || [];
-  if (TRAIN.suFor !== exId) { TRAIN.suFor = exId; TRAIN.draftSU = TRAIN.lastSetup(exId, date); }
+  if (!defs.length) return null;
   var su = TRAIN.draftSU || (TRAIN.draftSU = {});
-  var card = UI.el('div', 'exblock pad');
-  var box = UI.el('div', 'setup');
-  if (!defs.length) {
-    var add = UI.el('button', CHIP + ' mb-press mb-tap');
-    add.type = 'button';
-    add.textContent = 'Add Setup';
-    add.onclick = function () { TRAIN.setupDialog(exId); };
-    box.appendChild(add);
-  }
+  var box = UI.el('div', 'setup suline');
   defs.forEach(function (d) {
     if (d.kind === 'toggle') {
       var c = UI.el('button', CHIP + ' mb-press mb-tap' + (su[d.id] ? ' on' : ''));
@@ -11825,8 +12485,9 @@ function setupCard(exId, ex, date) {
       c.setAttribute('aria-pressed', su[d.id] ? 'true' : 'false');
       c.onclick = function () {
         if (su[d.id]) delete su[d.id]; else su[d.id] = 1;
+        c.classList.toggle('on', !!su[d.id]);
+        c.setAttribute('aria-pressed', su[d.id] ? 'true' : 'false');
         Mobile.feedback('select');
-        draw();
       };
       box.appendChild(c);
     } else {
@@ -11839,21 +12500,26 @@ function setupCard(exId, ex, date) {
       box.appendChild(w);
     }
   });
-  if (defs.length) {
-    var ed = UI.el('button', 'ico mb-press mb-tap');
-    ed.type = 'button';
-    ed.innerHTML = ico('edit');
-    ed.setAttribute('aria-label', 'Edit setup');
-    ed.onclick = function () { TRAIN.setupDialog(exId); };
-    box.appendChild(ed);
-  }
-  card.appendChild(box);
-  return card;
+  var ed = UI.el('button', 'ico mb-press mb-tap');
+  ed.type = 'button';
+  ed.innerHTML = ico('edit');
+  ed.setAttribute('aria-label', 'Edit setup');
+  ed.onclick = function () { TRAIN.setupDialog(exId); };
+  box.appendChild(ed);
+  return box;
 }
 TRAIN.setupDialog = function (exId) {
   var ex = TRAIN.exercises()[exId];
   if (!ex) return;
-  var defs = copyObj(ex.setup || []), name = null, kind = 'value', paint = null;
+  /* One step (1.0.84): ADD, or Enter, saves the field there and then, and
+     a removal is saved at once with an UNDO. Until then ADD only staged it
+     and SAVE wrote it, so a field typed, added and then CANCELled was lost.
+     TOGGLE comes first: most of what he names is on or off. */
+  var defs = copyObj(ex.setup || []), name = null, kind = 'toggle', paint = null;
+  var write = function () {
+    TRAIN.patchExercise(exId, { setup: defs.length ? copyObj(defs) : undefined });
+    draw();
+  };
   var addOne = function () {
     var nm = String(name.value || '').trim();
     if (!nm) { UI.toast('Please enter a name', { bad: true }); UI.focusSoon(name); return false; }
@@ -11864,7 +12530,10 @@ TRAIN.setupDialog = function (exId) {
     defs.push({ id: (nm.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'x') + '-' + Date.now().toString(36).slice(-4),
                 name: nm, kind: kind });
     name.value = '';
+    write();
     paint();
+    Mobile.feedback('select');
+    UI.focusSoon(name);
     return true;
   };
   UI.dialog({
@@ -11881,7 +12550,15 @@ TRAIN.setupDialog = function (exId) {
           del.type = 'button';
           del.innerHTML = ico('del');
           del.setAttribute('aria-label', 'Remove ' + d.name);
-          del.onclick = function () { defs.splice(i, 1); paint(); };
+          del.onclick = function () {
+            var gone = defs.splice(i, 1)[0];
+            write(); paint();
+            /* the sets keep what they recorded; only the field is gone */
+            UI.undo(UI.esc(gone.name) + ' removed', function () {
+              defs.splice(Math.min(i, defs.length), 0, gone);
+              write(); paint();
+            });
+          };
           list.appendChild(UI.row(d.name, d.kind === 'toggle' ? 'Toggle' : 'Setting', del));
         });
       };
@@ -11890,7 +12567,7 @@ TRAIN.setupDialog = function (exId) {
       name = UI.field('text', { placeholder: 'Straps, Seat height, Back pad' });
       b.appendChild(UI.row('Name', '', name));
       b.appendChild(UI.row('Type', 'A toggle is on or off. A setting holds a number or a word.',
-        UI.segmented([{ id: 'value', name: 'SETTING' }, { id: 'toggle', name: 'TOGGLE' }], kind,
+        UI.segmented([{ id: 'toggle', name: 'TOGGLE' }, { id: 'value', name: 'SETTING' }], kind,
           function (v) { kind = v; })));
       var add = UI.el('button', 'mb-btn mb-press mb-tap');
       add.type = 'button'; add.style.width = '100%'; add.textContent = 'ADD';
@@ -11899,14 +12576,14 @@ TRAIN.setupDialog = function (exId) {
       Mobile.form(b, addOne);
     },
     actions: [
-      { label: 'CANCEL' },
-      { label: 'SAVE', kind: 'go', fn: function () {
+      /* everything is saved as it happens; DONE also adds a name typed
+         and not yet added, so nothing typed is lost */
+      { label: 'DONE', kind: 'go', fn: function () {
         if (String(name.value || '').trim() && !addOne()) return false;
-        TRAIN.patchExercise(exId, { setup: defs.length ? defs : undefined });
-        draw();
       } },
     ],
   });
+  if (!defs.length) UI.focusSoon(name);
 };
 
 /* ═══════════════════ NAVIGATION ═══════════════════ */
@@ -12390,7 +13067,7 @@ function exportSheets() {
           Math.round(TRAIN.toUnit(s.kg || 0, unit) * 100) / 100,
           Math.round((s.kg || 0) * 1000) / 1000,
           s.r || 0,
-          Math.round(TRAIN.toUnit((s.kg || 0) * (s.r || 0), unit) * 10) / 10,
+          Math.round(TRAIN.toUnit(TRAIN.volS(s), unit) * 10) / 10,
           s.dist || '', s.dur || '', s.done ? 'yes' : '', s.pr ? 'PR' : '',
           s.warm ? 'yes' : '', s.split ? s.split.text : '', setupText(s.su, s.ex), s.note || '']);
       });
@@ -12402,7 +13079,7 @@ function exportSheets() {
   dates.forEach(function (d) {
     var sets = TRAIN.setsOn(d), sess = Rec.get('session', d, '') || {};
     var reps = 0, vol = 0, ex = {};
-    sets.forEach(function (s) { reps += s.r || 0; vol += (s.kg || 0) * (s.r || 0); ex[s.ex] = 1; });
+    sets.forEach(function (s) { reps += s.r || 0; vol += TRAIN.volS(s); ex[s.ex] = 1; });
     var mins = sess.start && sess.end
       ? Math.floor((Date.parse(sess.end) - Date.parse(sess.start)) / 60000) : '';
     var inBlock = TRAIN.phaseOn(d);
@@ -12423,7 +13100,7 @@ function exportSheets() {
       r.maxWeight ? Math.round(TRAIN.toUnit(r.maxWeight.kg, unit) * 10) / 10 : '',
       r.maxWeight ? r.maxWeight.date : '',
       r.maxReps ? r.maxReps.r : '',
-      r.max1rm ? Math.round(TRAIN.toUnit(TRAIN.e1rm(r.max1rm.kg, TRAIN.sr(r.max1rm)), unit) * 10) / 10 : '']);
+      r.max1rm ? Math.round(TRAIN.toUnit(TRAIN.e1rmS(r.max1rm), unit) * 10) / 10 : '']);
   });
 
   return [
@@ -12479,22 +13156,32 @@ function boot() {
   if (TRAIN.foldSeeds()) TRAIN.recomputePRs();
   /* Only once every device's rows and tombstones are in, or a group deleted
      on another device comes back. */
-  Rec.ready(function () { if ((TRAIN.splitCoarse() + TRAIN.fillCats()) && TRAIN.redraw) TRAIN.redraw(); });
+  Rec.ready(function () { if ((TRAIN.splitCoarse() + TRAIN.fillCats() + TRAIN.reviveLifts()) && TRAIN.redraw) TRAIN.redraw(); });
   /* and again whenever exercises or sets arrive from another copy */
-  var foldT = null;
+  var foldT = null, foldEx = {};
   Rec.on(function (rows) {
     if (!rows || !rows.some(function (r) { return r.type === 'exercise' || r.type === 'set'; })) return;
     clearTimeout(foldT);
-    foldT = setTimeout(function () { if (TRAIN.foldSeeds()) { TRAIN.recomputePRs(); if (TRAIN.redraw) TRAIN.redraw(); } }, 800);
+    /* a set changed on another device (a weight corrected) changes that
+       lift's records here too, not only on the device that wrote it */
+    rows.forEach(function (r) { if (r.type === 'set' && r.payload && r.payload.ex) foldEx[r.payload.ex] = 1; });
+    foldT = setTimeout(function () {
+      var f = TRAIN.foldSeeds(), v = TRAIN.reviveLifts(), ids = Object.keys(foldEx);
+      foldEx = {};
+      if (f) TRAIN.recomputePRs(); else if (ids.length) TRAIN.recomputePRs(ids);
+      if ((f || v) && TRAIN.redraw) TRAIN.redraw();
+    }, 800);
   });
   TRAIN.restRestore();
   TRAIN.wake();
   /* Records are worked out again once under the rule that counts a split
      set by its effective reps (3, 1.0.70; 2 kept split sets apart), and
-     never again unless something changes. */
-  if (Rec.setting(APP.id, 'prRule') !== 3 && Rec.count('set')) {
+     never again unless something changes. 4 (1.0.83): an assisted lift's
+     records go the other way, less help is stronger. 5 (1.0.85): a set
+     below zero is a record too, and 0 on a lift that goes below zero. */
+  if (Rec.setting(APP.id, 'prRule') !== 5 && Rec.count('set')) {
     TRAIN.recomputePRs();
-    Rec.setting(APP.id, 'prRule', 3);
+    Rec.setting(APP.id, 'prRule', 5);
   }
   draw();
   /* Tom, 2026-09-25: TRAIN opens on the first exercise of today's session
@@ -12566,7 +13253,7 @@ var trainBooted = false;
 setTimeout(function () {
   if (trainBooted || !(Rec.count('set') || Rec.count('exercise'))) return;
   TRAIN.reindex(); draw();
-}, 300);
+}, 0);   /* was 300: the start screen now leaves at 0.15 s (boot.js EARLY) */
 Rec.ready(function () { trainBooted = true; boot(); });
 /* Every write announces, and one SAVE is up to four writes: the set, its
    record flag, the workout timer and the rest timer. Reindexing every set four
@@ -12575,6 +13262,7 @@ Rec.ready(function () { trainBooted = true; boot(); });
 var redrawSoon = null;
 Rec.on(function () {
   if (TRAIN.importing || redrawSoon) return;      /* the importer redraws once, at the end */
+  if (TRAIN.holding) { TRAIN.holdOwed = true; return; }   /* a row is up: holdToMove redraws on the drop */
   redrawSoon = setTimeout(function () { redrawSoon = null; TRAIN.reindex(); draw(); }, 0);
 });
 Day.on(draw);
@@ -12589,7 +13277,10 @@ document.getElementById('restchip').onclick = function () {
   menuAt({ clientX: innerWidth - 12, clientY: 96 }, [
     { label: 'Open Timer', fn: function () { TRAIN.restSheet(); } },
     { label: 'Add 30 seconds', fn: function () {
-      TRAIN.rest.until += 30000; TRAIN.rest.fired = false; drawRestBar();
+      /* saved, or coming back to the app put the old end time back */
+      TRAIN.rest.until += 30000; TRAIN.rest.fired = false;
+      Rec.setting(APP.id, 'rest', { until: TRAIN.rest.until, len: TRAIN.rest.len });
+      drawRestBar();
     } },
     { label: 'Stop timer', fn: function () { TRAIN.restStop(); } },
   ], 'REST TIMER');

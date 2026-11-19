@@ -48,6 +48,13 @@ ninety" asks for two held pauses of 0.8 to 2s.
 | TED talks | mean 163, two-thirds between 153 and 168 | [Six Minutes](https://sixminutes.dlugan.com/speaking-rate/) |
 | Podcast solo host | 150 to 165 | [wiredclip](https://wiredclip.com/average-words-per-minute-speaking/) |
 | edX lecture videos, 6.9 million sessions | 156 mean | [Guo et al 2014 via OSCQR](https://oscqr.suny.edu/how-long-should-instructional-videos-be/) |
+| American English telephone conversation, measured on large corpora (Yuan, Liberman & Cieri 2006): about 195 on average, speakers ranging roughly 111 to 291. Measured, not a guide figure, so higher than the guides, like Tauroza & Allison | about 195 (111 to 291) | Yuan, Liberman & Cieri, "Towards an integrated understanding of speaking rate in conversation", Interspeech 2006 (figures as given in the 2026-11-18 brief; the paper was not reopened that day) |
+
+**A reference for the Live and Talking-head bands (added 2026-11-18, not
+applied).** Natural conversation runs near 195 words a minute (Yuan, Liberman
+& Cieri 2006), inside the current Live and Talking-head bands of 175 to 205.
+The bands' numbers were not changed in this pass; this is the measured anchor
+for the next time they are reviewed.
 
 **Syllables.** English articulation rate 6.19 syllables a second in read speech
 with pauses excluded (Pellegrino, Coupé & Marsico 2011, [Language Log](https://languagelog.ldc.upenn.edu/nll/?p=22)); about 9 a second is the upper bound of hearing ([NSF PAR](https://par.nsf.gov/servlets/purl/10531499)); Tauroza & Allison call under 3.17 slow and over 5.33 fast; the cluttering literature puts average conversation at 4 to 5 and says over 5.3 may indicate cluttering ([toofastforwords](https://toofastforwords.com/symptoms-cluttering/main/speech-rate/)). **Syllables per word in adult conversational English: 1.4 to 1.5** ([Journal of Fluency Disorders](https://www.sciencedirect.com/science/article/abs/pii/S0094730X00000887)); written text 1.45 to 1.65 ([Teflpedia](https://teflpedia.com/Syllables_per_word)).
@@ -56,6 +63,11 @@ with pauses excluded (Pellegrino, Coupé & Marsico 2011, [Language Log](https://
 and the screen says "estimated from N syllables". 150 words a minute times 1.4
 is 3.5 syllables a second including pauses; the beat drill clicks at the middle
 of the band times 1.4.
+
+**Follow-up, not built (2026-11-18): syllables a second from the transcript.**
+Counting each transcript word's syllables with the CMU Pronouncing Dictionary
+would give a true syllables-a-second figure to set against the 4 to 5.3
+conversation range above, instead of words divided by 1.4. Left for later.
 
 ## 3. Filler words
 
@@ -74,6 +86,25 @@ erm, ah, hmm, mm always count. `right`, `like`, `so`, `okay`, `actually` count
 only at the edge of a transcript chunk or beside a joining word, which is where
 they are a crutch and not a word. The default crutch list is Toastmasters'
 crutch words plus the two Tom named.
+
+**One list for the suite (2026-11-18).** SPEAK, CLIP and OUTER HEAVEN's
+postspeech counted different words. They now read one list,
+`shared/fillers.json` (CLIP and OUTER HEAVEN keep checked copies): sounds um,
+uh, ah and hmm with their spellings, and the phrases you know what i mean, you
+know, right, like, basically, literally, actually, kind of, sort of, i mean,
+okay so, so yeah, you see. **Um and uh are counted apart** (er under uh, erm
+under um) because Clark & Fox Tree 2002 found they do different jobs: uh
+before a short delay, um before a longer one. His own crutch list in Settings
+still replaces the phrases.
+
+**Fillers per 100 words, beside per minute (2026-11-18).** A take with a
+transcript also shows fillers per 100 words, read against research bands
+rather than a target of his: **under 2 is clean** (Clark & Fox Tree 2002: uh
+plus um about 1.7 per 100 words in conversation), **2 to 6 is normal
+unscripted speech** (Bortfeld et al 2001: disfluencies about 2 to 6 per 100
+words across speakers and tasks), **over 6 stands out**. Per 100 words does
+not move with pace, so it is the fairer number when he speeds up; the per
+minute targets above are unchanged and still drive the drills.
 
 ## 4. Pauses
 
@@ -164,6 +195,65 @@ crispness reference. About three minutes.
 The difference here: no 0 to 10 scores and no "confidence". Each number is
 shown against a target with met or not, and the target is his.
 
+## 10. Toastmasters and the great speakers
+
+Toastmasters International's Table Topics: an impromptu answer of one to two minutes to a question the speaker has not seen, timed with green, yellow and red lights, with a speaker over the limit by 30 seconds out of time in contests. Its meetings also count fillers (the Ah-Counter) and give spoken evaluation. The great speakers' common pattern, from their biographies: high volume over years, a model imitated (Frederick Douglass read *The Columbian Orator* aloud; Cicero declaimed set pieces), written preparation, and the same material refined across deliveries (King used the "dream" refrain in speeches before August 1963). Demosthenes' pebbles come from Plutarch and are partly legend.
+
+## 11. Coaching after the take, added 2026-11-16
+
+- **Um comes before a delay.** Clark and Fox Tree 2002 (Cognition) found
+  speakers use "uh" before short delays and "um" before longer ones: the
+  filler announces that the next words are still being found. So ums that sit
+  right after a pause are planning, and the fix aims at the pause (breathe in,
+  then the first real word), not at willpower.
+- **Real-time feedback.** Tanveer, Lin and Hoque 2015 (Rhema, IUI) gave
+  speakers live cues on pace and volume while they spoke and reported it
+  helped them adjust without breaking the talk. The fix drills' live counter
+  is the same idea, on one number only.
+- **Easy onset.** A soft, slightly slowed first sound is a standard
+  fluency-shaping technique in stuttering therapy; here it is offered for
+  stammered starts, which the ear only approximates.
+- **One fault at a time, one step at a time.** Scaffolding (root brief): the
+  drill's goal is one step from this take, never the finished target.
+
+Not checked here: the exact effect sizes in either paper. Labelled from
+memory of the abstracts, not re-read on 2026-11-16.
+
+## 12. The program: how orators were made, added 2026-11-16
+
+Tom: *"the purpose of Speak is to turn me into a great orator"*, then
+*"Everything, the goal is a program designed to create a master speaker."*
+
+- **The order of the stages** follows the classical canons (Cicero, *De
+  Oratore*; Quintilian, *Institutio Oratoria*): invention, arrangement,
+  style, memory, delivery. Schools started the voice and delivery early and
+  drilled them throughout; SPEAK puts the voice first (VOICE), then fluency,
+  arrangement (MESSAGE), style (CRAFT), and memory with delivery (THE TALK).
+  Graded exercises from simple to whole speeches are the *progymnasmata*.
+- **Arrangement.** The throughline, one idea per talk, and writing the talk out
+  then learning it until it stops sounding learned: Chris Anderson, *TED Talks:
+  The Official TED Guide to Public Speaking* (2016). Point, reason, example,
+  point is a media-training and Toastmasters frame; problem, solution, result
+  is the case-study frame. The callback is speechwriting practice, no study.
+- **Story.** The Moth's rules: true, happened to you, something changes, no
+  notes, five minutes with a one-minute grace at slams (themoth.org).
+- **Devices.** Tricolon, anaphora, antithesis and the pause are the classical
+  figures; the examples are Lincoln 1863, King 1963, Kennedy 1961. Churchill
+  laying out his speeches in broken lines with pauses marked is documented in
+  his speech notes. The transcript has no punctuation, so a list of three
+  cannot be found and that step counts nothing; contrast and repeated
+  openings are text patterns, labelled as estimates.
+- **Rehearsal counts.** Jill Bolte Taylor's ~200 rehearsals is reported by
+  Carmine Gallo, *Talk Like TED* (2014), not by TED. Treat as anecdote.
+- **Pen in the teeth.** A voice and acting coaching drill. No controlled study
+  was found; it is in as a drill whose second half is measured, nothing more.
+- **Review.** Earlier stages come back once a week at most because skills not
+  practised fade (the spacing effect, Cepeda et al. 2006), and deliberate
+  practice keeps a few skills in focus at a time (Ericsson et al. 1993).
+
+Set here with no source: every time window in SHAPE and STORY except the
+slam, the 80, 85 and 90% script thresholds, and the 7-day review gap.
+
 ## Confidence
 
 High on the figures confirmed by two or more independent extracts: Bortfeld
@@ -174,3 +264,27 @@ Medium on vendor benchmarks and Duolingo secondary claims. Low on any guide
 figure with no method, which is most of the per-style WPM table. Set here with
 no source at all: the live band, the crispness 85%, the pitch spread 6 and 10
 semitones, the eye bands.
+
+## Measured models, 2026-11-17
+Measured by Claude with CLIP's transcriber (faster-whisper, word times) on 4 minutes of each video, and by a research pass from YouTube captions. Words a minute over the whole stretch; "talking" leaves out pauses of 250 ms or more. Edited videos (jump cuts) read high, because the cuts take the pauses out.
+
+| Speaker | Video | wpm | talking | sound share | fillers/min |
+|---|---|---|---|---|---|
+| Jocko Willink | "GOOD" IdTMDpizis8 (set piece, music) | 117 | 244 | 48% | 0 |
+| Dan Koe | K8K09g9XR4s | 211 | 226 | 93% | 0.2 |
+| Dan Koe | iX5CgAwxAtc | 188 | 222 | 85% | 0 |
+| Alex Hormozi | aFoMYz_jWcs | 222 | 254 | 87% | 1.2 |
+| Faizan Asif | LPrgVUrlRCM (interview, two voices) | 209 | 244 | 86% | 0.2 |
+| From captions: Chris Williamson 164-171, Ryan Holiday 184-197, Sean Nalewanyj 213, Jeff Nippard 215, Leila Hormozi 248, Iman Gadzhi 233, Jocko with a guest 180, GaryVee 157-169 (a bad model for other reasons) | | | | | |
+
+What it says: every model but Jocko's set piece is faster than the old 160 to 190 band. Their clarity comes from clean, finished sentences, not slow speech. Jocko's weight comes from silence (half of "GOOD" is pauses), not slow words: inside a phrase he runs at 244.
+
+## ASHA Practice Portal, read 2026-11-18
+Pages: Fluency Disorders, Articulation and Phonology, Voice Disorders, Accent Modification, Dysarthria in Adults (asha.org/practice-portal). Written for clinicians treating disorders; no adult rate norms, no syllables-a-second figures, no fading schedule with numbers.
+- Feedback: frequent feedback on how it was done while a skill is new, then occasional feedback on the result only, and varied practice, so it holds and transfers (Dysarthria).
+- Efficiency: understood words a minute, not raw words (Dysarthria). A 2 to 4 minute talk shows whether speech decays (Dysarthria).
+- Cluttering signs: rate too fast for the speaker's own system, irregular pauses, run-together syllables and dropped endings, loudness fading at phrase ends, excess ordinary disfluency. Treatment: slowing and pausing, "fast with pauses", over-articulation, stressing endings, steady loudness to the end (Fluency).
+- Intelligibility (words understood) and comprehensibility (listener effort) are rated apart (Accent Modification).
+- Steps from words to conversation, then self-monitoring and self-correction (Articulation and Phonology).
+- Voice care: straw phonation, lip trills, resonant voice; warning signs effort, fatigue, breathlessness, tension; no self-directed pitch change (Voice).
+- Not supported or not covered there: mouth evenness (kept: it is his own habit, named by him); pitch spread is a variety measure, not a push higher.

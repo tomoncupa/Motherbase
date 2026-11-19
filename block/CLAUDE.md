@@ -26,6 +26,74 @@ Tom: "If we wanted to specifically do Habits in BLOCK what can we retool", then 
 - **An every-day thing stays a block** (Tom). The block menu's "Track as a habit" adds a habit with `act`, the block's own tick id, so its grid shows the block's history and a tick in either place is one tick. Its count is the days the block runs a week. It is left off the Day's Also column and the published plan, because the block is already there.
 - The view id stays `anytime` and the kind stays `anytime`, so nothing stored moved.
 
+## 1.0.25, 2026-11-09: Week, Every and Habits are one Schedule page
+
+Tom: "Weekly and every so often and habit tracked routines just in 1 page". The Schedule tab (`#vWeek`) shows `#sched`, which holds `#week` on top and `#every` and `#anytime` side by side below (`.schpair`, stacked when narrow). Rules that stand:
+
+- The view ids `week`, `every` and `anytime` all mean the Schedule page, so saved views, self-tests and "Tracked on Habits" still land; that link scrolls to Habits.
+- `#vEvery` and `#vAny` stay in the page, hidden, so putting the tabs back is one commit. Every's owed-or-due count rides on Schedule (`rhBadge`).
+- Only the week strip scrolls sideways when the window is narrower than seven day columns; the page itself never does.
+
+## 1.0.28, 2026-11-16: the Schedule review, picks 1, 2 and 5
+
+Tom picked from the review page (claude.ai/artifact/UPC7MfBNsYeNBvvr6xvTUq). Rules that stand:
+
+- The Every and Habits add boxes draw on `--bg` with `--text-1`. They had no background and drew white under light text.
+- A weekday with no day on it is `.day.wempty`: its name and picker, no body. A weekday running a day keeps its column.
+- A `{lifeos:1, show}` message opens a spot: `schedule` the Schedule page, `habits` or `every` that section with the cursor in its add box. HOME's EVERY & HABITS uses all of it.
+- The self-test's two drag checks ("drag into a routine", "drag between routines") failed with or without this change, so something in 1.0.26 or 1.0.27 broke them. Not looked into.
+
+## 1.0.29, 2026-11-17: review picks 3 and 4
+
+Tom asked for both after all. Rules that stand:
+
+- Habit squares are `--s-4` (16px; the review said 18, which is off the scale). The grid starts at the left under the name, and all seven weekday letters show.
+- Everything on the Schedule page reads at `--f-1` or more: one `#sched` rule raises the shared classes (weekbar, day columns, section heads, hints) there only. The Day and Summary views still carry 9 to 11.5px labels.
+- No em dashes in the Schedule page's text or tooltips, nor in the Day, Schedule, Summary and + Day tab tips.
+
+## 1.0.30, 2026-11-17: the Flow tab
+
+Tom: "prepare for when we wake up not the best versions of ourselves ... accommodate for our lowest common factor", from his 2020 chart. He picked: its own tab; red boxes pickable; picks written to STATUS; arrow gaps set times; and all six suggestions. Rules that stand:
+
+- **Every rule is `shared/flow.js`** (rows `flow`, `fbox`, `farrow`, `fwalk`; see the root data model). BLOCK draws and edits; HOME's FLOW card and STATUS's widget follow the same file. Change a rule there, never in an app.
+- **Plan / Today.** Plan: drag a box (snaps to 24px), click a box or an arrow's chip to change it in the side panel, Arrow to... then click the target, right-click either for its menu, Delete or Backspace removes the picked one with Undo. Today: where he is, every way out as a button, times ahead, the floor, and the paths taken in the last 30 days with each day's STATUS grade letter. Any box can be "I am here now".
+- **A pick** writes the step, ticks a green box under the slug of its name (so a box named like a block ticks that block), and writes a STATUS entry "Name (arrow words)" at that minute unless This flow's switch is off (`block.flowEntries` 0). Facts are dated the moment of the pick; the walk is dated the day it began and stays open 20 hours after its last step.
+- **Sleep picks an arrow:** an arrow marked short sleep or enough sleep is suggested from that day's STATUS `sleep` reading against the flow's `short` hours (6). Suggested, never taken for him.
+- **The floor** (boxes marked Part of the floor): reach every one on a day and BLOCK's streak counts that day (`streak()` asks `Flow.floorMet`). HOME's STREAKS card does not know this yet.
+- **No way back:** a red box from which no green box can be reached is flagged on the canvas and in the side panel.
+- **Start from your 2020 chart** seeds his chart read off the picture; the floor on Brush teeth and Salt drink is a guess and is his to change.
+- The bin and the footer are hidden on Flow (a view change).
+
+## 1.0.31, 2026-11-17: drawn like his 2020 chart
+
+Tom: "I don't like how curvy the layout is. Match super closer the image I gave you, along with the spacing." Rules that stand:
+
+- Boxes are solid blocks in their kind's colour with the words centred; the words take whichever of `--bg` and `--text-1` reads better on that fill in the theme worn (`fInk`, measured).
+- Arrows are straight lines with right-angle turns (`fRoute`): straight down; down, across, down to the next row; out the side along the gap between columns, each line in a gap on its own lane, a fan (3 or more out of one box) sharing one; a long way back up and to the left loops round the right of everything. The first route that crosses no other box wins.
+- An arrow's words sit beside its line on the canvas colour, no box. In Plan the line itself is picked (a wide invisible stroke), so a wordless arrow carries no marker. `dash` 1 draws a path he might take dashed.
+- His proportions: box 144 x 72, columns 192 apart, rows 108 apart, snapping to 12px. "No way back" is the words only, no outline.
+- "Start from your 2020 chart" (and "Add your 2020 chart" in the flow menu) is the whole picture now, 39 boxes, read off the image; no fixed times, floor on Brush Teeth and Salt Drink (a guess).
+
+## 1.0.32, 2026-11-18: every box on the Flow chart is one size
+
+Tom: "uniform in design". Each draw sets every box to the tallest box's height, so lines meet every box at the same points.
+
+## 1.0.33, 2026-11-18: words fit the Flow chart's boxes
+
+Every box is 144 x 72 again and its words shrink to fit on whole words (`Flow.fit`, 15px down to 12); only a box that cannot hold them grows, and every box then takes the tallest height.
+
+## 1.0.34, 2026-11-18: the sample day
+
+Tom: "Create a better sample flow chart based off what I gave you initially, but I don't like that we're starting with woke up bad. Start it with asking me how I woke up." The samples live in `shared/flow.js` (`Flow.sample('day' | '2020')`). The empty Flow tab offers Start with the sample day first, then Your 2020 chart as drawn; the flow menu adds either. The sample day: 32 boxes, starting at How did you wake up? (Good: enough sleep, Bad: short sleep), no box with more than three ways out, a way back from every red box, Lights out loops to the next morning.
+
 ## Needs from the home screen
 
-None. HOME 1.0.75 copied `rhPeriod`, `rhPer` and `act` ticking into its EVERY & HABITS card (`rhAnyState`, `rhTickH`). Change both when habit maths changes.
+The new chapter: `HOME.md`, Needs from BLOCK (2026-11-16), asks STREAKS and EVERY & HABITS to count from `Chapter.from('block')`. HOME 1.0.75 copied `rhPeriod`, `rhPer` and `act` ticking into its EVERY & HABITS card (`rhAnyState`, `rhTickH`). Change both when habit maths changes.
+
+## New chapter (Tom, 2026-11-16; 1.0.26)
+
+"Reset tracking with zero guilt". The rule is `shared/chapter.js`; `chFrom(day)` reads `Chapter.from('block', day)` on every draw, and a `chapter` row landing redraws like any row.
+- **Cut from the chapter day:** the Summary's current streak, finished last 14 days, blocks you reliably do and What the record says (`statsFrom`, the later of the chapter day and his own Counting since line, `S.streakFrom`; a chapter later than his line says so beside it); every habit's streak (`rhStreak` `floor`: a period running across the day is the oldest looked at and can add one, never end the run).
+- **An Every block** missed before the chapter is due on its first day (`everyState` `floor`), not owed for every week before; done since, its schedule is untouched. The Day's Also column uses the chapter running on the day shown.
+- **Kept whole:** every tick, the habit grids, the 14 bars, History, "days recorded" and this period's "x of y" (it keeps every tick in the period, so a chapter never makes it fall).
+- **Today is open** (since 1.0.26, any chapter or none): a half-done today neither breaks the streak nor counts in the average or a block's rate.

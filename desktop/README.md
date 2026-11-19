@@ -22,7 +22,9 @@ Opening it twice does nothing. There is only ever one.
   its time, today's mood and energy once there are any, and three controls.
   **Drag it anywhere** by its background and it stays there.
 - **The status check** is meant to be in the way, and since 17 September it
-  takes the **whole screen**. It comes up in front of whatever you are doing,
+  takes the **whole screen**, unless STATUS Settings, DESKTOP, How it comes,
+  is Red dot or Pop up (the dot plus a Windows notification, from a tray icon that is there only while the notification shows): then a red dot sits on the widget's button and the taskbar
+  icon until you press it, and it opens as a box (`due|1`, `checkin`). It comes up in front of whatever you are doing,
   takes the focus and makes a sound. There is no close button and no skip:
   SAVE is the only way out, and until every scale is pressed it names the one
   still missing. It wears a status window, and which one is in Settings,
@@ -32,7 +34,7 @@ Opening it twice does nothing. There is only ever one.
   yourself is not followed by another ten minutes later. Walking away from one
   at night ends the night: you get one, and it closes when you answer it.
 - **Ctrl+B** writes a bullet from anywhere, even from inside another program.
-  Change it from the tray: **Bullet shortcut**, **Choose my own**, then press
+  Change it in STATUS Settings, DESKTOP, **Bullet shortcut**, **My own**, then press
   the keys you want. It needs Ctrl, Alt or Shift in it, because Windows will
   not give a plain letter to a program that is not in front.
 - **The pencil** writes a bullet without leaving the widget. It opens on
@@ -40,10 +42,17 @@ Opening it twice does nothing. There is only ever one.
 - **The chevron** opens the whole of STATUS. The chevron in its top bar takes
   you back to the widget.
 
-Right click the tray icon next to the clock for **Open STATUS**, **Check in
-now**, always on top, the shortcut, and **Quit**.
-Right clicking the widget or the app opens the same menu where the page has
-no menu of its own (2026-10-18). Coming back from the whole app after moving
+- **The S-rank overlay** (STATUS 1.0.101): what is left for an S today, in
+  a corner of the main screen (top right by default), over your windows.
+  Clicks go through it and it never takes the focus. STATUS draws the picture
+  and STATUS.exe places it (`ov|...`, `ovimg|...`, class `Overlay`). Every
+  choice is in Settings, DESKTOP, S-RANK OVERLAY.
+
+**No tray icon** since STATUS 1.0.102 (Tom, 2026-11-16: the tray holds SPEAK
+alone). Always on top, Start with Windows, the shortcut and Quit are in
+STATUS Settings, DESKTOP, THE PROGRAM. Right clicking the widget or the app
+opens a menu with Open STATUS, Check in now, always on top, the shortcut and
+Quit where the page has no menu of its own (2026-10-18). Coming back from the whole app after moving
 it, the widget shrinks into the app's top right corner and stays there.
 
 ## Its data
@@ -64,7 +73,7 @@ browser on its own. This program is only the frame around it: it runs the page
 inside Microsoft's WebView2, the engine that already ships with Windows, and
 the page tells it what to be through a proper message channel.
 
-Closing the window quits the program, so it can never sit in the tray switched
+Closing the window quits the program, so it can never sit hidden and switched
 off.
 
 ## The Main Menu's title bar
@@ -91,6 +100,27 @@ If it says Claude is signed out, press SIGN IN and sign in on the Claude website
 
 The panel is `shared/claude.js`; the window side is `ClaudeBridge.cs`.
 
+## SPEAK.exe, the practice widget
+
+Tom, 2026-11-10: "an always on overlay widget, so I can start a mini practice
+whenever." He chose a PC widget of its own over a button on STATUS.
+
+- A small window, 300 by 116 inside, on top of every other window, with
+  Windows' own title bar coloured like the page so it drags and snaps.
+- One button, **TABLE TOPIC**. It starts a take at once. The window grows to
+  440 by 760 for the take and its numbers, keeping its top left corner where
+  that fits, and goes back to where it was a second after the numbers close.
+  The page asks for each size (`speak/index.html`, the widget).
+- It opens `speak/index.html?widget=1` at the hosted address and shares
+  `data` with STATUS and the Main Menu, so a take made here is in SPEAK
+  everywhere.
+- The microphone and camera are allowed without a prompt in this window only.
+- **Start with Windows** is on from its first open: a line under the user's
+  Run key, `Motherbase SPEAK`. Right click the title bar to turn it off.
+- Where it sits is kept in `speak-app.txt`.
+- Tom only, like SPEAK, so Setup.exe does not carry it and a change to
+  `SpeakApp.cs` needs no client Setup.
+
 ## The nightly backup
 
 Every night at 4am, and ten minutes after you sign in on a day the PC was
@@ -112,7 +142,7 @@ powershell -ExecutionPolicy Bypass -File "C:\Users\user\Downloads\Motherbase\des
 
 ## Giving it to someone else
 
-Send them **Motherbase Setup.exe** (built beside this file). One file: both
+Send them **Motherbase Setup <date>.exe** (built beside this file, named for the day it was built). One file: both
 programs and Microsoft's WebView2 files are inside it. Added 27 October 2026.
 
 1. They double click it. Windows may say "Windows protected your PC" because
@@ -141,17 +171,17 @@ WebView2 (rare on Windows 10, never on 11), Setup says so with a button to get i
 from the site. The programs themselves now do too: half a minute after either
 opens, and every six hours after, a Setup-installed copy reads
 `desktop/update.txt` on its site. If that fingerprint is not its own
-`Setup.exe`'s, it downloads the new `Motherbase Setup.exe`, checks it, and
+`Setup.exe`'s, it downloads the Setup that `update.txt` names, checks it, and
 runs it with `--update`, which swaps the files in without closing anything;
 the next open is the new build. No connection or a bad download changes
 nothing. Your own copy never checks (`Updater.cs`).
 
 So **a change to STATUS.exe or Main Menu.exe reaches them only through the
-client build**: commit the rebuilt `Motherbase Setup.exe` with them, then
+client build**: commit the rebuilt `Motherbase Setup <date>.exe` (and the old one's removal) with them, then
 `tools/build-client.py` puts it and its `update.txt` on the client site.
 
 To test on this PC without touching your own shortcuts:
-`"Motherbase Setup.exe" --dir <folder> --address http://127.0.0.1:8811/`.
+`"Motherbase Setup <date>.exe" --dir <folder> --address http://127.0.0.1:8811/`.
 
 ## Personal Design Toolkit
 
@@ -203,10 +233,14 @@ three Microsoft WebView2 files in `lib\`.
 | `StatusDesktop.cs` | the old Chrome launcher, kept until the new one has earned its place |
 | `Backup.exe` `Backup.cs` | the nightly backup and its source; reads `tools/backup.html` |
 | `install-backup-task.ps1` | sets up (or `-Remove`s) the 4am task that starts it |
-| `Motherbase Setup.exe` `Setup.cs` | the package for someone else, and its source |
+| `Motherbase Setup <date>.exe` `Setup.cs` | the package for someone else, and its source |
 | `setup.html` `SetupPage.cs` | the first-run setup page, and how the Main Menu serves it |
 | `Hosted.cs` | which address both programs open (`address.txt`) |
 | `Updater.cs` | a given copy updating itself from the client site |
 
-Windows only. Not in the client build, except `Motherbase Setup.exe` and its
+Windows only. Not in the client build, except `Motherbase Setup <date>.exe` and its
 `update.txt`, which the client site carries for the update check.
+
+## Opening from the saved copy (2026-11-16)
+
+STATUS.exe, Main Menu.exe and SPEAK.exe open the hosted page without `?fresh=1`, so the copy `sw.js` kept answers at once. With `fresh=1` the page and every script went to the network first and waited up to 3 s each (`SLOW_MS`) before the kept copy answered, and one of GitHub Pages' four addresses (185.199.111.153) never answers from Tom's ISP, so STATUS took 6 s to draw. New code still arrives: `sw.js` refreshes kept copies in the background, `mobile.js` reopens an untouched page onto new code, and STATUS reloads itself onto a newer version when idle. Measured launch to page loaded: 0.6 to 0.7 s, was about 6 s.

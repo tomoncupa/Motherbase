@@ -37,7 +37,7 @@ see the root brief on many writers. Every edit merges into the row as it is
 | Type | Key | Payload |
 |---|---|---|
 | `excat` | category id, the slug of its name | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex, and there are only twelve |
-| `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup, bar, wu}` |
+| `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup, bar, wu, assist}` |
 | `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, plan, pr, prf, dist, dur, note, ord, warm, su}` — **one row per set** |
 | `session` | `''` | `{start, end, note, from, order, name, vs, tags, energy, pump, quality, pday}` — the day's timer, comment, the day it was copied from, the exercise order he set, the session's name, a day he picked to compare it with, how it went (context tags, three 1 to 5 ratings), and the routine day it was started from |
 | `phase` | phase id | `{name, start, end, program}` — a training block. `end` is optional; `program` is the routine or FORGE program its days come from (1.0.71) |
@@ -148,14 +148,53 @@ An imported exercise of any other type is read off what was logged against it
   session records, Top 3, GRAPH's 1RM and Max Reps, `setDelta`). **Every total,
   Most volume and the arrow's weight x reps half read `r`, every rep.** Where a
   split set's strength is stated it says so: "10 5 (counts as 14)".
+- **Estimated 1RM is the suite's one formula** (`shared/e1rm.js`, decision D4, 2026-11-18): Brzycki, reps in reserve added when the set has them, reps counted at most 12; `e1rmMaxReps` still leaves out sets above it. Not the record rule above.
 - **Records start again with each training block**; the stored `pr` is the
   all-time rule, block records are worked out when shown.
+- **An assisted lift reads the right way up** (1.0.83, Tom 2026-11-16: "more
+  weight there means more assist"). The weight is the machine's help, so
+  less is stronger. `TRAIN.isAssisted`: the name says "assist", unless
+  Edit Exercise's Assisted switch wrote `exercise.assist` 1 or 0. **Every
+  reader of weight goes through one of three:** `TRAIN.wk(s)` (bigger is
+  stronger, the help negated; every record rule, the five kinds, session
+  records, rep maxes, goals, the session card's top set), `TRAIN.load(s)`
+  (what the body moved: bodyweight minus help, null with no bodyweight),
+  and `TRAIN.e1rmS` / `TRAIN.volS`, which read the load. **Volume: bodyweight
+  minus help when a weigh-in exists, else left out**; no estimated 1RM
+  without one, never a guess. Bodyweight is STATUS's `ev` weight for Tom,
+  CHECK IN's `cval` `<pid>|weight` on a client, the weigh-in on or before
+  the day, else the first after. Next weight steps the help DOWN when the
+  band is beaten; the set arrow says "+20 lb help" and points down; GRAPH
+  shows Least Help, and hides 1RM and volume with no bodyweight. A new
+  reader of `s.kg` as strength uses these, never `s.kg` itself. `prRule` 4
+  recomputed every record once. Not inverted: Add Warmups and the Set
+  Calculator. (HISTORY.md: Assisted lifts (1.0.83, 2026-11-16))
+- **Weight may go below zero on any lift** (1.0.85, Tom 2026-11-16: "the
+  option to put negative weight for something like pull ups or negative
+  weight anywhere actually"). The weight stepper's minus walks past 0; a
+  typed `-` works where the keyboard has one (the iPhone decimal pad has
+  none). -20 lb is 20 lb of help, so the plain number reads the right way
+  up (-10 beats -20, 0 beats -10) and `TRAIN.wk` is unchanged. **A lift with
+  any set below zero goes below** (`TRAIN.goesBelow`, `idx.neg`; an assisted
+  lift too): its 0 is a real weight, and its load is bodyweight plus the
+  number for every set, null with no weigh-in. **Every record rule asks
+  `TRAIN.weighed(s)`, never `kg > 0`.** Max Weight and goals have no floor at
+  0; a goal at or below zero fills only once met; Next steps freely below
+  zero, and help never below none. `prRule` 5 recomputed every record once.
+  Not handled: plates, Add Warmups and the Set Calculator ignore a negative.
 - **Five kinds, five symbols** (`TRAIN.prKinds`, `TRAIN.prMarks`; icons
   `pr-life` trophy, `pr-block` medal, `pr-weight` barbell, `pr-reps` crown,
   `pr-vol` bars, in `shared/icons.js`). Weight, reps and volume are what the
   set was on its day and keep their symbol after a later set beats it; a set
   shows every kind it is, gold, 12px under the numbers on TRACK so the row
   stays 44px. The records sheet ends with the key.
+- **A movement's first session earns no records of any kind** (Tom,
+  2026-11-09: "Don't count PRs for a new movements first session";
+  `TRAIN.firstDay`): no trophy, medal, barbell, crown, bars, save sound or
+  card line, but its sets still set the bar. A waiting suggestion is never
+  a record. **Barbell and crown are against everything before the set**:
+  heavier than the heaviest earlier set with at least these reps; more reps
+  than the most at this weight or heavier. (HISTORY.md: First sessions, ghosts from last time, a warmup switch (1.0.82, 2026-11-09))
 (HISTORY.md: Personal records (the brief's version, 2026-10-21))
 
 ## Training, not working out
@@ -189,6 +228,11 @@ screen's `setCounts`, the training tick's qty, last time and History.
 A `phase` row: a name, a start, and an optional end. A block runs until the next
 one starts, or until its own end. The session strip under the date shows the
 block and its week number. Deleting a block keeps every session in it.
+
+**TRAIN does not read chapters** (`shared/chapter.js`). Tom, 2026-11-16:
+"Train doesn't directly care about chapters it operates in blocks". Records,
+comparisons and counts stay on training blocks; a new chapter offers no
+block, and TRAIN is not in `Chapter.APPS`.
 
 ### Names, and how much stronger
 
@@ -232,10 +276,29 @@ block and its week number. Deleting a block keeps every session in it.
 ### The week
 
 Analysis opens on WEEKLY: sessions, sets, reps and volume, then sets per muscle
-(half a set for a muscle an exercise also works) and HIT, the number of sessions
-that trained it. Below it, eight weeks of sets per muscle. **No targets**, at Tom's
+and HIT, the number of sessions that trained it. **Two muscle views** (1.0.91,
+Tom 2026-11-16), a switch under the week's dates, kept in `train.musView`:
+DIRECT SETS (the default) counts each real set once toward the lift's main
+muscle, whole numbers; WEEKLY VOLUME counts every muscle a set trains by its
+share (a chin up: Biceps 1, Lats 0.8), with decimals. The card, the session
+card and the eight weeks follow it. **What a lift trains is `TRAIN.musOf`,
+which asks `shared/muscles.js` `Muscles.forLift`**: the lift's own `mus`, then
+FORGE's `ftag`, then the master list, then its group. FORGE asks the same, so
+they cannot disagree. Edit Exercise's Main muscle and Side muscles fill from
+the name until changed; a change writes `exercise.mus` ({Muscle: share}) and
+wins everywhere; GO BACK TO THE NAME clears it. `also` is read only for a
+lift no rule knows. Muscles are coloured by region (`Muscles.slotOf`).
+**Groups follow the master list** (1.0.91): Sort Into Groups moves each lift
+to the group the list files it under (a muscle, or Prehab as P/Rehab), never
+one already in a muscle group its own shares include, makes groups he had
+deleted, and deletes groups left empty that are not a muscle, Prehab or
+Cardio (Back, Chest, Core, Legs, Shoulders, Forearms); UNDO brings them back. **No Adductors group** (1.0.93, Tom): Adductors still counts as a
+muscle and an adductor lift files under Glutes (`Muscles.FILE`); the
+forearm muscles are Forearm Flex. and Forearm Ext.
+Offered once more (`sortSeen` 2). A new log is seeded and sorted at once.
+Tidy suggests the list's group first. Below it, eight weeks of sets per muscle. **No targets**, at Tom's
 request: "I'd rather be told how many times I hit a muscle, I'll know if I need to
-hit more."
+hit more." 1.0.94: Edit Exercise shows a lift saved with an old forearm name as the new one, and picking Adductors as the main muscle files it in Glutes.
 
 ### Profile
 
@@ -248,10 +311,49 @@ a block exists.
 
 An exercise carries the setup it needs, named by him, each a **toggle** (Straps)
 or a **setting** (Seat height, Back pad). **Each set records its own**, because
-straps go on after a couple of working sets. A new set takes the setup of the set
-before it today; the first set of a session takes the first set of the last
-session. TRACK shows it above the steppers and under each set. Edit Setup is in
-the training screen's More.
+straps go on after a couple of working sets. (HISTORY.md: Setup on one line, and three setup bugs (1.0.84, 2026-11-16))
+
+- **Nothing goes above WEIGHT on TRACK** (Tom, 2026-11-16: "We want as
+  little data as possible before the input for weight and reps"). The
+  stepper box starts with its WEIGHT label. Under SAVE, in this order: the
+  setup line, the faded last-time line, the coach's line (1.0.88: "Move
+  the faded last time numbers below save"), then the logged sets.
+- **Last session's comment shows faded on today's same working set**
+  (`.ghostnote`, 1.0.88; Tom: "last set's notes to show up as faded out
+  text so it's clear that this is last session's notes ... unless
+  anything is written, just keep it there"): set N against last time's
+  set N, warmups out, muted and slanted, never stored. His own comment
+  replaces it; the comment box shows it as the placeholder.
+- **One line under SAVE** (`setupLine`, 1.0.86), above the logged sets, only
+  on an exercise that has setup: chips for toggles, small boxes for
+  settings, a pencil for the list. Tapping a setting's name puts the caret
+  in its box.
+  **It is exactly what SAVE or UPDATE records**, and changing it writes
+  nothing until then. No setup, no line: Add Setup is in More and in a set's
+  comment box, which also edits a past set's setup.
+- **The next set takes the last set DONE today, with or without setup**: a
+  set with everything off says off. The first set of a session takes the
+  first set done last session. A planned set not yet done says nothing
+  (`TRAIN.lastSetup`).
+- **Tapping a set he did loads its exact setup, none included**
+  (`loadDraft`), so UPDATE can never stamp the line onto it; once nothing is
+  selected the carried setup comes back (`TRAIN.suFromSel`). A past set's
+  setup changed in its comment box moves the line only if that set is the
+  one the line shows.
+- **Edit Setup saves as it goes**: ADD or Enter saves a field, a removal saves
+  with an UNDO, TOGGLE is the default. A set keeps what it recorded when a
+  field is removed.
+- **A set row says only what CHANGED in setup** (`setupDiff`, 1.0.87; Tom,
+  2026-11-16: "unless anything changes, then it just holds on from the last
+  set", so the room goes to comments): "Straps", "Straps off", "Seat 5",
+  "Seat off". The day's first set says its whole setup. A suggestion not
+  taken says nothing and is not the set before.
+- **A suggestion ticked done records the carried setup** (`TRAIN.carriedSetup`),
+  as UPDATE on it does. A set with no `su` reads as everything off.
+- **A set's comment and setup words open its comment box** on a tap (Tom,
+  2026-11-16: "edit the text by clicking on the text, not just the text
+  box"), as the bubble does; the rest of the row still loads the set, and a
+  hold anywhere still lifts it.
 
 ### Asked about, and turned down
 
@@ -396,7 +498,10 @@ Each is short here; its story is under the heading named.
   groups; a group's colour is `TRAIN.CAT_SLOT`; `fillCats` finds a group by
   name and moves no exercise; movements change group only through the SORT
   sheet. Plates ride the WEIGHT label on barbell lifts. Add Warmups writes
-  `warm: 1, plan: 1`. Swipe a set left to delete. (HISTORY.md: The training screen, as Tom rebuilt it on 2026-09-24)
+  `warm: 1, plan: 1`. Swipe a set left to delete. **The comment box has a
+  Warmup switch** (1.0.82, Tom 2026-11-09): it starts as TRAIN reads the
+  set and writes `warm` 1 or 0. Weight and reps on a TRACK row stand
+  `--s-4` apart (the columns are inline, so their min-widths never apply). (HISTORY.md: The training screen, as Tom rebuilt it on 2026-09-24)
 - **Routines list his named sessions**; TRAIN opens on today's first waiting
   set; a save is silent unless it is a record. (HISTORY.md: Named sessions, and what opens first (1.0.26, 2026-09-25))
 - **A FORGE program is one routine per week** (`prog-<id>-wN`); its target is
@@ -404,6 +509,11 @@ Each is short here; its story is under the heading named.
   (the Algrowrithm). (HISTORY.md: A program in weeks, and the coach's target (FORGE branch 1.0.21-1.0.22, on main as TRAIN 1.0.32, 2026-09-25))
 - **An open slot** ("Any Chest") is picked once for every week and survives a
   resend; a new exercise from a program reuses a muscle group by name. (HISTORY.md: Open slots, and a muscle group left alone (FORGE branch 1.0.23, on main as TRAIN 1.0.32, 2026-09-25))
+- **A lift with sets is never left deleted** (1.0.92, `TRAIN.reviveLifts`):
+  a starter comes back by its starter name, anything else as Unnamed lift;
+  an empty set is no reason. A set changed on another device recomputes
+  that lift's records. His data was cleaned 2026-11-16 (pound sets stored
+  as kilos, orphan sets, doubles, the group sort) through the backup inbox.
 - **Merge Into** moves every row onto the kept exercise with one UNDO;
   renaming or dropping a starter needs a `SEED_RENAME` or `SEED_FOLD` entry. (HISTORY.md: Merging two exercises, and starters renamed (1.0.35, 2026-09-25))
 - **Tidy Movements** (exercise list More, `TRAIN.tidyOpen`, screen `tidy`)
@@ -417,6 +527,14 @@ Each is short here; its story is under the heading named.
 - **Warmups count in every total**; records and set-N comparisons stay on
   working sets. A lift's GRAPH opens on Top 3 Sets & Total Work with a
   least-squares trend; the set 1 to 4 lines are hidden, not deleted. (HISTORY.md: Strength graphics and what a trend measures (1.0.49 to 1.0.59))
+- **GRAPH's Volume By Set** (1.0.90, Tom 2026-11-16: "x axis set y axis
+  volume"; `TRAIN.volBySet`, `drawVolBySet`): weight and reps lifts only,
+  set number along the bottom, weight x reps up the side from zero, one
+  line per session (last 8 in the period; newest the accent, the one before
+  `--data-2`, older faded). Working sets that count, warmups out, weight
+  through `TRAIN.load` (no load answer, left out, its number kept). Header:
+  the newest session's total and its change, numbers only. A chip per
+  session picks the line a tap or drag reads. (HISTORY.md: Volume By Set (1.0.90, 2026-11-16))
 - **A set's green arrow** shows when it moved more weight x reps than set N
   last time or its estimated 1RM rose. **Decided, not built**: a session
   crossing midnight stays on its start day; a comparison day only within 8
@@ -484,6 +602,11 @@ steppers as a GHOST: the placeholder, `--text-muted`, never the value.
 - A set he logged loads as values (his number to correct). After SAVE his
   numbers stay as ghosts, so the same set again is still one press.
 - An exercise with a set waiting opens on it, ghosts showing (`openExercise`).
+- **Tapping one of last time's sets on TRACK loads it as ghosts** (Tom,
+  2026-11-09: "if I click last sessions numbers let them show up as ghosts
+  on the left"; `loadDraft(s, true)`): nothing saved, a new set not an
+  update, today's setup kept. Each set in the faded line is a button, a
+  dotted line under it, 44px caught by `mb-tap`.
 
 ## Parked
 

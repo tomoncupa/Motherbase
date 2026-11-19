@@ -220,6 +220,8 @@ the package's, due that day. Packages only. (HISTORY.md: A second kind of sessio
 
 **Session boxes are `sesh` rows in date order**; a future date is refused. (HISTORY.md: Sessions as boxes)
 
+**A session's date saves when its box is left or on Enter, never on `change`** (1.0.36, 2026-10-29). Chrome's date box reads a typed "2" as the 2nd and fires `change`; the redraw re-sorted the boxes, so typing 23, 26 and 27 sent three of Jay's sessions to 2 Oct on 2026-10-28. **A COACH session (`k-<pid>` key, `src: 'coach'`) shows its date and cannot be moved**: its key is one per client per day, so two moved onto one day became one row and a session was lost. Repaired by hand the next day.
+
 **Earnings a session and a week**, the week marked "about". (HISTORY.md: What a session earns)
 
 **A payer is not a client.** Names live in `wealth.payers`, keyed on what
@@ -298,9 +300,11 @@ and client and takes the bank's amount and date: *"Obey the numbers from the
 actual files rather than whats from STATUS."* Nothing is written until apply;
 a skipped line is remembered. (HISTORY.md: Import, and what it took)
 
-**A PDF password goes to the reader and nowhere else**: not a setting, not a
-row, not the console. Readers load from a CDN only when needed; pasting still
-works. (HISTORY.md: What the parser had to learn)
+**Statement passwords are a setting, `wealth.stmtPw`** (Tom, 2026-11-16: "put a
+default password in wealth settings ... automatically apply it"). A locked PDF or
+spreadsheet tries each in turn before asking; one he types that opens a file is
+added. Settings, MONEY, STATEMENT PASSWORDS shows dots only; never print one to the
+console or a log. Readers load from a CDN only when needed; pasting still works. (HISTORY.md: What the parser had to learn)
 
 **The running balance decides a line's amount.** A statement that does not
 add up is refused without "import it anyway". Reversals cancel; his own money

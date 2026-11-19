@@ -34,6 +34,14 @@ Tom pasted it on 2026-10-13:
 | [CONDITIONS] | DOMS, Sleep Deprivation, Stressed, Hypothyroidism, PCOS, Lipedema, Calorie Deficit, Weight Loss, Dopamine Overload, Depression, Alzheimer's, Neurodegeneration |
 | [TRAITS] | Empty. Populate as content development surfaces candidates. |
 
+Added 2026-10-22 (1.0.4): eight terms his live Skool lessons already bracketed
+but the list lacked. Claude proposed the brackets, Tom answered "Yes to all":
+SKILLS Dopamine Calibration, Weighing-In; STATS Hormones, Neurotransmitters,
+Protein, Learning Ability; CONDITIONS Lactose Intolerance, Mental Health. 47
+entries in all. Scale Tracking lost its "Weighing in" alias so it cannot be
+taken for Weighing-In. The master list for writers is
+`tom-context/skool-brackets.md`.
+
 **The names and brackets are his, verbatim. Every definition and every bracket
 meaning built into the file is Claude's draft**, and the screen says so: a
 DRAFT mark on each one and a banner counting them. His real definitions live on

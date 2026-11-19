@@ -142,6 +142,7 @@ const APPS = [
   { id: 'checkin', name: 'CHECK IN', path: 'checkin/index.html', root: '#main .card', nav: '#nav button' },
   { id: 'kitchen', name: 'KITCHEN', path: 'kitchen/index.html', root: '#view[data-drawn]', nav: 'nav.kx-tabs button' },
   { id: 'bullet', name: 'BULLET',    path: 'bullet/index.html', root: '#main .card', nav: '' },
+  { id: 'flow',   name: 'FLOW',      path: 'flow/index.html',   root: '#main .card', nav: '' },
   { id: 'sheet',  name: 'SHEET',     path: 'sheet/index.html',  root: '#main',     nav: '' },
   { id: 'system', name: 'NOTICE',    path: 'system/index.html', root: '#stage',    nav: '' },
   { id: 'arc',    name: 'ARC',       path: 'arc/index.html',    root: '#viewport', nav: '' , desk: true },
@@ -357,6 +358,7 @@ async function reviewApp(a) {
       }
     }
 
+    if (a.id === 'home') await reviewBoard(w);
     await reviewDesign(a, f);
 
     ok(a.id + ': nothing threw while being used', thrown.length === 0, thrown.slice(0, 2).join(' | '));
@@ -365,6 +367,30 @@ async function reviewApp(a) {
   } finally {
     if (f) f.remove();
   }
+}
+
+/* ── the home screen's widgets ──
+   Tom, 2026-11-05, after + WIDGET opened nothing for a day: "make sure that
+   glitch doesnt happen again". One level under the bug: every widget is the
+   shape the board reads (index.html, WIDGET_SHAPE), and + WIDGET, pressed,
+   lists every widget it should. */
+async function reviewBoard(w) {
+  let faults;
+  try { faults = w.eval('widgetFaults()'); } catch (e) { faults = ['could not be read: ' + e.message]; }
+  ok('home: every widget is the shape the board reads', !faults.length, faults.slice(0, 3).join(' | '));
+  let said = '';
+  try {
+    w.document.querySelector('#btnWidget').click();
+    await wait(250);
+    /* the list is lifted into a shared sheet, so it is found by its own class */
+    const boxes = w.document.querySelectorAll('.wpickbox'), box = boxes[boxes.length - 1];
+    const rows = box ? box.querySelectorAll('.wpick > .opt').length : 0;
+    const want = w.eval('Object.keys(WIDGETS).filter(k => !WIDGETS[k].hidden && widgetHere(WIDGETS[k])).length');
+    if (!box) said = 'the list never opened';
+    else if (rows < want) said = rows + ' rows for ' + want + ' widgets';
+    w.eval('closeModal()');
+  } catch (e) { said = e.message; }
+  ok('home: + WIDGET opens and lists every widget', !said, said);
 }
 
 /* ── the foundation, folded in ──
@@ -508,11 +534,12 @@ function reviewRows(Rec, Health) {
        browser had never held a check-in */ 'cfield cval cphoto checkin cmark cref cperson ' +
     /* The rest of CLAUDE.md's ownership table, missing until 2026-09-15 for
        the same reason: the test browser held none of them */
-    /* BLOCK */ 'rhythm ' + /* QUESTS */ 'project ' + /* TRAIN */ 'phase ' +
+    /* BLOCK */ 'rhythm ' + /* QUESTS */ 'project aim ' + /* TRAIN */ 'phase ' +
     /* LOG */ 'recap cell ' + /* SPEAK */ 'take topic ' + /* NOTICE */ 'msg ' + /* SHEET */ 'feat ' +
     /* MIX */ 'dose ' + /* COACH, missing from 1.0.0 */ 'cset cex cphase csession cprog ' +
     /* KITCHEN */ 'kcount kfood kplan kdish kskip ' + /* RECEIPTS, and KITCHEN on a client */ 'buy receipt alias ' +
-    /* every device's own note, shared/report.js, 2026-09-30 */ 'device')
+    /* every device's own note, shared/report.js, 2026-09-30 */ 'device ' +
+    /* what the iPhone sends, shared/phone.js, 2026-11-16 */ 'phone pplace papp')
     .split(' ');
   const strays = {};
   /* Live rows only. A tombstone is the memory of a row that has gone, and it

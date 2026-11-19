@@ -531,7 +531,53 @@ function localDate(ms) {
   const d = new Date(ms);
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
 }
+/* ── a row whose id names another type (2026-11-16) ──
+
+   A row's id is built from its type, date and key, and `byType` files it
+   under `type`. 769 of a COACH client's rows reached the PC's store as
+   `local|cset|...` typed `set` (and `cex` as `exercise`, `csession`,
+   `cexcat`), with the client's prefix gone from the key: exactly the copies
+   TRAIN's `?client=` adapter hands out (`back()` in train/index.html), which
+   keep the client's id and wear TRAIN's type. `Rec.all('set')` then counted
+   253 client sets as Tom's. They arrived whole while the store came up with
+   nearly nothing in it (14 to 16 Nov: Local Storage recreated, IndexedDB
+   failing on a full disk), so nothing stood in their way.
+
+   `merge` now refuses such a row (`fits`). This puts back any that are
+   already stored: the type is read off the id, and the key off the id too
+   when the id says one with a prefix the key has lost, but only when the
+   result rebuilds the id exactly; anything else is left alone. It is a
+   write, stamped now, so it reaches live sync and the copies elsewhere. */
+const fits = r => String(r.id).split('|')[1] === clean(r.type);
+let misfits = 0;
+function repairTypes() {
+  const fixed = [];
+  for (const id in rows) {
+    const r = rows[id];
+    if (fits(r)) continue;
+    const p = String(id).split('|');
+    if (p.length !== 4 || p[0] !== USER || p[2] !== clean(r.date || '')) continue;
+    const ck = clean(r.key);
+    let key = r.key;
+    if (p[3] !== ck) {
+      if (!(p[3].length > ck.length + 1 && p[3].slice(-(ck.length + 1)) === '-' + ck)) continue;
+      key = p[3].slice(0, p[3].length - ck.length - 1) + '|' + (r.key == null ? '' : r.key);
+    }
+    if (rowId(p[1], r.date, key) !== id) continue;
+    const t = now();
+    const out = Object.assign({}, r, { type: p[1], key: key, updated_at: t > r.updated_at ? t : r.updated_at });
+    write(out);
+    fixed.push(out);
+  }
+  if (fixed.length) {
+    console.warn('[records] put back the type of ' + fixed.length + ' row(s) whose id named another');
+    announce(fixed, true);
+  }
+  return fixed.length;
+}
+
 function repairDates() {
+  repairTypes();
   const bad = [];
   for (const id in rows) { const r = rows[id]; if (r.date && !DATE_OK.test(r.date)) bad.push(r); }
   if (!bad.length) return 0;
@@ -640,8 +686,41 @@ function trimFast(idbList, max, to) {
    Writes are unaffected — they queue on the same open and land when it does. */
 const IDBWAIT = 2500;
 let idbSlow = false, baseDone = false;
+/* ── the whole store, not just ready (2026-11-16) ──
+
+   Rec.ready fires after IDBWAIT on localStorage alone when IndexedDB is slow,
+   and that is right for a first paint and wrong for anything that must see
+   every row. On 2026-11-16 the desktop programs (STATUS.exe, SPEAK.exe, Main
+   Menu.exe, Backup.exe) shared one store and IndexedDB took longer than that
+   to answer the backup page; the page waited ten quiet seconds for live sync
+   and saved the fast half: 4,700 rows of 26,000, every set and most dated rows
+   absent. Nothing was lost, the file was just short.
+
+   `Rec.whole()` resolves once IndexedDB has really answered: the big half, and
+   every kept-out type something has asked for (it starts none itself, so call
+   Rec.need first for those). {ok: true} then, or {ok: false, why} when
+   IndexedDB failed outright, in which case what is in memory is all this page
+   will ever have. A device with no IndexedDB at all is whole on localStorage. */
+let bigState = 0, bigWhy = '';          /* 0 waiting, 1 answered, -1 failed */
+const wholeQ = [];
+function checkWhole() {
+  if (!wholeQ.length) return;
+  if (bigState === 0) return;
+  let ok = bigState === 1, why = bigWhy;
+  for (const t in LZ) {
+    const z = LZ[t];
+    if (!z.big) return;
+    if (z.big < 0) { ok = false; why = why || z.bigWhy || ('indexeddb could not read ' + t); }
+  }
+  const q = wholeQ.splice(0);
+  q.forEach(f => { try { f({ ok: ok, why: ok ? '' : why }); } catch (e) { console.warn('[records]', e); } });
+}
+function bigSettled(state, why) {
+  if (bigState !== 1) { bigState = state; if (state < 0) bigWhy = why || 'indexeddb failed'; }
+  checkWhole();
+}
 function hydrate() {
-  if (!IDB.available) { baseIn(); return; }
+  if (!IDB.available) { bigSettled(1); baseIn(); return; }
   let settled = false;
   const slow = setTimeout(() => {
     if (settled) return;
@@ -662,10 +741,12 @@ function hydrate() {
     if (changed) { repairDates(); announce([], false); }
     try { makeRoom(list); } catch (e) { console.warn('[records] trim', e); }
     baseIn();
+    bigSettled(1);
   }).catch(e => {
     settled = true; clearTimeout(slow); idbSlow = false;
     console.warn('[records] indexeddb unavailable, localStorage only', e);
     baseIn();
+    bigSettled(-1, 'indexeddb unavailable: ' + ((e && (e.message || e.name)) || 'no reason given'));
   });
 }
 function baseIn() { baseDone = true; maybeReady(); }
@@ -732,7 +813,7 @@ function touchAll(types) { (types && types.length ? types : lazyTypes()).forEach
 
 function lazyLoad(type) {
   if (LZ[type]) return LZ[type].p;
-  const z = LZ[type] = { state: 1, early: !hydrated, q: [], p: null };
+  const z = LZ[type] = { state: 1, early: !hydrated, q: [], p: null, big: 0 };
   z.p = new Promise(res => { z.res = res; });
   lazyRead(type, z);
   return z.p;
@@ -770,7 +851,7 @@ function lazyRead(type, z) {
     announce([], false);
     maybeReady();
   };
-  if (!IDB.available) { done(); return; }
+  if (!IDB.available) { z.big = 1; done(); checkWhole(); return; }
   let settled = false;
   const slow = setTimeout(() => {
     if (settled) return;
@@ -787,10 +868,13 @@ function lazyRead(type, z) {
     });
     moveOut(inLs, held);
     done();
+    z.big = 1; checkWhole();
   }).catch(e => {
     settled = true; clearTimeout(slow);
     console.warn('[records] indexeddb unavailable for ' + type + ', localStorage only', e);
     done();
+    if (z.big !== 1) { z.big = -1; z.bigWhy = 'indexeddb could not read ' + type + ': ' + ((e && (e.message || e.name)) || 'no reason given'); }
+    checkWhole();
   });
 }
 /* The fast half's copies of a kept-out type go once IndexedDB holds them at
@@ -843,6 +927,8 @@ const Rec = {
 
   /** how many rows this page could not save in either half */
   unkept() { return unkept; },
+  /** rows `merge` refused because their id names another type (repairTypes) */
+  misfits() { return misfits; },
   /** fn(count) on every row that could not be saved anywhere */
   onUnkept(fn) { if (typeof fn === 'function') unkeptFns.push(fn); },
 
@@ -867,6 +953,13 @@ const Rec = {
     readyQ.push(fn);
   },
   get hydrated() { return hydrated; },
+  /** Resolves once IndexedDB has really answered for the big half and every
+      kept-out type asked for so far: {ok: true}, or {ok: false, why} when it
+      failed. Rec.ready may fire before this on a slow IndexedDB; anything that
+      must see every row (a backup) waits on Rec.need() and then this. */
+  whole() {
+    return new Promise(res => { wholeQ.push(res); checkWhole(); });
+  },
   /** true when every page on this origin hears each write's rows through
       the channel: a served address with BroadcastChannel. A page's own poke
       to its neighbours is then only needed for a write with no rows. */
@@ -1037,6 +1130,10 @@ const Rec = {
     const changed = [];
     (incoming || []).forEach(r => {
       if (!r || !r.id || !r.type) return;
+      /* An id that names another type is a copy dressed as something it is
+         not (repairTypes, above). Filed under its `type` it would be read as
+         that type's row; refused, the stored row it copies stands. */
+      if (!fits(r)) { if (!misfits++) console.warn('[records] refused a row whose id names another type', r.id, r.type); return; }
       /* A kept-out type not in yet (KEPT OUT). A row another page on this
          device just wrote is stored already, so a page not holding the type
          lets it go; anything from outside waits for the stored copy. */

@@ -1,4 +1,4 @@
-/* shared/cloud.js — 0.2.4 — Firebase as a SECOND sync, beside the Google Sheet,
+/* shared/cloud.js — 0.2.12 — Firebase as a SECOND sync, beside the Google Sheet,
    and since 0.2.0 the trays a client and the coach send each other things by.
 
    Tom, 2026-09-20: "Keep the google sheet sync, I like it". So this is not a
@@ -124,6 +124,19 @@ var probed = null;
 function csave() { if (probed) return; try { localStorage.setItem(CKEY, JSON.stringify(cfg)); } catch (e) {} }
 cread();
 
+/* The one document that connects. Normally the top one. ROOM's wallpaper
+   (OUTER HEAVEN, an http page on this PC) frames the home screen one widget
+   at a time, so every suite page there is a frame and none is top: the
+   wallpaper names one of them with ?sync=1 and that one connects for the
+   rest, which share its rows through the store (2026-11-17). Only a frame
+   whose top is another site may do this, so the suite's own frames never
+   open a second connection. */
+var LEAD = (function () {
+  if (g.top === g) return true;
+  if (!/[?&]sync=1(&|$)/.test(g.location.search)) return false;
+  try { return !g.top.location.href; } catch (e) { return true; }
+})();
+
 /* Another frame pasted the config or signed in. Same reason the mirror does
    this: an app opened before the paste would otherwise answer "not set up" for
    the rest of the session. */
@@ -221,7 +234,7 @@ function onUnkept() {
   if (cfg.seen) { cfg.seen = ''; csave(); }
   note(UNKEPT, 0);
 }
-if (g.top === g && g.Rec && g.Rec.onUnkept) {
+if (LEAD && g.Rec && g.Rec.onUnkept) {
   g.Rec.onUnkept(onUnkept);
   if (unkeptNow()) onUnkept();
 }
@@ -323,8 +336,49 @@ function app() {
   /* Named, so a page that has its own default Firebase app for some other
      reason cannot collide with ours. */
   try { fb = g.firebase.app('motherbase'); }
-  catch (e) { fb = g.firebase.initializeApp(c, 'motherbase'); }
+  catch (e) { putBack(c); fb = g.firebase.initializeApp(c, 'motherbase'); }
   return fb;
+}
+
+/* ── the second copy of the sign-in (0.2.10) ──
+
+   Tom, 2026-11-16: "Do A as long as no security issues". Firebase keeps the
+   sign-in in IndexedDB, the same files as every row, and a power cut, a full
+   disk or a store too busy to answer can leave it unreadable at start; the
+   device then reads as signed out. So the account Firebase hands back is
+   also written to localStorage, `mb.signin`, a separate set of files. Before
+   Firebase starts, if its own localStorage slot is empty, the copy is put in
+   that slot: Firebase reads IndexedDB first, so a sign-in still there wins
+   and the copy is never used; with none there, Firebase takes the copy and
+   moves it back into IndexedDB itself.
+
+   Security: the copy holds what Firebase's own localStorage slot holds, on
+   the same origin, readable by exactly the scripts that can already read the
+   IndexedDB copy. It is never a row, never in a backup, a device note or a
+   log, and Sign out deletes it. A copy for another account or another
+   Firebase project is never put back. */
+var SKEY = 'mb.signin';
+var offered = false;   /* the copy was put in Firebase's slot this open */
+function fbKey(c) { return 'firebase:authUser:' + c.apiKey + ':motherbase'; }
+function keepSignIn(u) {
+  if (probe || !u || typeof u.toJSON !== 'function') return;
+  try { localStorage.setItem(SKEY, JSON.stringify(u.toJSON())); } catch (e) {}
+}
+function dropSignIn() { try { localStorage.removeItem(SKEY); } catch (e) {} }
+function putBack(c) {
+  if (probe || !cfg.on || !c || !c.apiKey) return;
+  try {
+    var s = localStorage.getItem(SKEY);
+    if (!s) return;
+    var j = JSON.parse(s);
+    if (!j || !j.uid || j.apiKey !== c.apiKey || j.appName !== 'motherbase') return;
+    if (cfg.uid && j.uid !== cfg.uid) return;
+    if (localStorage.getItem(fbKey(c))) return;
+    /* Put back on every open where Firebase's slot is empty, which is most
+       of them; Firebase deletes it again when IndexedDB answered. */
+    localStorage.setItem(fbKey(c), s);
+    offered = true;
+  } catch (e) {}
 }
 
 /* ── signing in ──
@@ -351,6 +405,7 @@ function signIn() {
   }).then(function (r) {
     var u = r && r.user;
     if (!u) throw new Error('signed in, but no account came back');
+    keepSignIn(u);
     cfg.uid = u.uid; cfg.email = u.email || ''; cfg.on = 1; cfg.lost = ''; csave();
     note('', 1);
     /* anything that waited for a sign-in goes now */
@@ -360,6 +415,7 @@ function signIn() {
 }
 
 function signOut() {
+  dropSignIn();
   stop();
   cfg.on = 0; cfg.uid = ''; cfg.email = ''; cfg.seen = ''; cfg.pushed = ''; cfg.lost = ''; csave();
   var done = Promise.resolve();
@@ -684,7 +740,7 @@ function pending() {
    left waiting for signal tries again in a minute, then every five. */
 var autoT = null, autoGap = 60000;
 function autoFlush() {
-  if (g.top !== g || isFile()) return;
+  if (!LEAD || isFile()) return;
   if (autoT) { clearTimeout(autoT); autoT = null; }
   if (!probe && !cfg.on) return;
   pending().then(function (l) {
@@ -814,6 +870,17 @@ function rules(coach) {
    times and returns early when nothing moved, so re-delivery costs one
    comparison and removes the off-by-one that an exclusive boundary would need
    to get right in a place where getting it wrong loses a row.              */
+/* ── one merge per answer, 0.2.12 (2026-11-17) ──
+
+   The SDK hands over every row of one answer in one synchronous loop, one
+   child event each. Until 0.2.12 each was merged on its own, so each one
+   announced, and every page redrew once per row: 1,023 rows that had
+   arrived overnight froze the home screen in Chrome for 116 seconds, at
+   about 113ms a redraw (measured 2026-11-17, Tom: "why does motherbase take
+   so long to open"). Rows now gather and go into ONE `Rec.merge` as soon as
+   the loop ends, or before the answer's value event is acted on, so one
+   answer is one announce, one redraw and one save of `seen`. */
+var inbox = [], inboxT = 0;
 function onRow(snap) {
   var v = null;
   try { v = snap.val(); } catch (e) {}
@@ -822,15 +889,27 @@ function onRow(snap) {
      payload was only those, such as BLOCK's `{v: []}`, comes down with no
      payload at all, and an app reading a field off it throws (2026-09-25). */
   if (v.payload == null && !v.deleted) v.payload = {};
+  inbox.push(v);
+  if (!inboxT) inboxT = setTimeout(flushRows, 0);
+}
+function flushRows() {
+  clearTimeout(inboxT); inboxT = 0;
+  if (!inbox.length) return;
+  var list = inbox; inbox = [];
   var R = store(), n = 0;
-  try { n = R ? R.merge([v]) : 0; } catch (e) { return; }
-  var at = v.updated_at || '';
-  cloudAt[v.id] = at;
-  /* The cloud holds an older copy than this device: something wrote over a
-     newer one. Ours goes back up. */
-  var mine = mineOf(v.id);
-  if (mine && (mine.updated_at || '') > at) { redo[v.id] = 1; nudge(); }
-  if (at && at > (cfg.seen || '') && at <= soon() && !unkeptNow()) { cfg.seen = at; csave(); }
+  try { n = R ? R.merge(list) : 0; } catch (e) { return; }
+  var seen = cfg.seen || '', top = soon(), unkept = unkeptNow(), resend = 0;
+  list.forEach(function (v) {
+    var at = v.updated_at || '';
+    cloudAt[v.id] = at;
+    /* The cloud holds an older copy than this device: something wrote over a
+       newer one. Ours goes back up. */
+    var mine = mineOf(v.id);
+    if (mine && (mine.updated_at || '') > at) { redo[v.id] = 1; resend = 1; }
+    if (at && at > seen && at <= top && !unkept) seen = at;
+  });
+  if (seen !== (cfg.seen || '')) { cfg.seen = seen; csave(); }
+  if (resend) nudge();
   if (n) { last.got += n; landed('got'); }
 }
 /* This device's own copy of a row, tombstone or not. */
@@ -864,13 +943,16 @@ function listen() {
   /* A value event comes after every child event of the same answer, so by
      now each row the cloud holds in the window has been merged. */
   q.once('value').then(function () {
+    flushRows();
     if (q !== query || !started) return;
     loaded = true; say();
+    mark('first');
     /* Anything written while this device was away goes up now. */
-    push('open').then(function () { if (due()) check(); });
+    push('open').then(function () { mark('sent', 1); if (due()) check(); });
   }, function () {});
 }
 function unlisten() {
+  flushRows();
   try { if (query) { query.off('child_added', onRow); query.off('child_changed', onRow); query.off('child_removed', onGone); } } catch (e) {}
   query = null;
 }
@@ -879,18 +961,21 @@ function start() {
   if (started) return Promise.resolve(false);
   if (!probe) {
     if (!cfg.on || !cfg.cfg) return Promise.resolve(false);
-    if (g.top !== g) return Promise.resolve(false);   /* one connection per document */
+    if (!LEAD) return Promise.resolve(false);   /* one connection per document */
     if (missing(cfg.cfg)) return Promise.resolve(false);
   }
   /* The signed-in account is the source of truth for the uid, not the one we
      wrote down: a token can expire and a stored uid would then address a
      path nothing can read. The smoke checks hand in a stand-in instead. */
+  took = {};
   var found = probe ? Promise.resolve().then(probe) : loadSDK().then(function () {
+    mark('sdk');
     auth = g.firebase.auth(app());
     return new Promise(function (res) {
       var off = auth.onAuthStateChanged(function (u) { off(); res(u); });
     });
   }).then(function (u) {
+    mark('auth');
     return u ? { uid: u.uid, email: u.email || '', db: g.firebase.database(app()) } : null;
   });
   /* 0.2.3: TRAIN's sets are kept out of the open (records.js, KEPT OUT). A
@@ -899,7 +984,18 @@ function start() {
      smoke checks' stand-in store has no `need` and goes straight on. */
   found = found.then(function (me) {
     var R = store();
-    return me && !probe && R && R.need ? R.need().then(function () { return me; }) : me;
+    return me && !probe && R && R.need ? R.need().then(function () { mark('need'); return me; }) : me;
+  });
+  /* 0.2.9 (2026-11-16): and until IndexedDB has really answered. Rec.ready
+     and Rec.need go ahead on localStorage alone after 2.5 s, and the desktop
+     programs' shared store took far longer that morning; a row heard from the
+     cloud then met no copy here and was taken whole, over a newer one still
+     on its way in. A minute at most, then on as before. */
+  found = found.then(function (me) {
+    var R = store();
+    if (!me || probe || !R || !R.whole) return me;
+    return Promise.race([R.whole(), new Promise(function (res) { setTimeout(res, 60000); })])
+      .then(function () { mark('whole'); return me; }, function () { return me; });
   });
   return found.then(function (me) {
     if (!me) { signedOut(); return false; }
@@ -935,6 +1031,24 @@ function start() {
   }).catch(function (e) { note(e && e.message ? e.message : 'could not start', 0); return false; });
 }
 
+/* ── how long a start took, step by step (0.2.11, 2026-11-16) ──
+   Tom: "keep TRAIN to caring about the last month". Before changing what a
+   start loads, this says where its time goes: milliseconds since the page was
+   asked for when the library was in (sdk), Google answered (auth), TRAIN's
+   sets were in (need), IndexedDB had answered (whole), the cloud's first
+   answer was merged (first) and the first send was done (sent). The first
+   step of each start only; kept on `mb.cloud` as `took`. */
+var took = {};
+function mark(k, save) {
+  if (probe || took[k] != null) return;
+  try { took[k] = Math.round(g.performance.now()); } catch (e) { return; }
+  if (save) {
+    cfg.took = Object.keys(took).map(function (n) { return n + ' ' + took[n]; }).join(', ') +
+      ' ms, ' + new Date().toLocaleString();
+    csave();
+  }
+}
+
 function onErr(e) {
   /* A permission error here means the rules are not the ones in the setup
      note, and it is worth saying which because it is the one failure with an
@@ -964,6 +1078,9 @@ function onConn(s) {
    in the suite signed them out: the sign-in was simply gone. Said in words
    that name the one fix. */
 function signedOut() {
+  /* Signed out with the second copy on offer: Google refused it too (watched
+     2026-11-16 with a made-up copy: 400 INVALID_ID_TOKEN), so it goes. */
+  if (offered) { dropSignIn(); offered = false; }
   if (cfg.on && !cfg.lost) { cfg.lost = new Date().toLocaleString(); cfg.lostKept = keptIn(); csave(); }
   note('Google has signed this device out' + (cfg.lost ? ' (noticed ' + cfg.lost + ')' : '') +
     '. Nothing syncs from here until you sign in again', 0);
@@ -1010,6 +1127,8 @@ function watch() {
     stop();
     signedOut();
   });
+  /* the second copy follows every token Firebase is handed, once now */
+  auth.onIdTokenChanged(function (u) { if (u) keepSignIn(u); });
 }
 
 function stop() {
@@ -1100,6 +1219,8 @@ function write(patch) {
 
 function push(why) {
   if (!started || !db || !uid) return Promise.resolve(0);
+  /* rows heard but not yet merged go in first, so a push sees them */
+  flushRows();
   /* Not before the cloud has answered, and never blind. The top of this file
      says why; the push runs by itself once both are true. */
   if (!loaded || !conn) { owed = true; return Promise.resolve(0); }
@@ -1348,7 +1469,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.2.7',
+  VERSION: '0.2.11',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
@@ -1406,7 +1527,7 @@ var Cloud = {
     csave(); say();
     return '';
   },
-  forget: function () { stop(); fb = null; cfg = { cfg: BUILT_IN, on: 0, uid: '', email: '', at: '', sentAt: '', gotAt: '', lost: '', pushed: '', seen: '' }; csave(); say(); },
+  forget: function () { dropSignIn(); stop(); fb = null; cfg = { cfg: BUILT_IN, on: 0, uid: '', email: '', at: '', sentAt: '', gotAt: '', lost: '', pushed: '', seen: '' }; csave(); say(); },
 
   signIn: signIn,
   signOut: signOut,
@@ -1417,6 +1538,9 @@ var Cloud = {
 
   /** the account id the database sees, for pasting into the drop rules */
   who: function () { return account().then(function (me) { return { uid: me.uid, email: me.email }; }); },
+  /** the signed-in account and its database, for phone.js's inbox (2026-11-16).
+      Rejects with the plain reason when there is none, like everything here. */
+  db: function () { return account(); },
   /** 0.1: one parcel in the client's single slot on the shelf. Kept for the
       smoke checks and for anything older; apps send with `post` now. */
   send: put,

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.29, 2026-10-23">
+<meta name="mb-version" content="1.0.32, 2026-11-18">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -21,6 +21,7 @@
 <script src="../shared/creatures.js"></script>
 <script src="../shared/chart.js"></script>
 <script src="../shared/range.js"></script>
+<script src="../shared/e1rm.js"></script>
 <style>
 /* COACH, built 2026-09-22. Tom: "Can coach look like a pokemon box on Pc?"
    and "Optimize COACH to make use of iPad and desktop space".
@@ -355,8 +356,10 @@ const opt = (k, d) => { const v = Rec.setting(APP.id, k); return v == null ? d :
 const unit = () => opt('unit', 'kg');
 const KG_LB = 2.20462;
 const show = kg => kg == null || kg === '' ? '' : String(Math.round((unit() === 'lb' ? kg * KG_LB : kg) * 10) / 10);
-const toKg = v => { const n = parseFloat(v); if (!(n >= 0)) return null; return Math.round((unit() === 'lb' ? n / KG_LB : n) * 1000) / 1000; };
-const e1 = (kg, r) => kg > 0 && r > 0 && r <= 12 ? kg * (1 + r / 30) : 0;
+/* a weight may be below zero, -20 on a pull-up being 20 of help (TRAIN 1.0.85) */
+const toKg = v => { const n = parseFloat(v); if (!isFinite(n)) return null; return Math.round((unit() === 'lb' ? n / KG_LB : n) * 1000) / 1000; };
+/* the suite's one estimated 1RM (shared/e1rm.js, Brzycki); sets over 12 reps still left out here */
+const e1 = (kg, r, rir) => kg > 0 && r > 0 && r <= 12 ? E1RM.calc(kg, r, rir) : 0;
 
 /* ── clients ── */
 const people = () => Rec.map('cperson');
@@ -370,7 +373,50 @@ const own = (type, pid) => Rec.all(type).filter(r => String(r.key).indexOf(pid +
    show in the week, the sessions, strength, the range, or bill. */
 const setCounts = s => !s || !s.plan || !!s.done;
 const setsOf = pid => own('cset', pid).filter(r => setCounts(r.payload));
-const exOf = pid => { const m = {}; own('cex', pid).forEach(r => { m[r.key.slice(pid.length + 1)] = r.payload; }); return m; };
+/* `below`: a lift with any set below zero is read against bodyweight, as
+   TRAIN.goesBelow does (TRAIN 1.0.85). A copy, never the store's payload. */
+const exOf = pid => {
+  const m = {}, neg = {};
+  own('cset', pid).forEach(r => { if (r.payload && (+r.payload.kg || 0) < 0) neg[r.payload.ex] = 1; });
+  own('cex', pid).forEach(r => { const id = r.key.slice(pid.length + 1);
+    m[id] = neg[id] ? Object.assign({}, r.payload, { below: 1 }) : r.payload; });
+  return m;
+};
+const goesBelow = x => isAssisted(x) || !!(x && x.below);
+/* An assisted lift (TRAIN 1.0.83): the weight logged is the machine's help,
+   so less is stronger. TRAIN's rule: the name says "assist" unless the
+   exercise's own switch (`assist` 1 or 0) says otherwise. What the body
+   moved is the client's weight less the help, from CHECK IN's `cval`
+   <pid>|weight in their unit; with no weigh-in an assisted set has no
+   estimated 1RM and adds nothing to volume. Records come from TRAIN's own
+   `pr` flag, which TRAIN works out the right way up. */
+const isAssisted = x => !!x && (x.assist === 1 || x.assist === 0 ? x.assist === 1 : /assist/i.test(x.name || ''));
+const bwList = pid => {
+  const u = (Rec.get('cperson', null, pid) || {}).unit || 'lb', want = pid + '|weight';
+  return Rec.all('cval').filter(r => r.key === want && r.date && r.payload && +r.payload.v > 0)
+    .map(r => [r.date, u === 'lb' ? +r.payload.v / KG_LB : +r.payload.v])
+    .sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+};
+const bwOn = (L, date) => { let v = null; for (const x of L) { if (x[0] <= date || v === null) v = x[1]; if (x[0] > date) break; } return v; };
+/* range.js multiplies weight by reps and knows no exercise names, so an
+   assisted set goes in as what the body moved, or nothing */
+const rangeSets = pid => {
+  const ex = exOf(pid), L = bwList(pid);
+  return setsOf(pid).map(r => {
+    const s = r.payload || {};
+    if (!goesBelow(ex[s.ex])) return r;
+    return Object.assign({}, r, { payload: Object.assign({}, s, { kg: loadOf(ex[s.ex], s, r.date, L) || 0 }) });
+  });
+};
+/* the weight the body moved; null for an assisted set, or one on a lift
+   that goes below zero, with no bodyweight. Below zero: bodyweight plus the
+   number, so -20 is bodyweight less 20 (TRAIN 1.0.85). */
+const loadOf = (x, s, date, L) => {
+  const kg = +s.kg || 0, a = isAssisted(x);
+  if (!a && !(x && x.below)) return kg;
+  const bw = bwOn(L, date);
+  return bw ? Math.max(0, a ? bw - kg : bw + kg) : null;
+};
 
 /* ── a client's check-ins ──
    CHECK IN keys a client's answers and photos `pid|field`, under the same
@@ -972,11 +1018,11 @@ function drawBox(col) {
 const warmSet = s => s.warm === 1 || s.warm === true ? true : s.warm === 0 || s.warm === false ? false
   : !!s.note && /\bwarm[ -]?ups?\b|\bwu\b/i.test(s.note);
 function sessionsOf(pid) {
-  const ex = exOf(pid), by = {};
+  const ex = exOf(pid), by = {}, bwL = bwList(pid);
   setsOf(pid).forEach(r => {
     const s = r.payload; if (warmSet(s)) return;
     const d = by[r.date] || (by[r.date] = { date: r.date, vol: 0, sets: 0, ex: [], lifts: [], byEx: {} });
-    d.vol += (+s.kg || 0) * (+s.r || 0);
+    d.vol += (loadOf(ex[s.ex], s, r.date, bwL) || 0) * (+s.r || 0);
     d.sets++;
     const nm = (ex[s.ex] || {}).name || 'Exercise';
     let L = d.byEx[s.ex];
@@ -1005,13 +1051,13 @@ function sessionsOf(pid) {
   });
 }
 function liftsOf(pid) {
-  const ex = exOf(pid), by = {};
+  const ex = exOf(pid), by = {}, bwL = bwList(pid);
   setsOf(pid).forEach(r => {
-    const s = r.payload; if (warmSet(s) || !(s.kg > 0) || !(s.r > 0)) return;
+    const s = r.payload; if (warmSet(s) || (!(+s.kg) && !goesBelow(ex[s.ex])) || !(s.r > 0)) return;
     const x = by[s.ex] || (by[s.ex] = { name: (ex[s.ex] || {}).name || 'Exercise', best: 0, bs: null, days: {}, last: '' });
     x.days[r.date] = 1;
     if (r.date > x.last) x.last = r.date;
-    const v = e1(s.kg, s.r);
+    const v = e1(loadOf(ex[s.ex], s, r.date, bwL), s.r, s.rir);
     if (v > x.best) { x.best = v; x.bs = s; }
   });
   return Object.values(by).filter(x => x.best > 0)
@@ -1088,11 +1134,11 @@ function blockLine(pid) {
 
 let bkAt = -1, bkFor = '', bkN = 0;
 function blockLifts(pid, a, z) {
-  const ex = exOf(pid), by = {};
+  const ex = exOf(pid), by = {}, bwL = bwList(pid);
   setsOf(pid).forEach(r => {
     if (r.date < a || r.date > z) return;
     const s = r.payload; if (warmSet(s)) return;
-    const v = e1(s.kg, s.r); if (!v) return;
+    const v = e1(loadOf(ex[s.ex], s, r.date, bwL), s.r, s.rir); if (!v) return;
     const x = by[s.ex] || (by[s.ex] = { name: (ex[s.ex] || {}).name || 'Exercise', days: {} });
     const d = x.days[r.date]; if (!d || v > d.v) x.days[r.date] = { v: v, kg: s.kg, r: s.r };
   });
@@ -1284,11 +1330,11 @@ function drawWeek(col, pid, ss) {
    they are out of the volume. */
 function setText(s) {
   const kg = +s.kg || 0, r = +s.r || 0;
-  if (kg > 0 && r > 0) return show(kg) + '×' + r;
+  if (kg !== 0 && r > 0) return show(kg) + '×' + r;
   if (r > 0) return r + ' reps';
   if (s.dist > 0) return (Math.round(s.dist * 100) / 100) + ' km';
   if (s.dur > 0) return Math.round(s.dur / 60) + ' min';
-  return kg > 0 ? show(kg) + ' ' + unit() : '—';
+  return kg !== 0 ? show(kg) + ' ' + unit() : '—';
 }
 function drawRecent(col, pid, ss) {
   const card = document.createElement('div'); card.className = 'card';
@@ -1885,7 +1931,7 @@ function drawClientIn(put) {
     const rc = document.createElement('div'); rc.className = 'card range';
     /* the year at a glance first (2026-10-18), not under everything else */
     put('range').appendChild(rc);
-    Range.mount(rc, Range.fromRows(setsOf(sel), own('cphase', sel), Day.today()), WIDE.matches ? 140 : 200, {
+    Range.mount(rc, Range.fromRows(rangeSets(sel), own('cphase', sel), Day.today()), WIDE.matches ? 140 : 200, {
       print: opt('rangePrint'), perDay: 2,
       volume: kg => { const v = +show(kg) || 0; return (v >= 1e6 ? Math.round(v / 1e5) / 10 + 'M' : v >= 1e5 ? Math.round(v / 1e3) + 'k' : Math.round(v).toLocaleString()) + ' ' + unit(); },
       onChange: o => { if (o.print !== opt('rangePrint')) Rec.setting(APP.id, 'rangePrint', o.print); },

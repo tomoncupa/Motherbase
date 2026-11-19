@@ -49,8 +49,8 @@ Free-Exe $out
 & $csc -nologo -target:winexe -out:"$out" -win32icon:"$dir\status.ico" `
   -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
   -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
-  -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" `
-  (Join-Path $dir 'StatusApp.cs') (Join-Path $dir 'KeyBox.cs') (Join-Path $dir 'Hosted.cs') (Join-Path $dir 'Updater.cs')
+  -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" -reference:System.Web.Extensions.dll `
+  (Join-Path $dir 'StatusApp.cs') (Join-Path $dir 'FoodGuess.cs') (Join-Path $dir 'KeyBox.cs') (Join-Path $dir 'Hosted.cs') (Join-Path $dir 'Updater.cs')
 
 if ($LASTEXITCODE -ne 0) { Write-Output "Build failed."; exit $LASTEXITCODE }
 
@@ -71,6 +71,18 @@ Free-Exe $menu
 
 if ($LASTEXITCODE -ne 0) { Write-Output "Main Menu build failed."; exit $LASTEXITCODE }
 
+# ── SPEAK.exe, the practice widget on top of everything. Tom only, so not in Setup ──
+$speak = Join-Path $dir 'SPEAK.exe'
+Free-Exe $speak
+& $csc -nologo -target:winexe -out:"$speak" -win32icon:"$dir\speak.ico" `
+  -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
+  -reference:System.Web.Extensions.dll `
+  -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
+  -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" `
+  (Join-Path $dir 'SpeakApp.cs') (Join-Path $dir 'SpeakRefine.cs') (Join-Path $dir 'Hosted.cs')
+
+if ($LASTEXITCODE -ne 0) { Write-Output "SPEAK build failed."; exit $LASTEXITCODE }
+
 # ── the nightly backup, started by Windows, never seen ──
 $backup = Join-Path $dir 'Backup.exe'
 & $csc -nologo -target:winexe -out:"$backup" `
@@ -84,7 +96,10 @@ if ($LASTEXITCODE -ne 0) { Write-Output "Backup build failed."; exit $LASTEXITCO
 # ── the package for someone else: one Setup.exe holding both programs ──
 # Tom, 2026-10-27. Everything it installs is built into it, so it is one file
 # to send. It installs a copy that opens the client address (Setup.cs).
-$setup = Join-Path $dir 'Motherbase Setup.exe'
+# Named for the day it was built (Tom, 2026-11-04: "Date the file name"), so
+# a file sent or downloaded says how new it is. Only the newest is kept.
+Get-ChildItem $dir -Filter 'Motherbase Setup*.exe' | Remove-Item -Force
+$setup = Join-Path $dir ('Motherbase Setup ' + (Get-Date -Format 'yyyy-MM-dd') + '.exe')
 $res = @()
 foreach ($f in @('STATUS.exe','Main Menu.exe','setup.html')) { $res += "-resource:$(Join-Path $dir $f),$f" }
 foreach ($f in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.WinForms.dll','WebView2Loader.dll')) { $res += "-resource:$(Join-Path $lib $f),$f" }
@@ -97,7 +112,8 @@ if ($LASTEXITCODE -ne 0) { Write-Output "Setup build failed."; exit $LASTEXITCOD
 Write-Output "Built:"
 Write-Output "  $out"
 Write-Output "  $menu"
+Write-Output "  $speak"
 Write-Output "  $backup"
 Write-Output "  $setup"
 Write-Output ""
-Write-Output "Double click it. It puts an icon in the tray, next to the clock."
+Write-Output "Double click it. STATUS opens as the widget, with its button on the taskbar."

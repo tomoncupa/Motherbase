@@ -34,7 +34,15 @@ are holding a stale copy of whatever you just changed.
 |---|---|---|
 | `records.js` | The store. Rows, merge, subscriptions. | Highest. Holds his history. |
 | `day.js` | One definition of "today" for the whole suite. | High. Everything dates through it. |
-| `journal.js` | One journal line: kinds, the day it shows on, typed times, ticking and repeats. Read by STATUS, LOG, QUESTS and the home screen. Since 2026-09-24 `dedupe()` deletes extra copies of a made-once todo (`wealth-bill-*`, `arc-r-*`) found on more than one date, keeping a ticked one else the earliest; runs on `Rec.ready` and at most once a minute from `notes()`, so a device that never opens WEALTH is cleaned too. | High. It writes STATUS's `note` rows. |
+| `journal.js` | One journal line: kinds, the day it shows on, typed times, ticking and repeats. Read by STATUS, LOG, QUESTS and the home screen. Since 2026-09-24 `dedupe()` deletes extra copies of a made-once todo (`wealth-bill-*`, `arc-r-*`) found on more than one date, keeping a ticked one else the earliest; runs on `Rec.ready` and at most once a minute from `notes()`, so a device that never opens WEALTH is cleaned too. Since 2026-11-17 `filterShows` is QUESTS's Today filter (`quest.todayFilter`), read by QUESTS and HOME's NEXT card. | High. It writes STATUS's `note` rows. |
+| `dose.js` | How much of a tracked thing was taken, and when: readings, food, journal lines and BLOCK ticks, by a HOME HALF-LIFE tracker's rules. HOME's card and STATUS's tiles both read it (2026-10-30). A meal counts at the time typed on it (`at`), else when logged (2026-11-09). Eight `dose:` smoke checks through a stand-in store. | Medium. Two screens read it; it writes nothing. |
+| `grade.js` | The day's letter: every pillar's ladder and the average, read from STATUS's settings (`status.pillars`, `standards`, `targets`, `kcalDir`, `countCal`). STATUS's `dayScore` and HOME's DAY PLAN card both ask `Grade.day` (2026-11-03). Since 1.1.0 (2026-11-04) `Grade.stepPlan` splits the steps left to S over DAY PLAN's walks still to come, after the passive steps still to come (`lifeos.steplan`), and `Grade.toS` says how far each pillar is from its S; STATUS's widget and DAY PLAN read them. | Medium. Two screens read it; it writes nothing. |
+| `goals.js` | A QUESTS goal's week: the call (On track, Adjust, Off track from days since a linked task was done, 7 and 21), his own call per week (`marks`), the last 6 weeks' counts, "Day X of Y", and the one fix (`next`). QUESTS's Goals screen and HOME's THIS WEEK card both ask it (2026-11-16). `mark` and `toToday` are its two writes. Since the same day a goal may be fed by data (`aim.src`: TRAIN sessions a week, a lift's estimated 1RM, a STATUS measure, a BLOCK habit's days a week), read with TRAIN's counting and warmup rules. Six `goals:` smoke checks through a stand-in store. | Medium. Two screens read it; it writes only on a press. |
+| `chapter.js` | A new chapter (Tom, 2026-11-16): `chapter` rows `{name, start, from, t}`, undated; a chapter runs until the next starts, like a TRAIN block. `from[app]` is the day that app counts from (before `start` is allowed, `'all'` keeps everything). `Chapter.from(app)` is what an app reads; `Chapter.APPS` lists the apps that read from a new chapter, and the New chapter sheet offers only those: QUESTS, STATUS (1.0.98, its rank and days-hit counts, from the later of the chapter and its fresh start) and BLOCK (1.0.26, streaks, habit streaks and anything owed). TRAIN does not: it counts in training blocks (Tom, 2026-11-16). An app that adopts it adds its one line to `APPS`, a foundation edit Tom approved for this. Two `chapter:` smoke checks. | Medium. It moves where counting starts; it deletes nothing. |
+| `muscles.js` | The master list (Tom, 2026-11-16): which muscles a movement trains and how much, a share 0 to 1 per muscle (chin up Biceps 1, Lats 0.8, his call; 1 and 0.5 from Pelland 2025, the rest judgement). `Muscles.of(name)` gives `{rule, share, main, group}`; first matching rule wins, so a specific name sits above the general one. `norm` spells out shorthand (SLDL, RDL, OHP...) and strips machine brands (LGNDRY alone matches nothing). `PREHAB` rules file under TRAIN's Prehab group. `Muscles.forLift(name, own, tag, group, also)` is the one order every app reads a lift by: its own `exercise.mus`, FORGE's `ftag.mus`, the list, its TRAIN group. TRAIN (`musOf`, 1.0.91) and FORGE (`musShare`, 1.0.6) ask it; COACH shows a client inside TRAIN, so it agrees. `slotOf` colours a muscle by region. 2,909 name variants and his 337 lifts tested in Playwright; four `muscles:` smoke checks. | Medium. Counting only; it writes nothing. |
+| `e1rm.js` | The one estimated 1RM (decision D4, 2026-11-18): Brzycki, `kg x 36 / (37 - reps)`, reps in reserve added when the set carries them, reps counted at most 12. `E1RM.calc(kg, reps, rir)`, `E1RM.weightFor(one, n)` for a rep-max table. TRAIN (`TRAIN.e1rm`, its calculator), HOME's recovery map, COACH and `goals.js` all ask it; before it HOME and COACH used Epley. FORM's comparison of several formulas is a different job and stays. Computed on the fly, never stored, and not the record rule. One `e1rm:` smoke check. | Medium. Every 1RM on screen moves with it. |
+| `muscle-key.js` | One key over every muscle list (decision D3, 2026-11-18): for each of the 27, its FMA ID where Wikidata confirms one (null for groups and parts, `part` lists the named muscles), heading, HOME body-map part, Automagic Calculator group, and the AnaTOMy ids (`data/muscles.json` and the 66-muscle body model) that roll up into it. HOME's body map reads its parts and big muscles from it (`homeMap`, `HOME_BIG`). Automagic and AnaTOMy are mapped here, not edited. Two `muscle key:` smoke checks, one pinning HOME's old hand-written map. | Low. HOME's map reads it; it writes nothing. |
+| `flow.js` | A day planned as branches (Tom, 2026-11-17, from BLOCK): `flow`, `fbox`, `farrow`, `fwalk` rows; where he is (`here`), every way out, `reach` (step, tick for a green box, STATUS entry via `Journal.add`, with an undo), times ahead from arrow gaps, counts, look-back, `noWayBack`, the floor (`floorMet`, read by BLOCK's streak) and the sleep suggestion from STATUS's `sleep` reading. BLOCK's Flow tab, HOME's FLOW card and STATUS's widget all follow it. Since 0.2.0 (2026-11-18) `Flow.card(host, {fid, quiet, onPick, empty})` is the travel card HOME's FLOW card and the FLOW phone app draw: where he is on top, two levels below, travel to look, I'M HERE reaches every block on the way; its CSS is injected once (`mb-flow-card-css`, classes `flc-`). Since 0.3.0 blocks keep the golden ratio and `Flow.fit(el, max, min)` shrinks words to fit (BLOCK's chart uses it too); `Flow.note(fid, text, kind)` writes a STATUS bullet and keeps it on the walk's last step (`n`), shown in the top block. 0.3.1: `Flow.sample('day' | '2020')` makes a sample flow (the day starts at How did you wake up?); `Flow.note` writes an Entry stamped with the minute it was typed. Added from a BLOCK session at Tom's ask; a new file, nothing existing changed. Four `flow:` smoke checks through a stand-in store. | Medium. It writes ticks and journal entries on a pick. |
 | `skins.js` `skins.json` | Themes, and the colour layer on top. | Medium. Cosmetic but wide. |
 | `mobile.js` | The touch layer: sheets, swipes, keyboard, back stack, haptics, safe areas. | Medium. Every app's feel. |
 | `sound.js` | Sound themes and instruments, synthesised. | Low. |
@@ -46,7 +54,8 @@ are holding a stale copy of whatever you just changed.
 | `health.js` | Answers "is my data okay". | Low. |
 | `demo.js` | The DEMO's made-up person and its DEMO tab. The storage switch itself is the first thing in `skins.js`. Fetched only in the demo. | Low. It writes only inside the demo's own namespace. |
 | `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
-| `claude.js` | The CLAUDE panel, added 2026-10-04: a gold tab in Main Menu.exe only (the window injects it; without `chrome.webview` it returns). Ask about the rows, or log by talking. Hands claude.exe a slimmed copy of every row as files; applies Claude's writes here (Journal.add, Rec.set for new rows, Rec.patch for changes), each with Undo; ticks Training after sets like TRAIN.assertTick. Never writes `device`, `setting`, `skin`, pictures or `brief`. | Medium. It writes rows on what Claude says, each shown with Undo. |
+| `phone.js` | What the iPhone's Shortcut sends (2026-11-16): claims each parcel in LIVE SYNC's `phone/<code>` inbox and writes `ev` steps and sleep, `pplace`, `papp`; draws YOUR IPHONE under LIVE SYNC. Needs `Cloud.db()` (cloud.js 0.2.8) and the `phone` rule in `CLOUD.md`. Eight `phone:` smoke checks drive the reader with no database. | Medium. It writes STATUS readings. |
+| `claude.js` | The CLAUDE panel, added 2026-10-04: a gold tab in Main Menu.exe only (the window injects it; without `chrome.webview` it returns). Ask about the rows, or log by talking. Hands claude.exe a slimmed copy of every row as files; applies Claude's writes here (Journal.add, Rec.set for new rows, Rec.patch for changes), each with Undo; ticks Training after sets like TRAIN.assertTick. Never writes `device`, `setting`, `skin`, pictures or `brief`. 1.1.2 (2026-11-16): a `note` todo may carry `due` and `aim` (an aim that exists), and the prompt has "Planning a week" for THIS WEEK's PLAN WITH CLAUDE. 1.1.0 (2026-11-04): `MBClaude.ask(text)` opens the panel and asks, for the home screen's Plan the day; two more writes, `plan` (one DAY PLAN time, the card's own row shape) and `steps` (`lifeos.steplan`, the one setting it may write), both with Undo. | Medium. It writes rows on what Claude says, each shown with Undo. |
 | `boot.js` | The start screen on the home screen and the phone apps. | Low. Writes nothing but one sessionStorage flag. |
 | `_smoke.html` | 424 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
@@ -188,6 +197,11 @@ story that fits the device row.
   `catch-up:` smoke checks run the real sw.js against a stand-in cache.
 - Still only proved in Playwright. iOS's resume and `visibilitychange` are
   the phone's to show.
+- **Ctrl+R and F5** (2026-11-16, Tom: "why do we have to open twice?"): a
+  plain reload is one more open to sw.js and got the kept copy, and
+  STATUS.exe has the browser's reload key off. `mobile.js` `wireReload` now
+  catches the key in every page and frame and reopens the top page with
+  `?fresh=1`. sw-check's 11th step; the old code fails it.
 
 ## Live sync waking up (`cloud.js` 0.2.7, 2026-10-18)
 
@@ -400,6 +414,77 @@ should be ON the mountains."
   everyone a default Block 1"): training before the first block, or all of
   it with none, is a mountain named Block 1. Drawn only (`auto: true` in
   `layout`), never a row; `Range.blocksOf` does not include it.
+
+## A row whose id names another type (2026-11-16, `records.js`)
+
+The PC's store held 769 COACH client rows as `local|cset|...` typed `set`
+(and `cex` as `exercise`, `csession` as `session`, `cexcat` as `excat`), the
+client's prefix gone from the key, `updated_at` 8 and 9 Oct. Every file up
+to 14 Nov 23:46 was clean; every 16 Nov file had them. `Rec.all('set')`
+counted 253 client sets as Tom's. They are the copies TRAIN's `?client=`
+adapter hands out (`back()`, train/index.html), which keep the client's id.
+They reached the PC whole while its store came up near empty (Local Storage
+recreated 14 Nov 21:45, IndexedDB failing on the full disk), most likely
+from live sync's copy, so no stored row stood against them. **Not proved:**
+how such copies left a client TRAIN on 8 and 9 Oct; COACH frames it, and
+cloud.js, the sheet and claude.js all stay out of frames.
+
+- **`merge` refuses** a row whose id's type segment is not its `type`
+  (`fits`); `Rec.misfits()` counts them. The 14 Nov file has none that
+  differ by type (55 differ by key only, left alone).
+- **`repairTypes`** runs wherever `repairDates` does (boot, the IndexedDB
+  read, a kept-out type arriving, reload): the type from the id, the key from
+  the id when the id carries a prefix the key lost, only when the result
+  rebuilds the id exactly. Each is a write stamped now and announced, so live
+  sync sends the right copy on. Checked on the real rows: 769 of 769 came
+  back as the 14 Nov file has them.
+- One `rec:` smoke check, watched failing on the old file.
+
+## Ready is not whole (2026-11-16, `Rec.whole`, `cloud.js` 0.2.9)
+
+Every backup that caught up with live sync from 06:56 on 16 Nov held 4,700
+rows of 26,000: no sets, most dated rows absent, no extra tombstones. Runs
+where live sync did not connect held everything. STATUS.exe, SPEAK.exe and
+Main Menu.exe share `desktop/data` with Backup.exe, and with all of them
+open IndexedDB answered the backup page later than IDBWAIT (2.5 s), so
+`Rec.ready` and `Rec.need` went ahead on the trimmed fast half and the page
+saved it ten quiet seconds after live sync connected. A run with no live
+sync waited two minutes, long enough for IndexedDB. Proved: a copy of the
+store opened alone gave 26,255 rows, the real one with the programs open
+gave 4,984. Nothing was lost; the files were short.
+
+- **`Rec.whole()`** resolves `{ok}` once IndexedDB has really answered for
+  the big half and every kept-out type asked for so far, `{ok: false, why}`
+  if it failed. It starts no load: call `Rec.need()` first.
+- **`tools/backup.html`** waits on it, 150 s at most, and on a failure or a
+  timeout saves nothing (Backup.exe logs FAILED, the last good file stays).
+  A wait of 5 s or more is written on backup.log's inbox line.
+- **`cloud.js` 0.2.9** waits on it too, a minute at most, before its first
+  merge: a row heard from the cloud while the IndexedDB copy is still on its
+  way met no copy and was taken whole, over a newer one.
+- **Why IndexedDB was that slow: `todoist.js`.** Profiled over the
+  programs' debug port: Main Menu's page at a full core and 5 GB, 77% of it
+  inside `announce` from `TodoistSync` writing rows. Its `same()` compared
+  whole payloads by `JSON.stringify`, and live sync hands a row back with its
+  keys sorted and empty lists and nulls gone, so no Todoist row ever matched
+  again. Since it moved into STATUS (05:34, 05b93b2) every pass in every
+  STATUS rewrote all 461 Todoist rows, each write redrew every open app, and
+  the rows went round live sync and the channel to the other STATUS, which
+  did the same. `same` now compares content (`canon`: sorted keys, empties
+  dropped). A busy page holds its IndexedDB transactions open, and nothing
+  else on the store is answered. One `todoist:` and one `rec:` smoke check.
+
+## One merge per answer (2026-11-17, `cloud.js` 0.2.12)
+
+Tom: "why does motherbase take so long to open". The hosted home screen in
+his Chrome froze for 116 s in one long frame inside Firebase's socket
+handler (Long Animation Frame entries, read off the live tab): 1,023 rows
+had arrived since that browser last opened, `onRow` merged each one alone,
+so each announced and the home screen redrew once per row, about 113 ms
+each. That frame is also why the device row read first paint 39.9 s. `onRow`
+now gathers rows and `flushRows` merges them as one `Rec.merge` when the
+SDK's loop ends (a 0 ms timer), and before the value event, a push or an
+unlisten acts. One `live sync:` smoke check (40 rows, one merge).
 
 ## Live sync boundaries (2026-09-24, `cloud.js` 0.1.3)
 
@@ -632,6 +717,43 @@ device id lives in localStorage). Two causes, still not told apart:
 
 Read every device's `disk` and `auth` in the nightly backup before guessing.
 
+**2026-11-16, asked again.** The 14 Nov backup: every device `disk: kept`,
+`kept: LOCAL`, no `authErr` anywhere, so Google never refused a token. Only
+"PC, desktop program" carries `lostKept: LOCAL`. Two PC causes found, both
+outside the code: C: (222 GB) hit 0 MB free on 15 and 16 Nov (`backup.log`
+SKIPPED), and Windows logged 10 power losses since 1 Oct (Kernel-Power 41,
+bugcheck 0; Tom: him or Meralco, plus a cheap PSU). Either can stop
+WebView2 reading or keeping its store at start. Unproven which; 30 GB was
+freed that day. No code change.
+
+**2026-11-16, 8am, "I get logged out???"** Not a sign-out. The program had
+reopened at 07:58:28; its own `mb.cloud` showed `lost` empty and a send at
+07:59:19. For the ~45 s of start (auth, then `R.need()`) DATA read "Not
+syncing yet. Starting up." over a Sign in button. io.js 0.1.18 says
+"Signed in as X. Connecting" with no button until start ends or `why` is set.
+Also seen: Local Storage was recreated "since it was missing" on 14 Nov
+21:45 (Chromium's LOG) with no power loss or restart logged near it, and
+another power loss at 04:41 on the 16th. Same morning the store's IndexedDB
+answered slower than live sync waits with three programs open on it
+(`tools/backup.html`, Rec.whole); Firebase keeps the sign-in there first.
+cloud.js 0.2.10 keeps a second copy of the sign-in (`mb.signin`), tested with
+a made-up copy only: Google refused it and the copy deleted itself.
+
+**Open, asked by Tom the same day: "keep TRAIN to caring about the last
+month".** 13,168 of 25,854 rows are sets, 231 from the last month. Apps open
+in 1 to 4 s on the desktop (device rows); the slow part is live sync's start,
+which waits for every set (`R.need()`) and IndexedDB (`R.whole()`). Not
+measured which step costs the time: cloud.js 0.2.11 writes `took` on
+`mb.cloud` (ms since open for sdk, auth, need, whole, first, sent); read it
+from `desktop/data/EBWebView/Default/Local Storage/leveldb` once a desktop
+program has started twice on 0.2.11. If `need` is the cost, the plan is
+live sync starting on recent sets and reading an older set only when the
+cloud sends one or a push needs one, never cutting what TRAIN keeps
+(records, Profile, range.js and COACH read all of it). That touches
+records.js; another session was editing it that day. Also seen: the hosted
+home in Tom's Chrome froze for minutes at 1.4 GB with 1,619 rows in its
+store and its set read taking 24 s.
+
 ## The start screen (2026-10-04, `boot.js`)
 
 Tom: "a sort of cool startup animation when we're opening up the app",
@@ -751,8 +873,65 @@ to-dos."
   check, click the words, STATUS opened with the check up; the same from the
   home screen's TODAY card; BLOCK's menu publishing the link into the plan.
 
+## Ctrl+Z (2026-11-02, `ui.js`)
+
+Tom: "add a ctrl z feature", "everywhere". Every `UI.undo` is kept (30,
+newest last) and Ctrl+Z / Cmd+Z presses them one at a time after the
+snackbar has gone; "Undone: <its words>" when the undo itself says nothing.
+An undo run from the key or its button adds none of its own (`undoing`), or
+Ctrl+Z would flip a change back and forth. A text box keeps its own Ctrl+Z.
+Every app and the OUTER HEAVEN board got it unedited. One smoke check; watched
+in Chrome on the smoke page and on the board (a cleared ramble came back).
+
 ## History
 
 `HISTORY.md`, beside this file, holds the debt list, the numbered foundation
 findings other briefs cite as "foundation item N", and the app icon rework.
 Read it when working in that corner; add build stories there, not here.
+
+## Axis words never touch (2026-11-16, `chart.js`)
+
+From a HOME session, Tom: "Do this task here". `c.grid` printed a side number at every step, so a chart about 60px tall printed 80, 81 and 82 over each other; it now keeps every second (third...) step, line and number, when the steps are closer than the label size plus 4px. `c.labels` dropped nothing; it now leaves off a word that would come within `LAB_GAP` of the one before, and a lit one (third item) outranks those before it, the way `timeAxis` already did. One `chart:` smoke check, watched failing on the old file (5 numbers in 60px). Found by `tools/home-sweep.py` (WEIGHT, SLEEP, the measure card, TRAIN volume at 2 by 2), which now reports none.
+
+## One drag, always one ending (2026-11-16, `mobile.js`)
+
+Tom picked B from the state-machine sweep, drags first: COACH's slot drag
+listened on the window and heard a cancelled pointer; BLOCK, the home screen
+and FORGE did not, so a release never heard left a block lifted out of its
+lane, a ghost on the page, and the board refusing to redraw.
+
+- **`Mobile.drag(ev, {start, move, drop, tap, cancel, slop})`** from a
+  pointerdown. One named step, `d.state`: pressed, dragging, then dropped,
+  tapped or cancelled. Exactly one of drop, tap or cancel runs, once.
+  Cancel covers pointercancel, window blur, the page going hidden, Escape,
+  a mouse move with no button down (a release never heard), a callback that
+  threw, a new drag, and `Mobile.drag.cancel()`; `d.why` says which.
+- **`Mobile.dragging()`** is the live drag's step or ''. BLOCK's
+  `boardBusy` asks it. **`Mobile.drag.log`** keeps the last 20 endings.
+- **Moved onto it:** BLOCK 1.0.27 (block drag puts the block back on any
+  cancel; resize keeps its length), HOME 1.0.125 (card move leaves no ghost;
+  resize goes back to its size). **FORGE 1.0.5** uses the browser's own
+  drag and drop, which this cannot own: its redraw now waits while `drag` is
+  set, catches up on dragend, and a pointer move with no button down clears
+  a drag whose ending was never heard. COACH keeps its own, which already
+  listens on the window. TRAIN's `holdToMove` listens on its list, which a
+  redraw replaces, and is not moved yet: a TRAIN session's job.
+- One `mobile:` smoke check runs all nine endings. Watched in headless
+  Chromium with a real mouse: BLOCK reorder, then lift and blur, Escape and
+  pointercancel each put the block back with no ghost and the board free;
+  HOME lift and blur moved nothing, a real move moved the card, a resize and
+  Escape went back; FORGE took a row landing mid-drag after the drop. Review
+  212/212 WebKit at 390, 197/197 Chromium at 1280, smoke 483/483. **Not
+  watched:** a touch screen's own pointercancel, on a real device.
+
+## A todo is never done and cancelled at once (2026-11-16, `journal.js`)
+
+From the state-machine sweep. `cancel(on)` on a done todo now undoes the
+tick the way unticking does (`doneOn`, `doneAt` go, `by` goes back); it
+left them, so a cancelled todo still showed as done on that day. `tick` on
+a cancelled todo sets `cancelled: 0`, and a repeat's done copy is never
+cancelled. One `journal:` smoke check through a stand-in store.
+
+## One connection from a frame under another site (2026-11-17, `cloud.js`)
+
+ROOM's wallpaper (OUTER HEAVEN, http on this PC) frames the home screen one widget at a time (HOME 1.0.134), so no suite page there is the top document and none would connect. `LEAD` lets a frame connect when its address carries `?sync=1` AND its top is another site (reading `top.location` throws); the suite's own frames keep `top === self` as the rule. It replaces the three `g.top` checks (onUnkept, autoFlush, start). From a HOME/ROOM session at Tom's ask. Not watched signed in: the wallpaper's WebView2 sign-in is the test.

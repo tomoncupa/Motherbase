@@ -31,7 +31,7 @@
    Bumped by hand, and only when something changed that a person would notice
    or that changes the shape of stored data. VERSIONS.md says what each one
    did. */
-const VERSION = '0.1.17';
+const VERSION = '0.1.18';
 
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const apps = Object.create(null);
@@ -1664,8 +1664,12 @@ const IO = {
         : s.live
         ? 'Signed in as <b>' + esc(s.email || 'you') + '</b>, but not connected right now. Everything is saved here and goes up when the connection is back.' + times
         : s.why ? '<b>Not syncing.</b> ' + esc(s.why) + '.' + times
-        : s.on ? '<b>Not syncing yet.</b> Starting up.' + times
+        /* 2026-11-16, Tom: "I get logged out???" He was not: the program had
+           just reopened and was still asking Google, and this line sat over a
+           Sign in button. A sign-out Google confirms lands in s.why above. */
+        : s.on ? 'Signed in as <b>' + esc(s.email || 'you') + '</b>. Connecting, nothing to do.' + times
         : 'Set up on this device, and not signed in yet.';
+      const starting = s.on && !s.live && !s.why;
 
       const btn = (label, cls, fn) => {
         const b = el('button', 'mb-btn ' + cls + ' mb-press mb-tap', label);
@@ -1675,7 +1679,9 @@ const IO = {
         return b;
       };
 
-      if (!s.live) {
+      if (starting) {
+        /* no button while it connects; it redraws on its own when start ends */
+      } else if (!s.live) {
         btn('Sign in with Google', 'go', e => {
           const b = e.currentTarget;
           b.disabled = true;
@@ -1711,6 +1717,9 @@ const IO = {
        pane has left the document, which needs no cooperation from whoever
        closed it. */
     const off = C.on(() => { pane.isConnected ? draw() : off(); });
+    /* YOUR IPHONE, once signed in (phone.js draws it, and draws it itself
+       into any LIVE SYNC row already open when it arrives) */
+    if (g.Phone) g.Phone.row(wrap);
     IO.deviceRow(wrap);
   },
 
@@ -1741,39 +1750,78 @@ const IO = {
     /* an app's folder is not always its name */
     const NAMES = { home: 'HOME', quest: 'QUESTS', portion: 'FOODDÉX', mix: 'ELEMENT', system: 'NOTICE', sheet: 'CHARACTER SHEET' };
     const nameOf = k => NAMES[k] || String(k || 'an app').toUpperCase();
-    host.appendChild(el('div', 'mb-group', 'DEVICES'));
-    if (t && t.ready) {
+    /* Tom, 2026-11-16: "a whole lot of words and numbers that take up a lot
+       of space". Folded to one line, DEVICES and a count, that says only
+       whether a device had errors this week. Open it for one line per
+       device; open a device for what it said before. */
+    if (!document.getElementById('mb-dev-css')) {
+      const st = document.createElement('style');
+      st.id = 'mb-dev-css';
+      st.textContent =
+        '.mb-dev>summary,.mb-dev-d>summary{list-style:none;cursor:pointer;display:flex;align-items:center;' +
+        'gap:var(--s-2,8px);min-height:44px;-webkit-user-select:none;user-select:none}' +
+        '.mb-dev>summary::-webkit-details-marker,.mb-dev-d>summary::-webkit-details-marker{display:none}' +
+        '.mb-dev>summary.mb-group{margin-bottom:0}' +
+        '.mb-dev-n{margin-left:auto;font-family:var(--font-body,system-ui);font-weight:400;letter-spacing:0;' +
+        'font-size:var(--f-2,13px);color:var(--text-2,GrayText);display:flex;align-items:center;gap:var(--s-2,8px)}' +
+        '.mb-dev svg{width:16px;height:16px;flex:none;color:var(--text-muted,GrayText);transition:transform var(--dur-1,120ms)}' +
+        '.mb-dev[open]>summary svg,.mb-dev-d[open]>summary svg{transform:rotate(180deg)}' +
+        '.mb-dev-d{border-top:var(--border-width,1px) solid var(--border,GrayText)}' +
+        '.mb-dev-d>summary{font-size:var(--f-2,13px)}' +
+        '.mb-dev-d>summary b{flex:1;min-width:0}' +
+        '.mb-dev-x{width:8px;height:8px;border-radius:50%;background:var(--warn,GrayText);flex:none}' +
+        '.mb-dev-b{padding:0 0 var(--s-3,12px)}' +
+        '.mb-dev-b p{' + small + '}' +
+        '@media (prefers-reduced-motion:reduce){.mb-dev svg{transition:none}}';
+      document.head.appendChild(st);
+    }
+    const chev = g.Icons && g.Icons.svg ? g.Icons.svg('expand') : '';
+    const week = Date.now() - 7 * 86400000;
+    const shown = list.slice(0, 8);
+    const recentOf = d => (d.errs || []).filter(e => Date.parse(e.t) > week);
+    const bad = shown.filter(d => recentOf(d).length).length;
+    const all = el('details', 'mb-dev');
+    const word = !shown.length ? 'this one'
+      : shown.length + (shown.length === 1 ? ' device' : ' devices') + ', ' +
+        (bad ? bad + ' with errors' : 'no errors');
+    all.appendChild(el('summary', 'mb-group', 'DEVICES<span class="mb-dev-n">' +
+      (bad ? '<i class="mb-dev-x"></i>' : '') + esc(word) + chev + '</span>'));
+    host.appendChild(all);
+    if (t && t.ready && !shown.some(d => d.me)) {
       const op = el('p', null, 'Opened in <b>' + secs(Math.max(t.paint, t.ready)) + '</b> here' +
         (t.paint ? ', first drawn at ' + secs(t.paint) : '') + '.');
       op.className = 'mb-opened';
-      host.appendChild(op);
+      op.style.cssText = small;
+      all.appendChild(op);
     }
-    const week = Date.now() - 7 * 86400000;
-    list.slice(0, 8).forEach(d => {
-      const box = el('div');
-      box.style.cssText = 'margin:0 0 var(--s-3,12px)';
+    shown.forEach(d => {
+      const recent = recentOf(d);
+      const box = el('details', 'mb-dev-d');
+      box.appendChild(el('summary', null, '<b>' + esc(d.name) + (d.me ? ' (this one)' : '') + '</b>' +
+        '<span class="mb-dev-n">' + (recent.length ? '<i class="mb-dev-x"></i>' + recent.length +
+          (recent.length === 1 ? ' error, ' : ' errors, ') : '') + esc(d.me ? 'now' : ago(d.seen)) + chev + '</span>'));
+      const body = el('div', 'mb-dev-b');
       const sync = d.sync === 'live' ? 'synced ' + ago(d.syncedAt) : d.sync || 'no live sync';
-      box.appendChild(el('p', null, '<b>' + esc(d.name) + '</b>' + (d.me ? ' (this one)' : '') +
-        '. Seen ' + esc(ago(d.seen)) + ', ' + esc(sync) + '.'));
-      const recent = d.errs.filter(e => Date.parse(e.t) > week);
+      body.appendChild(el('p', null, esc('Seen ' + ago(d.seen) + ', ' + sync + '.')));
+      if (d.me && t && t.ready) {
+        const op = el('p', null, 'Opened in <b>' + secs(Math.max(t.paint, t.ready)) + '</b> here' +
+          (t.paint ? ', first drawn at ' + secs(t.paint) : '') + '.');
+        op.className = 'mb-opened';
+        body.appendChild(op);
+      }
       const last = d.errs[d.errs.length - 1];
-      const e = el('p', null, recent.length
+      body.appendChild(el('p', null, recent.length
         ? esc(recent.length + (recent.length === 1 ? ' error' : ' errors') + ' this week. Last, in ' + nameOf(last.app) + ': ' + last.m)
-        : 'No errors this week.');
-      e.style.cssText = small;
-      box.appendChild(e);
+        : 'No errors this week.'));
       /* the last three opens on that device, newest first */
       const opens = Object.keys(d.open || {}).map(k => [k, d.open[k]]).filter(x => x[1] && x[1].s != null)
         .sort((a, b) => String(b[1].at || '').localeCompare(String(a[1].at || ''))).slice(0, 3);
-      if (opens.length) {
-        const o = el('p', null, esc('Opened ' + opens.map(x => nameOf(x[0]) + ' in ' + x[1].s + ' s' +
-          (x[1].p ? ' (drawn at ' + x[1].p + ' s)' : '')).join(', ') + '.'));
-        o.style.cssText = small;
-        box.appendChild(o);
-      }
+      if (opens.length) body.appendChild(el('p', null, esc('Open times: ' +
+        opens.map(x => nameOf(x[0]) + ' ' + x[1].s + ' s').join(', ') + '.')));
       const v = Object.keys(d.v).sort().map(k => nameOf(k) + ' ' + d.v[k]).join(', ');
-      if (v) { const vp = el('p', null, esc(v)); vp.style.cssText = small; box.appendChild(vp); }
-      host.appendChild(box);
+      if (v) body.appendChild(el('p', null, esc('Versions: ' + v + '.')));
+      box.appendChild(body);
+      all.appendChild(box);
     });
   },
 };
@@ -3452,8 +3500,11 @@ function addShared(id, file, done) {
 /* report.js: this device's note. cloud.js: LIVE SYNC. */
 IO.loadCloud = function (done) {
   if (DEMO) return;
-  if (g.Cloud) { if (done) setTimeout(done, 0); return; }
-  addShared('mb-cloud-js', 'cloud.js', done);
+  /* phone.js (2026-11-16) reads what the iPhone's Shortcut sends; it needs
+     cloud.js, so it follows it in. */
+  const phone = () => addShared('mb-phone-js', 'phone.js');
+  if (g.Cloud) { phone(); if (done) setTimeout(done, 0); return; }
+  addShared('mb-cloud-js', 'cloud.js', () => { phone(); if (done) done(); });
 };
 /* ── the sync dot (2026-10-06) ──
    Tom, from a design review: "Maybe a small green dot." A sync that failed in

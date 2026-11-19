@@ -43,3 +43,5 @@ objects, so it listed every drink as off when none was.
 **1.0.10, 2026-10-22.** The small line under a drink (1.250 g per litre) is 12px, the smallest reading size, from 11.7px. Found by `_review.html`'s tiny-text check.
 
 1.0.11, 2026-10-25: the plan published for the home screen (`publishPlan`) carries each dose's `nut` and `mg`, so the home screen's TO WEIGH card can tick a drink. Its tick is a copy of `tickCard` plus `mixToStatus` in index.html, a copy of `toStatus`: change `toStatus` and `mixToStatus` together.
+
+2026-11-09: the home screen runs ELEMENT unseen in a hidden frame (`mixFeed` in index.html, HOME 1.0.104), so `publishPlan` runs on every store write without ELEMENT being opened. Anything ELEMENT does on load or draw now happens on every home screen open: keep `draw()` free of writes other than the plan.

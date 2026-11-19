@@ -36,8 +36,13 @@ const Measure = (() => {
   }
 
   /** Every meal logged on a day, oldest first. STATUS's own reader, moved. */
+  /* `t` is when it was eaten: the time typed on it (`at`), else when logged */
   const meals = date => Rec.all('meal', { date: date })
-    .map(r => Object.assign({ key: r.key }, r.payload))
+    .map(r => {
+      const m = Object.assign({ key: r.key }, r.payload), a = /^(\d{1,2}):(\d\d)/.exec(m.at || '');
+      if (a && r.date) m.t = new Date(r.date + 'T' + String(a[1]).padStart(2, '0') + ':' + a[2] + ':00').getTime();
+      return m;
+    })
     .sort((a, b) => a.t - b.t);
 
   /** The readings typed into STATUS for one field on one day. */

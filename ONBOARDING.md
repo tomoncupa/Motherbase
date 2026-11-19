@@ -29,7 +29,7 @@ That writes `../Motherbase-Client`, a complete working suite with:
 | **Apps** | HOME, BLOCK, STATUS, LOG, QUESTS, TRAIN, CHECK IN, STYLE |
 | **Not included** | FORM, ARC, FOODDÉX, WEALTH, SPEAK and NOTICE (Tom's own), and the LINKS widget |
 | **Themes** | Default, System, Chalkboard, Sketch, Doodle — five, from eighteen |
-| **Added** | `guide.html`, the client's setup page: nine steps, about ten minutes |
+| **Added** | `guide.html`, the client's setup page: phone, sign in, then `Motherbase Setup.exe` on the PC; the sheet is an optional fold at the foot (rewritten 2026-11-03) |
 
 `Default` is Block renamed, `System` is Ice renamed. The ids underneath are
 unchanged, so nothing a theme is saved against breaks.

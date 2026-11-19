@@ -216,6 +216,15 @@ def run(p, engine, port):
     r = page.evaluate(RUNNING)
     r['navs'] = navs[0]
     step('a resume after a minute away leaves the page alone', lambda g: g['navs'] == 0 and g['v'] == '9.9.3', r)
+    quiet()
+
+    # Ctrl+R (2026-11-16): one press is the newest copy, not the kept one
+    push(ver='9.9.5')
+    navs[0] = 0
+    page.keyboard.press('Control+r')
+    time.sleep(1.5)
+    r = settle(page, navs)
+    step('Ctrl+R once is running the push', lambda g: g['v'] == '9.9.5' and not g['why'], r)
 
     browser.close()
     return results

@@ -71,7 +71,6 @@ class App : Form
     const int DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_ROUND = 2, DWMWCP_DONOTROUND = 1;
 
     WebView2 web;
-    NotifyIcon tray;
     MenuItem miTop;
     /* ── hosted first ──
        Tom, 2026-09-23: every device opens the hosted copy and joins by LIVE
@@ -111,7 +110,19 @@ class App : Form
         new System.Collections.Generic.Dictionary<uint, string[]>();
     bool dragging;
     int grabX, grabY;
-    ContextMenu trayMenu;
+    ContextMenu winMenu;     /* the right click menu, what the tray icon's menu was */
+    bool trayOn;             /* Settings, DESKTOP, Tray icon: off unless he turns it on */
+    NotifyIcon tray;
+    Rectangle wideBack;      /* where the window was before Settings took the screen */
+    string wideMode;
+    /* The whole app resizes from any edge, keeping its shape, and everything in
+       it grows with it (Tom, 2026-11-16: "It should scale with it ... from cell
+       phone size ... as big as to occupy the entire vertical resolution. But it
+       stays within the same ratio the whole time."). `zoom` is how much bigger
+       than the phone size the page asked for; 1 is the smallest. */
+    double zoom = 1;
+    Size appBase = new Size(390, 844);
+    const int GRIP = 6;
     /* where the whole app was put when it opened, and its corner before a
        status check took the screen, so going back lands where he left it */
     Point appPlaced = new Point(int.MinValue, 0);
@@ -174,7 +185,8 @@ class App : Form
         ClientSize = new Size(320, 170);
         PlaceWidget();
 
-        BuildTray();
+        BuildMenu();
+        Tray(trayOn);
         RegisterTheHotkey();
 
         dragT = new Timer();
@@ -186,16 +198,28 @@ class App : Form
         senseT.Tick += (s, e) => Sense();
         senseT.Start();
 
+        ov = new Overlay();
+        ovT = new Timer();
+        ovT.Interval = 1000;
+        ovT.Tick += (s, e) => OvTick();
+        ovT.Start();
+
         web = new WebView2();
         web.Dock = DockStyle.Fill;
         web.DefaultBackgroundColor = BackColor;
         web.CreationProperties = new CoreWebView2CreationProperties();
         web.CreationProperties.UserDataFolder = dataDir;
-        /* fresh=1 (2026-10-05): the offline cache hands over the copy it kept
-           and fetches the new one for next time, so a push showed up one open
-           late and the widget stayed the old one. The PC is always online. */
+        /* No fresh=1 (Tom, 2026-11-16: "Status takes way too long to open...
+           why can't we open the last saved copy and then in the background have
+           it update"). fresh=1 (2026-10-05) sent the page and every script to
+           the network first, each waiting up to 3 s (sw.js SLOW_MS) before the
+           kept copy answered, and one of GitHub's four addresses never answers
+           from his ISP: first paint 6.2 s. The kept copy opens at once; sw.js
+           fetches new copies in the background, mobile.js reopens an untouched
+           page onto new code, and STATUS reloads itself onto a newer version
+           when idle (its desktop block), so a push still arrives. */
         pageUrl = UseFolder() ? new Uri(page).AbsoluteUri + "?desktop=1&host=app"
-                              : HOSTED + "status/index.html?desktop=1&host=app&fresh=1";
+                              : HOSTED + "status/index.html?desktop=1&host=app";
         web.CoreWebView2InitializationCompleted += Started;
         Controls.Add(web);
         /* Navigating after the engine is up, rather than setting Source
@@ -225,8 +249,8 @@ class App : Form
         c.Settings.AreBrowserAcceleratorKeysEnabled = false;
         c.Settings.IsStatusBarEnabled = false;
         c.WebMessageReceived += Message;
-        /* Tom, 2026-10-18: a right click on the window offers the tray's
-           menu, Always on top first. Only where the page did not take the
+        /* Tom, 2026-10-18: a right click on the window offers the menu the
+           tray icon had, Always on top first. Only where the page did not take the
            right click for a menu of its own. */
         c.AddScriptToExecuteOnDocumentCreatedAsync(
             "addEventListener('contextmenu', function (e) { if (e.defaultPrevented) return; e.preventDefault();" +
@@ -285,6 +309,10 @@ class App : Form
         try { raw = e.TryGetWebMessageAsString(); }
         catch { return; }
         if (string.IsNullOrEmpty(raw)) return;
+        /* the overlay's picture is a long line of base64, never logged */
+        if (raw.StartsWith("ovimg|")) { OvImage(raw); return; }
+        /* a food typed with no numbers, guessed by Claude (FoodGuess.cs) */
+        if (raw.StartsWith("mbguess:")) { FoodGuess.Ask(raw.Substring(8), Log, s => BeginInvoke((Action)(() => { try { web.CoreWebView2.ExecuteScriptAsync("window.foodGuessBack&&foodGuessBack(" + s + ")"); } catch { } }))); return; }
         Log("page asked for: " + raw);
 
         string[] bits = raw.Split('|');
@@ -312,13 +340,21 @@ class App : Form
             return;
         }
         if (verb == "quit") { Quit(); return; }
-        if (verb == "menu") { if (trayMenu != null) trayMenu.Show(this, PointToClient(Cursor.Position)); return; }
-        /* The tray's settings, asked for from STATUS's own Settings, so there
-           is one place to set them. The tray menu still works. */
+        /* Tom, 2026-11-13: the status check can come as a red dot rather
+           than the whole screen (STATUS Settings, DESKTOP, How it comes).
+           `due|1` puts a red dot on the taskbar button,
+           `due|0` takes it off. The page decides when; this only paints. */
+        if (verb == "due") { string d = bits.Length > 1 ? bits[1] : "0"; Due(d != "0", d == "2"); return; }
+        if (verb == "menu") { if (winMenu != null) winMenu.Show(this, PointToClient(Cursor.Position)); return; }
+        /* The program's settings live in STATUS's own Settings, DESKTOP, THE
+           PROGRAM, since the tray icon went (STATUS 1.0.102, Tom: the tray
+           holds SPEAK alone). The right click menu still has them too. */
+        if (verb == "keybox") { ChooseKey(); return; }
         if (verb == "top")
         {
             onTop = bits.Length > 1 && bits[1] == "1";
-            TopMost = onTop; if (miTop != null) miTop.Checked = onTop; SaveCfg();
+            Pin(onTop); if (miTop != null) miTop.Checked = onTop; SaveCfg();
+            Sense();   /* the page's switch reads it back at once */
             return;
         }
         if (verb == "hotkey")
@@ -328,10 +364,29 @@ class App : Form
             {
                 hotkey = bits[1].ToLowerInvariant(); SaveCfg(); RegisterTheHotkey();
                 if (keysMenu != null) MarkKeys(keysMenu);
+                Sense();
             }
             return;
         }
-        if (verb == "boot") { SetBoot(bits.Length > 1 && bits[1] == "1"); return; }
+        if (verb == "boot") { SetBoot(bits.Length > 1 && bits[1] == "1"); Sense(); return; }
+        /* Tom, 2026-11-16: "Make the status tray icon toggleable in desktop
+           settings." Off by default: the tray holds SPEAK alone. */
+        if (verb == "tray") { trayOn = bits.Length > 1 && bits[1] == "1"; Tray(trayOn); SaveCfg(); Sense(); return; }
+        /* Settings takes the whole screen it is on while it is open, and the
+           window goes back where it was after (Tom, 2026-11-16: "take
+           advantage of all the desktop real estate ... don't limit it to the
+           current status size window"). */
+        if (verb == "wide") { Wide(bits.Length > 1 && bits[1] == "1"); return; }
+        /* `ov|show|pos|top`: the S-rank overlay's choices, from Settings, DESKTOP */
+        if (verb == "ov")
+        {
+            ovShow = bits.Length > 1 && bits[1] == "1";
+            if (bits.Length > 2) ovPos = bits[2];
+            if (bits.Length > 3) ovTop = bits[3];
+            ovCovered = false;
+            OvPlace(true);
+            return;
+        }
 
         int w = 0, h = 0;
         if (bits.Length >= 3)
@@ -352,7 +407,7 @@ class App : Form
                chevron is, and stays there. */
             bool moved = mode == "app" && Location != appPlaced;
             int right = Left + Width, top = Top;
-            mode = "widget"; ClientSize = new Size(w, h);
+            mode = "widget"; Unzoom(); ClientSize = new Size(w, h);
             if (moved) { KeepCorner(right, top); posX = Left; posY = Top; SaveCfg(); }
             else PlaceWidget();
             Round();
@@ -367,7 +422,9 @@ class App : Form
             if (mode == "checkin" && backRight != int.MinValue) { right = backRight; top = backTop; }
             backRight = int.MinValue;
             mode = "app";
-            ClientSize = new Size(w, h);
+            appBase = new Size(w, h);
+            ZoomTo(zoom);
+            ClientSize = AppSize();
             KeepCorner(right, top);
             appPlaced = Location;
             Round();
@@ -400,7 +457,9 @@ class App : Form
                    a second. */
                 if (mode == "checkin") return;
                 if (mode == "app") { backRight = Left + Width; backTop = Top; }
+                if (mode == "wide") { backRight = wideBack.Right; backTop = wideBack.Top; Pin(onTop); }
                 mode = "checkin";
+                Unzoom();
                 var scr = Screen.FromPoint(Cursor.Position).Bounds;
                 Square();
                 Bounds = scr;
@@ -409,14 +468,125 @@ class App : Form
             }
             else
             {
+                /* The red dot's check: he pressed for it, so a box in the
+                   middle, no sound, and back where he was after. */
+                if (mode == "checkin") return;
+                if (mode == "app") { backRight = Left + Width; backTop = Top; }
                 mode = "checkin";
+                Unzoom();
                 ClientSize = new Size(w, h);
                 Centre();
                 Round();
                 Front();
+                OvPlace(true);
+                return;
             }
             try { System.Media.SystemSounds.Exclamation.Play(); } catch { }
         }
+        OvPlace(true);   /* out of the way of a check, back after it, aside for the app */
+    }
+
+    /* ── the S-rank overlay ──
+       Tom, 2026-11-16: "always on top, by default on the upper right side,
+       and it doesn't really get in the way too much. Not really a window,
+       more like just an overlay that doesn't get interacted with." The page
+       draws the picture (STATUS 1.0.101, `ovDraw`); this only places it: a
+       corner of the main screen's work area, moved aside when the STATUS
+       window sits in that corner, hidden while a status check has the
+       screen. Clicks pass through it and it never takes the focus. */
+    Overlay ov;
+    bool ovShow = true, ovCovered;
+    string ovPos = "tr", ovTop = "always";
+    Timer ovT;
+
+    void OvImage(string raw)
+    {
+        if (ov == null) return;
+        string[] p = raw.Split(new char[] { '|' }, 4);
+        int w = 0, h = 0;
+        if (p.Length == 4) { int.TryParse(p[1], out w); int.TryParse(p[2], out h); }
+        if (w < 1 || h < 1 || p[3].Length == 0) { ov.SetImage(null); OvPlace(true); return; }
+        try
+        {
+            byte[] png = Convert.FromBase64String(p[3]);
+            using (var ms = new MemoryStream(png))
+            using (var b0 = new Bitmap(ms))
+                ov.SetImage(new Bitmap(b0));
+        }
+        catch (Exception ex) { Log("overlay picture did not read: " + ex.Message); return; }
+        OvPlace(true);
+    }
+
+    /* `raise` puts it back on top; moving with the widget only moves it. */
+    void OvPlace(bool raise)
+    {
+        if (ov == null) return;
+        bool want = ovShow && ov.HasImage && mode != "checkin" && mode != "wide" && !ovCovered;
+        if (!want) { ov.Appear(false); return; }
+        Size s = ov.ImageSize;
+        var wa = Screen.PrimaryScreen.WorkingArea;
+        const int M = 16, GAP = 12;
+        bool right = ovPos == "tr" || ovPos == "br", bottom = ovPos == "bl" || ovPos == "br";
+        int x = right ? wa.Right - s.Width - M : wa.Left + M;
+        int y = bottom ? wa.Bottom - s.Height - M : wa.Top + M;
+        /* never over the STATUS window: beside it first, so the corner's edge
+           stays the edge; above or below it when there is no room beside */
+        if (Visible && WindowState != FormWindowState.Minimized)
+        {
+            var me = Rectangle.Inflate(Bounds, GAP, GAP);
+            if (me.IntersectsWith(new Rectangle(x, y, s.Width, s.Height)))
+            {
+                int nx = right ? Left - GAP - s.Width : Right + GAP;
+                /* beside it, level with its top or bottom edge */
+                if (nx >= wa.Left && nx + s.Width <= wa.Right)
+                {
+                    x = nx;
+                    y = bottom ? Math.Min(Bottom, wa.Bottom) - s.Height : Math.Max(Top, wa.Top);
+                }
+                else y = bottom ? Top - GAP - s.Height : Bottom + GAP;
+            }
+        }
+        ov.Draw(x, y);
+        if (raise) { ov.Appear(true); ov.Z(ovTop != "never"); }
+    }
+
+    /* Once a second: Always keeps it on top of windows that put themselves
+       on top later; Not over full screen hides it while the window in front
+       fills the screen it is on (a game, a video) or Windows says a full
+       screen program or a presentation is running. */
+    void OvTick()
+    {
+        if (ov == null || !ovShow || !ov.HasImage) return;
+        if (ovTop == "full")
+        {
+            bool cov = FullScreenInFront();
+            if (cov != ovCovered) { ovCovered = cov; OvPlace(true); }
+            else if (!cov && ov.Up) ov.Z(true);
+        }
+        else if (ovTop == "always" && ov.Up) ov.Z(true);
+    }
+
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+    [DllImport("shell32.dll")] static extern int SHQueryUserNotificationState(out int state);
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
+
+    bool FullScreenInFront()
+    {
+        int st;
+        try { if (SHQueryUserNotificationState(out st) == 0 && (st == 3 || st == 4)) return true; } catch { }
+        IntPtr fg = GetForegroundWindow();
+        if (fg == IntPtr.Zero || fg == Handle || fg == ov.Handle) return false;
+        var cls = new StringBuilder(64);
+        GetClassName(fg, cls, cls.Capacity);
+        string c = cls.ToString();
+        if (c == "Progman" || c == "WorkerW" || c == "Shell_TrayWnd" || c == "Shell_SecondaryTrayWnd") return false;
+        RECT r;
+        if (!GetWindowRect(fg, out r)) return false;
+        var scr = Screen.FromHandle(fg);
+        if (!scr.Primary) return false;   /* the overlay is on the main screen */
+        var b = scr.Bounds;
+        return r.L <= b.Left && r.T <= b.Top && r.R >= b.Right && r.B >= b.Bottom;
     }
 
     /* Asking on demand. Also how the interruption gets tested without waiting
@@ -461,7 +631,7 @@ class App : Form
         string js = "window.deskHost&&deskHost({idle:" + idle +
             ",exe:" + Js(exe) + ",app:" + Js(app) + ",title:" + Js(title) +
             ",top:" + (onTop ? 1 : 0) + ",key:" + Js(Pretty(hotkey)) +
-            ",boot:" + (GetBoot() ? 1 : 0) + "})";
+            ",boot:" + (GetBoot() ? 1 : 0) + ",tray:" + (trayOn ? 1 : 0) + "})";
         try { web.CoreWebView2.ExecuteScriptAsync(js); } catch { }
     }
 
@@ -634,12 +804,20 @@ class App : Form
     {
         base.OnResizeEnd(e);
         if (mode == "widget") { posX = Left; posY = Top; SaveCfg(); }
+        if (mode == "app") { SaveCfg(); Log("app window " + Width + "x" + Height + ", zoom " + zoom.ToString("0.###", CultureInfo.InvariantCulture)); }
     }
 
     protected override void OnMove(EventArgs e)
     {
         base.OnMove(e);
         if (mode == "widget" && ready) { posX = Left; posY = Top; }
+        OvPlace(false);
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        OvPlace(false);
     }
 
     /* â”€â”€ settings, one line each, beside the program â”€â”€ */
@@ -655,6 +833,8 @@ class App : Form
                 string k = line.Substring(0, eq).Trim(), v = line.Substring(eq + 1).Trim();
                 if (k == "hotkey") hotkey = v.ToLowerInvariant();
                 else if (k == "ontop") onTop = (v != "0");
+                else if (k == "tray") trayOn = (v == "1");
+                else if (k == "zoom") { double z; if (double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out z) && z >= 1 && z < 10) zoom = z; }
                 else if (k == "pos")
                 {
                     string[] xy = v.Split(',');
@@ -675,12 +855,18 @@ class App : Form
                 "# STATUS. Delete this file to go back to the defaults.\r\n" +
                 "hotkey=" + hotkey + "\r\n" +
                 "ontop=" + (onTop ? "1" : "0") + "\r\n" +
+                "tray=" + (trayOn ? "1" : "0") + "\r\n" +
+                "zoom=" + zoom.ToString("0.###", CultureInfo.InvariantCulture) + "\r\n" +
                 (posX == int.MinValue ? "" : "pos=" + posX + "," + posY + "\r\n"));
         }
         catch { }
     }
 
-    void BuildTray()
+    /* ── no tray icon ──
+       Tom, 2026-11-16: the tray holds SPEAK alone; STATUS, the Main Menu and
+       OUTER HEAVEN live on the taskbar. What the tray icon's menu did is in
+       Settings, DESKTOP, THE PROGRAM, and on a right click on the window. */
+    void BuildMenu()
     {
         var menu = new ContextMenu();
         menu.MenuItems.Add(new MenuItem("Open STATUS", (s, e) => Front()));
@@ -688,7 +874,7 @@ class App : Form
         menu.MenuItems.Add("-");
         miTop = new MenuItem("Always on top", (s, e) =>
         {
-            onTop = !onTop; miTop.Checked = onTop; TopMost = onTop; SaveCfg();
+            onTop = !onTop; miTop.Checked = onTop; Pin(onTop); SaveCfg(); Sense();
         });
         miTop.Checked = onTop;
         menu.MenuItems.Add(miTop);
@@ -705,28 +891,137 @@ class App : Form
         }
         keys.MenuItems.Add("-");
         var custom = new MenuItem("Choose my own...");
-        custom.Click += (s, e) =>
-        {
-            using (var box = new KeyBox(hotkey))
-            {
-                if (box.ShowDialog() != DialogResult.OK || box.Chosen == null) return;
-                hotkey = box.Chosen; SaveCfg(); RegisterTheHotkey(); MarkKeys(keys);
-            }
-        };
+        custom.Click += (s, e) => ChooseKey();
         keys.MenuItems.Add(custom);
         menu.MenuItems.Add(keys);
         keysMenu = keys;
         menu.MenuItems.Add("-");
         menu.MenuItems.Add(new MenuItem("Quit", (s, e) => Quit()));
 
-        tray = new NotifyIcon();
-        tray.Icon = TrayIcon();
-        tray.Text = "STATUS";
-        tray.ContextMenu = menu;
-        trayMenu = menu;
-        tray.Visible = true;
-        tray.DoubleClick += (s, e) => Front();
+        winMenu = menu;
         MarkKeys(keys);
+    }
+
+    /* The tray icon, when he wants it: the right click menu on it, and a
+       double click brings STATUS to the front. */
+    void Tray(bool on)
+    {
+        if (!on) { if (tray != null) { tray.Visible = false; tray.Dispose(); tray = null; } return; }
+        if (tray != null) return;
+        tray = new NotifyIcon();
+        tray.Icon = plainIcon ?? Icon;
+        tray.Text = "STATUS";
+        tray.ContextMenu = winMenu;
+        tray.DoubleClick += (s, e) => Front();
+        tray.Visible = true;
+        Log("tray icon on");
+    }
+
+    double ZoomMax()
+    {
+        var wa = Screen.FromRectangle(Bounds).WorkingArea;
+        return Math.Max(1, (wa.Height - 2.0 * GRIP) / appBase.Height);
+    }
+    Size AppSize()
+    {
+        return new Size((int)Math.Round(appBase.Width * zoom) + 2 * GRIP, (int)Math.Round(appBase.Height * zoom) + 2 * GRIP);
+    }
+    void ZoomTo(double z)
+    {
+        zoom = Math.Max(1, Math.Min(ZoomMax(), z));
+        Padding = new Padding(GRIP);
+        try { web.ZoomFactor = zoom; } catch { }
+    }
+    /* the widget, the status check and Settings are drawn at their own size */
+    void Unzoom()
+    {
+        Padding = new Padding(0);
+        try { web.ZoomFactor = 1; } catch { }
+    }
+
+    void Wide(bool on)
+    {
+        if (on)
+        {
+            if (mode == "wide" || mode == "checkin") return;
+            wideBack = Bounds; wideMode = mode; mode = "wide";
+            Unzoom();
+            var wa = Screen.FromRectangle(Bounds).WorkingArea;
+            /* Always on top is for the widget and the status check, never
+               Settings (Tom, 2026-11-16): it sits with his other windows. */
+            Pin(false);
+            /* A big window in the middle of the screen, the desktop showing
+               round it. The whole screen was "a bit inconvenient" (Tom,
+               2026-11-16, asking for a middle ground). */
+            int ww = Math.Min((int)(wa.Width * 0.8), 1760), wh = Math.Min((int)(wa.Height * 0.9), 960);
+            Bounds = new Rectangle(wa.Left + (wa.Width - ww) / 2, wa.Top + (wa.Height - wh) / 2, ww, wh);
+            Round();
+            Front();
+            OvPlace(true);
+            Log("settings opened at " + Left + "," + Top + " " + Width + "x" + Height);
+        }
+        else
+        {
+            if (mode != "wide") return;
+            mode = wideMode ?? "app";
+            if (mode == "app") ZoomTo(zoom);
+            Bounds = wideBack;
+            Pin(onTop);
+            Round();
+            OvPlace(true);
+            Log("settings gave the screen back");
+        }
+    }
+
+    /* Always on top, said so Windows takes it from a program that is not in
+       front: the form's own TopMost asks without SWP_NOACTIVATE and was
+       ignored when Settings turned it back on (watched 2026-11-16). */
+    [DllImport("user32.dll", SetLastError = true)] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
+    void Pin(bool top)
+    {
+        TopMost = top;
+        bool ok = SetWindowPos(Handle, new IntPtr(top ? -1 : -2), 0, 0, 0, 0, 0x1 | 0x2 | 0x10);
+        Log("always on top " + (top ? "on" : "off") + ": " + (ok ? "ok" : "refused " + Marshal.GetLastWin32Error()) +
+            ", now " + (((long)GetWindowLongPtr(Handle, -20) & 8) != 0 ? "on top" : "not on top"));
+    }
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr h, int i);
+
+    void ChooseKey()
+    {
+        using (var box = new KeyBox(hotkey))
+        {
+            if (box.ShowDialog(this) != DialogResult.OK || box.Chosen == null) return;
+            hotkey = box.Chosen; SaveCfg(); RegisterTheHotkey();
+            if (keysMenu != null) MarkKeys(keysMenu);
+            Sense();
+        }
+    }
+
+    /* ── a Windows notification with no tray icon that stays ──
+       A notification has to come from a tray icon, so one is put there for
+       the length of the notification and taken away after: 12 seconds, or
+       as soon as it is clicked or closed. Clicking it runs `then`. */
+    NotifyIcon note;
+    Timer noteT;
+    void Notify(string text, ToolTipIcon kind, Action then)
+    {
+        NoteGone();
+        note = new NotifyIcon();
+        note.Icon = plainIcon ?? Icon;
+        note.Text = "STATUS";
+        note.Visible = true;
+        note.BalloonTipClicked += (s, e) => { NoteGone(); if (then != null) then(); };
+        note.BalloonTipClosed += (s, e) => NoteGone();
+        note.ShowBalloonTip(10000, "STATUS", text, kind);
+        noteT = new Timer();
+        noteT.Interval = 12000;
+        noteT.Tick += (s, e) => NoteGone();
+        noteT.Start();
+    }
+    void NoteGone()
+    {
+        if (noteT != null) { noteT.Stop(); noteT.Dispose(); noteT = null; }
+        if (note != null) { note.Visible = false; note.Dispose(); note = null; }
     }
 
     void MarkKeys(MenuItem keys)
@@ -744,6 +1039,46 @@ class App : Form
             mi.Text = known ? "Choose my own..." : "Choose my own...  (" + Pretty(hotkey) + ")";
             mi.Checked = !known;
         }
+    }
+
+    /* ── the red dot ── */
+    Icon plainIcon, dotIcon;
+    void Due(bool on, bool pop)
+    {
+        if (plainIcon == null) plainIcon = Icon;
+        if (on && dotIcon == null) dotIcon = DotIcon(plainIcon);
+        Icon use = on ? dotIcon : plainIcon;
+        if (use == null) return;
+        Icon = use;
+        /* `due|2`: one small Windows notification as
+           well (Tom, 2026-11-13, "also offer a small pop up from here").
+           Clicking it opens the check, the same as the widget's button. */
+        if (on && pop)
+            Notify("A status check is waiting. Click to answer it.", ToolTipIcon.None, () =>
+            {
+                if (!ready) return;
+                try { web.CoreWebView2.ExecuteScriptAsync("typeof deskDot !== 'undefined' && deskDot && deskDotOpen()"); } catch { }
+            });
+        if (!on) NoteGone();
+        Log(on ? (pop ? "red dot on, pop up" : "red dot on") : "red dot off");
+    }
+    static Icon DotIcon(Icon from)
+    {
+        try
+        {
+            using (var bmp = new Bitmap(64, 64))
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                using (var src = from.ToBitmap()) g.DrawImage(src, 0, 0, 64, 64);
+                /* bottom right, ringed in the page colour so it reads on any taskbar */
+                using (var ring = new SolidBrush(Color.FromArgb(8, 11, 16))) g.FillEllipse(ring, 30, 30, 34, 34);
+                using (var red = new SolidBrush(Color.FromArgb(232, 64, 64))) g.FillEllipse(red, 34, 34, 26, 26);
+                return Icon.FromHandle(bmp.GetHicon());
+            }
+        }
+        catch { return null; }
     }
 
     Icon TrayIcon()
@@ -799,10 +1134,9 @@ class App : Form
         UnregisterHotKey(Handle, HOTKEY_ID);
         uint mod, vk;
         if (!ParseHotkey(hotkey, out mod, out vk)) { hotkey = "ctrl+b"; ParseHotkey(hotkey, out mod, out vk); }
-        if (!RegisterHotKey(Handle, HOTKEY_ID, mod, vk) && tray != null)
-            tray.ShowBalloonTip(6000, "STATUS",
-                "Another program already uses " + Pretty(hotkey) +
-                ". Pick a different one from the tray menu.", ToolTipIcon.Warning);
+        if (!RegisterHotKey(Handle, HOTKEY_ID, mod, vk))
+            Notify("Another program already uses " + Pretty(hotkey) +
+                ". Pick a different one in STATUS Settings, DESKTOP.", ToolTipIcon.Warning, null);
     }
 
     protected override void WndProc(ref Message m)
@@ -815,6 +1149,45 @@ class App : Form
            worked, which is most of what "hard to drag" was. MA_ACTIVATE says
            focus it AND let the click through. */
         if (m.Msg == WM_MOUSEACTIVATE) { m.Result = new IntPtr(MA_ACTIVATE); return; }
+
+        if (m.Msg == 0x84 && mode == "app")   /* WM_NCHITTEST: the strip round the page resizes */
+        {
+            long lp = m.LParam.ToInt64();
+            Point c = PointToClient(new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF)));
+            const int CORNER = 20;
+            bool l = c.X < GRIP, r = c.X >= ClientSize.Width - GRIP, t = c.Y < GRIP, b = c.Y >= ClientSize.Height - GRIP;
+            bool nl = c.X < CORNER, nr = c.X >= ClientSize.Width - CORNER, nt = c.Y < CORNER, nb = c.Y >= ClientSize.Height - CORNER;
+            int hit = 0;
+            if ((t && nl) || (l && nt)) hit = 13;
+            else if ((t && nr) || (r && nt)) hit = 14;
+            else if ((b && nl) || (l && nb)) hit = 16;
+            else if ((b && nr) || (r && nb)) hit = 17;
+            else if (l) hit = 10; else if (r) hit = 11; else if (t) hit = 12; else if (b) hit = 15;
+            if (hit != 0) { m.Result = new IntPtr(hit); return; }
+        }
+        if (m.Msg == 0x214 && mode == "app")  /* WM_SIZING: same shape, phone size to the screen's height */
+        {
+            var rc = (RECT)Marshal.PtrToStructure(m.LParam, typeof(RECT));
+            int edge = m.WParam.ToInt32();
+            /* a press on the edge that has not moved yet changes nothing */
+            if (rc.R - rc.L == Width && rc.B - rc.T == Height) { m.Result = new IntPtr(1); return; }
+            double w = rc.R - rc.L - 2 * GRIP, h = rc.B - rc.T - 2 * GRIP;
+            bool vertical = edge == 3 || edge == 6;
+            double z = vertical ? h / appBase.Height : w / appBase.Width;
+            /* never past the top or bottom of the screen it is on */
+            var wa = Screen.FromPoint(new Point((rc.L + rc.R) / 2, (rc.T + rc.B) / 2)).WorkingArea;
+            bool fromTop = edge == 3 || edge == 4 || edge == 5;
+            double room = (fromTop ? rc.B - wa.Top : wa.Bottom - rc.T) - 2.0 * GRIP;
+            z = Math.Min(z, room / appBase.Height);
+            ZoomTo(z);
+            Size s2 = AppSize();
+            /* the right edge holds still unless he is dragging the left one, so the chevron stays put */
+            if (edge == 1 || edge == 4 || edge == 7 || vertical) rc.L = rc.R - s2.Width; else rc.R = rc.L + s2.Width;
+            if (edge == 3 || edge == 4 || edge == 5) rc.T = rc.B - s2.Height; else rc.B = rc.T + s2.Height;
+            Marshal.StructureToPtr(rc, m.LParam, false);
+            m.Result = new IntPtr(1);
+            return;
+        }
 
         if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HOTKEY_ID)
         {
@@ -829,20 +1202,122 @@ class App : Form
 
     /* Closing the window used to leave the launcher running with nothing to
        do, which is how a whole day went by with no check ins. Closing is
-       quitting now, and the tray is where it lives while it is not in front. */
+       quitting now. */
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
         SaveCfg();
         try { UnregisterHotKey(Handle, HOTKEY_ID); } catch { }
-        if (tray != null) { tray.Visible = false; tray.Dispose(); }
+        NoteGone();
+        Tray(false);
     }
 
     void Quit()
     {
         SaveCfg();
         try { UnregisterHotKey(Handle, HOTKEY_ID); } catch { }
-        if (tray != null) { tray.Visible = false; tray.Dispose(); }
+        NoteGone();
+        Tray(false);
         Application.Exit();
+    }
+}
+
+/* ── the overlay's window ──
+   A picture on the screen and nothing else: layered (its own pixels carry
+   their see-through), transparent to the mouse, a tool window so it has no
+   taskbar button and no Alt+Tab entry, and never activated, so it cannot
+   take the focus from what he is typing in. */
+class Overlay : Form
+{
+    [DllImport("user32.dll")] static extern bool UpdateLayeredWindow(IntPtr h, IntPtr dst, ref PT at, ref SZ size, IntPtr src, ref PT from, int key, ref BLEND blend, int flags);
+    [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr h);
+    [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
+    [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr dc);
+    [DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr dc);
+    [DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr dc, IntPtr o);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr o);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+    [StructLayout(LayoutKind.Sequential)] struct PT { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] struct SZ { public int W, H; }
+    [StructLayout(LayoutKind.Sequential, Pack = 1)] struct BLEND { public byte Op, Flags, Alpha, Format; }
+
+    const int WS_EX_LAYERED = 0x80000, WS_EX_TRANSPARENT = 0x20, WS_EX_TOOLWINDOW = 0x80, WS_EX_NOACTIVATE = 0x8000000;
+    const int WM_MOUSEACTIVATE = 0x21, MA_NOACTIVATE = 3, WM_NCHITTEST = 0x84, HTTRANSPARENT = -1;
+    const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOACTIVATE = 0x10;
+    static readonly IntPtr TOPMOST = new IntPtr(-1), NOTOPMOST = new IntPtr(-2);
+
+    Bitmap img;
+    bool up;
+    public bool Up { get { return up; } }
+    public bool HasImage { get { return img != null; } }
+    public Size ImageSize { get { return img == null ? Size.Empty : img.Size; } }
+
+    public Overlay()
+    {
+        FormBorderStyle = FormBorderStyle.None;
+        ShowInTaskbar = false;
+        StartPosition = FormStartPosition.Manual;
+        Text = "STATUS overlay";
+        IntPtr unused = Handle;   /* made now, shown only once there is a picture */
+    }
+
+    protected override bool ShowWithoutActivation { get { return true; } }
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.ExStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+            return cp;
+        }
+    }
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_MOUSEACTIVATE) { m.Result = new IntPtr(MA_NOACTIVATE); return; }
+        if (m.Msg == WM_NCHITTEST) { m.Result = new IntPtr(HTTRANSPARENT); return; }
+        base.WndProc(ref m);
+    }
+
+    public void SetImage(Bitmap b)
+    {
+        if (img != null) img.Dispose();
+        img = b;
+    }
+
+    /* the picture, with its own alpha, at x,y */
+    public void Draw(int x, int y)
+    {
+        if (img == null) return;
+        IntPtr scr = GetDC(IntPtr.Zero), mem = CreateCompatibleDC(scr), hb = IntPtr.Zero, old = IntPtr.Zero;
+        try
+        {
+            hb = img.GetHbitmap(Color.FromArgb(0));   /* premultiplied, as layering wants */
+            old = SelectObject(mem, hb);
+            var size = new SZ { W = img.Width, H = img.Height };
+            var from = new PT();
+            var at = new PT { X = x, Y = y };
+            var blend = new BLEND { Op = 0, Flags = 0, Alpha = 255, Format = 1 };
+            UpdateLayeredWindow(Handle, scr, ref at, ref size, mem, ref from, 0, ref blend, 2);
+        }
+        finally
+        {
+            ReleaseDC(IntPtr.Zero, scr);
+            if (hb != IntPtr.Zero) { SelectObject(mem, old); DeleteObject(hb); }
+            DeleteDC(mem);
+        }
+    }
+
+    public void Appear(bool on)
+    {
+        if (on == up) return;
+        up = on;
+        ShowWindow(Handle, on ? 4 : 0);   /* SW_SHOWNOACTIVATE, SW_HIDE */
+    }
+
+    /* on top of every window, or in among them */
+    public void Z(bool top)
+    {
+        SetWindowPos(Handle, top ? TOPMOST : NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 }

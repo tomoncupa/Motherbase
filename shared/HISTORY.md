@@ -307,3 +307,7 @@ CHECK IN, WEALTH): 246 to 18; Block fails 17 of the same 18 (STATUS's tile
 labels and dashes, TRAIN's DELETE behind its swipe rows, LOG's 0 total), and
 the last is WEALTH's "counted 45 days ago" in `--warn` as a word, the app
 trap. Not redone: the per-theme iPhone icons in `shared/icons/`.
+
+## Charts stop replaying their draw-in (2026-11-09, `chart.js`)
+
+Tom: "sometimes certain graphics just glitch and repeatedly redraw themselves at an epileptic frequency". Watched on his signed-in home screen in Chrome: every write rebuilt the whole board, and a `device` row (report.js) was written every few seconds, so all ten cards' charts were made fresh and each replayed its draw-in; a burst of live sync writes made that a flash per write. `Chart.mount` and `Chart.pie` now draw in once per page per label (numbers taken out of the label, so "76 weigh-ins" and "77" are one chart). Not fixed: the home screen still rebuilds on a `device` row, which no widget reads; index.html had another session's unfinished edits that day. One smoke check, 458 of 458.

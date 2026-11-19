@@ -19,7 +19,8 @@
    TRUE rather than on a timer:
      PAGE   the document is parsed, every script has run
      THEME  Skins has applied a theme
-     STORE  Rec has every row in memory (the home screen draws nothing before)
+     STORE  Rec has every row in memory, or EARLY ms have passed with the
+            fast half in (every app draws from it; the big half merges later)
      DRAWN  one frame after all three, so what is under it has painted
    Four seconds after the page was asked for it goes regardless, saying which
    stage it was still waiting on. A tap or a key dismisses it at once. The
@@ -58,6 +59,11 @@
 
   var now = function () { return g.performance && g.performance.now ? g.performance.now() : Date.now(); };
   var CAP = 4000;
+  /* Tom, 2026-11-17: "have the apps open at the speed of light". STORE no
+     longer waits for IndexedDB: once the page and theme are in and EARLY ms
+     have passed it counts as lit, so the screen goes at about 0.15 s, not
+     when the big half answers. */
+  var EARLY = 150;
   var reduced = false;
   try { reduced = g.matchMedia('(prefers-reduced-motion:reduce)').matches; } catch (e) {}
 
@@ -238,6 +244,13 @@
       var tm = null;
       try { tm = g.Rec.timing && g.Rec.timing(); } catch (e) {}
       line('store', 'STORE', tm && tm.ready ? 'READY ' + Math.round(tm.ready) + ' MS' : 'READY', 'OK');
+    } else if (!stage.store && stage.page && stage.theme && t1 >= EARLY && g.Rec) {
+      /* the fast half is read before any app script runs, and every app
+         draws from it inside 300 ms (TRAIN's and STATUS's early draws, the
+         home screen at once). The big half can take 2.5 s on an iPhone and
+         longer in the desktop programs, and it merges in underneath. */
+      mark('store');
+      line('store', 'STORE', 'FAST HALF', 'OK');
     } else if (!stage.store && !waitedStore && t1 > 1500 && g.Rec) {
       waitedStore = true;
       line('store', 'STORE', 'WAITING', '');

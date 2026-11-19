@@ -121,7 +121,7 @@ class Menu : Form
 
         Text = TITLE;
         StartPosition = FormStartPosition.Manual;
-        BackColor = Color.FromArgb(11, 14, 20);
+        BackColor = Color.FromArgb(0x08, 0x0B, 0x10);   // Block #080B10, the same as the bar and the page (was #0B0E14)
         Icon = AppIcon();
         MinimumSize = new Size(720, 480);
         Restore();
@@ -131,8 +131,11 @@ class Menu : Form
         web.DefaultBackgroundColor = BackColor;
         web.CreationProperties = new CoreWebView2CreationProperties();
         web.CreationProperties.UserDataFolder = dataDir;
-        /* fresh=1: this open comes from the network, not the kept copy. */
-        pageUrl = UseFolder() ? new Uri(page).AbsoluteUri : HOSTED + "?fresh=1";
+        /* No fresh=1 (2026-11-16): it made every open wait on the network,
+           up to 3 s per file, where GitHub's dead address from his ISP made
+           it slow. The kept copy opens at once and new code arrives in the
+           background (sw.js, mobile.js catching up). See StatusApp.cs. */
+        pageUrl = UseFolder() ? new Uri(page).AbsoluteUri : HOSTED;
         if (setupMode != "" && !UseFolder()) pageUrl = Setup.Url(HOSTED, setupMode);
         web.CoreWebView2InitializationCompleted += Started;
         Controls.Add(web);

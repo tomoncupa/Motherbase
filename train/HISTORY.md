@@ -1478,3 +1478,223 @@ Tested 2026-10-28 in the Browser pane (hidden, so controls pressed with
 target under 44, no words under 12px, no overflow, no sideways scroll.
 `tools/safari-check.py`: Chromium 1280 x 900 195/195, WebKit 390 x 844
 210/210. Not seen on his phone or on his real log.
+
+## First sessions, ghosts from last time, a warmup switch (1.0.82, 2026-11-09)
+
+Four asks from Tom in one message, his words:
+
+- **"Don't count PRs for a new movements first session."** Every set of a
+  new movement was a trophy and a medal, and a second heavier set the same
+  day sounded the record save. `TRAIN.firstDay(exId)` is the first date with
+  a working set that counts; `recomputePRs`, `prKinds` (all five symbols,
+  the medal included) and `recordHits` (the save sound and toast, the
+  session card's RECORDS, the share picture's PRs) give that day nothing.
+  Its sets still set the bar. A block's first session of an old movement
+  keeps its medal. While there: `recomputePRs` now skips a waiting
+  suggestion (it could be stored as the record), and `recordsFor` (Records
+  screen, records sheet, records card) skips them too.
+- **The barbell and crown asked too narrow a question.** The barbell
+  compared only with earlier sets at exactly the same reps, the crown only
+  at exactly the same weight, so 70 x 7 got a barbell after something
+  heavier for more reps was done. Now against everything before the set.
+  Measured on his 13,108 sets by the coordinating session: crowns 1,021 to
+  765, barbells 1,199 to 1,180 (not re-measured here).
+- **"if I click last sessions numbers let them show up as ghosts on the
+  left."** The faded last-time line above the steppers: each set in it is a
+  button now, the same words with a dotted line under them, and a tap loads
+  its numbers into the steppers as ghosts through `loadDraft(s, true)`, the
+  path a suggestion already used. "On the left" read as the steppers.
+  Measured at 390: the line kept its height (15px) and every set its place.
+- **"warmup designation should also be a toggle in set details button."**
+  The comment box (the bubble on a set) has a Warmup switch above RIR.
+- **"space between weight and reps."** On TRACK the two columns are inline
+  spans, so their `min-width` never applied and the reps touched the unit:
+  0px. Now `--s-4`, 16px; rows still 44px. The day screen and History
+  (flex rows) already stood 34 to 45px apart and were left.
+
+Tested in the Browser pane (hidden; controls pressed with `.click()`) at
+390 x 844 on a seeded log, and the switch on `?client=testpid`. Not seen on
+his phone or his real log.
+
+## Assisted lifts (1.0.83, 2026-11-16)
+
+Found building a client's strength report: their assisted pull-up scored 70 lb of
+help x 13 above 50 lb x 16. Tom: "We also need to fix the assisted pull up,
+since more weight there means more assist." Every reader of weight treated
+heavier as stronger: `recomputePRs`, `recordsFor`, the five kinds,
+`recordHits`, `setDelta`, `volUp`, `liftLine`, goals, `repMax`, GRAPH, Top 3,
+`suggestFill`, every volume total and the range.
+
+- Records need no bodyweight: they compare `TRAIN.wk`, the help negated.
+- Volume and estimated 1RM need what the body moved, so they use bodyweight
+  minus help when STATUS (or CHECK IN for a client) has a weigh-in, and
+  leave the lift out otherwise. Chosen over a stand-in bodyweight because a
+  guessed number would be shown as fact. A COACH client with no check-in
+  weight gets the lift out of volume and no 1RM.
+- `shared/range.js` was not touched: it knows no exercise, so TRAIN
+  (`TRAIN.rangeFrom`) and COACH (`rangeSets`) hand it an assisted set's load,
+  or 0, in place of the help.
+- Watched in headless Chromium on a fresh store with a made-up Assisted
+  Pull-up (60x10, 50x16, 70x13 in lb): 50x16 stored as the record, 70x13 not,
+  Records "Least help 50 x 16", 70 vs 50 "+20.0 lb help, -3 reps" pointing
+  down, beating 8-15 with 16 suggested 45 lb (two steps less help), 13 in
+  the band 67.5, a bench beside it still stepped up; no bodyweight, the
+  session's volume was the bench only; a 180 lb weigh-in made it
+  (180-70)x13 plus the bench exactly. The Assisted switch clicked off and
+  saved `assist: 0`, name, unit and note kept, records flipped back. Not on
+  the iPhone.
+
+## Setup on one line, and three setup bugs (1.0.84, 2026-11-16)
+
+Tom, 2026-11-15: "How setup works also a bit unintuitive", and picked option 1 of three
+(a line above the steppers plus the bug fixes; the others were a read-only
+"Next set" line under the steppers, or the fixes alone).
+
+What was wrong. Since 2026-09-22 setup lived only in a SAVED set's comment
+box, so a set's setup could only be said after it was logged, and nothing on
+TRACK showed what the next SAVE would record. `setupCard` was still in the
+file, called by nothing. Edit Setup staged a field on ADD and wrote it on
+SAVE, so CANCEL lost it, and SETTING was the default.
+
+Three bugs, each reproduced in the app before the fix:
+
+- **A.** Tapping a set with no setup left the draft as it was, and UPDATE
+  wrote it onto the set: set 1 with no straps got straps.
+- **B.** `lastSetup` skipped sets with no setup, so straps taken off on the
+  last set came back on the next open.
+- **C.** Changing set 1's setup in its comment box after set 3 made set 1's
+  setup the draft, so set 4 got it.
+
+Built: `setupLine` replaces `setupCard` at the top of the stepper box, one
+44px line, nothing on an exercise with no setup. `loadDraft` loads a done
+set's setup exactly and marks `TRAIN.suFromSel`; drawTrack puts the carried
+setup back once nothing is selected (CLEAR, UPDATE, a delete, leaving).
+`lastSetup` reads the last set done, everything off included, and a planned
+set not done says nothing. The comment box's `keep` moves the line only for
+the set it shows. Edit Setup saves on ADD or Enter, a removal saves with
+`UI.undo`, one DONE button, TOGGLE first.
+
+Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro, real taps on
+the line, the steppers, SAVE, UPDATE, the comment box and the dialog: 19 of
+19, no errors, no sideways scroll, every control on the line 44px. Not seen on
+his phone or his real log.
+
+## Setup under SAVE, and words that open their editor (1.0.86, 2026-11-16)
+
+Tom, on the 1.0.84 before/after picture: "Oh, I don't like this. We want as
+little data as possible before the input for weight and reps. put the
+settings between the save button and the actual save if needed. Also, I'd
+like the ability to edit the text by clicking on the text, not just the text
+box."
+
+- The setup line moved from the top of the stepper box to under the SAVE
+  bar, above the logged sets. Read "between the save button and the actual
+  save" as between SAVE and the saved sets. It still only shows on an
+  exercise with setup, and is still exactly what the next SAVE records.
+- A set row's comment and setup words (`.tnote`) now open that set's
+  comment box on a tap, the way the bubble does, without loading the set.
+  Read "the text box" as the comment bubble. Tapping a setting's name on
+  the setup line already focused its box (it is a `label`); now checked.
+- The faded "last time" line still sits above the steppers. It was asked
+  for on 2026-09-22 and was not part of this ask, so it stayed.
+
+Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro, real taps:
+23 of 23 (the 19 from 1.0.84 with the position check changed, plus the
+WEIGHT label being first, the setting's name focusing its box, and the note
+words opening the comment box without loading the set). Not seen on his
+phone or his real log.
+
+## Setup on a row says only what changed (1.0.87, 2026-11-16)
+
+Tom: "I don't want the setup settings to repeat per set. The understanding is
+unless anything changes, then it just holds on from the last set. Because
+obviously, otherwise, it would just take up too much space that could be put
+towards set comments instead."
+
+Until now a row showed its WHOLE setup whenever any part changed, so taking
+straps off on set 3 printed "Seat 4" again. `setupDiff` now says only the
+parts that moved: "Straps", "Straps off", "Seat 5", "Seat off". The first set
+of the day says its whole setup so a day reads on its own (an assumption,
+not asked). A suggestion not yet taken says nothing and does not count as
+the set before.
+
+Found on the way, from 1.0.84: ticking a suggestion (LOG ALL, a routine,
+Copy Previous Sets) stored no `su`, and 1.0.84's carry reads no `su` as
+everything off, so the NEXT set lost its straps; the new row would also have
+said "Straps off" on it. The tick now records the carried setup
+(`TRAIN.carriedSetup`: the setup line when it is showing the carry, else
+`lastSetup`), the same as UPDATE on a suggestion already did.
+
+Tested in headless Chromium at 390 x 844: 7 of 7 new checks (the row words
+for six sets, a ticked suggestion recording straps and saying nothing, the
+carry kept, all off saying "Straps off · Seat off", a suggestion ticked after
+all off storing none), and the 23 from 1.0.84 to 1.0.86. Not seen on his
+phone.
+
+## Last time under SAVE, last session's comments as ghosts (1.0.88, 2026-11-16)
+
+Tom: "The first set of the day shows us all set up. Actually, I would like
+last set's notes to show up as faded out text so it's clear that this is
+last session's notes. And unless anything is written, just keep it there,
+but have it clear that it's not written that day. Have it show up faded
+still. Move the faded last time numbers below save. No, exercise reordering
+makes sense if the list is exercises, and then set reordering makes sense in
+the actual logging view. Fix the bugs."
+
+- The first set of the day keeps its whole setup (confirmed).
+- The faded last-time line and the coach's line moved under SAVE, after the
+  setup line, inside the stepper box. Nothing sits above WEIGHT now.
+- A row with no comment of its own shows last session's comment on the same
+  working set (`then[n - 1]`, the day `vsFor` picks; warmups out), in
+  `--text-muted` and italic, never written to today's set. Writing a comment
+  replaces it. The comment box (bubble or words) opens with "Last time: ..."
+  as its placeholder.
+- Reordering stays as it is: a hold on the workout overview moves exercises,
+  a hold in the logging view moves sets.
+- "Fix the bugs": the code bugs (A, B, C and the ticked suggestion) were
+  fixed in 1.0.84 and 1.0.87. The sets they already wrote wrong cannot be
+  found: `set` is a whole-row type in `records.js` (`WHOLE_ROW`), so no
+  per-field write time says when `su` changed, and a wrong setup reads the
+  same as a right one. Nothing was rewritten; a wrong set is fixed by
+  tapping its setup words.
+
+Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro: 11 of 11
+(WEIGHT first, last time under SAVE after setup, his own comment winning, no
+ghost where last time had none, the ghost on set 3, muted and italic,
+nothing stored, the placeholder, his words replacing it, no sideways
+scroll, no errors), plus 23 and 7 from 1.0.84 to 1.0.87.
+
+## Volume By Set (1.0.90, 2026-11-16)
+
+Tom: "x axis set y axis volume". He picked a new view on a movement's GRAPH
+screen, beside Top 3 Sets & Total Work, not a change to it.
+
+- Set number 1, 2, 3 along the bottom; that set's weight x reps up the side,
+  drawn from zero. Each session is one line across its working sets: the
+  newest bold in the accent, the one before it `--data-2`, up to six older
+  ones thin and muted. Eight sessions at most, inside the period picked.
+- Working sets only (warmups by TRAIN's rule, plans not taken left out),
+  numbered in the order done. The weight is `TRAIN.load`, so an assisted
+  lift reads bodyweight minus help and a below-zero lift bodyweight plus the
+  number; with no weigh-in the set is left out and keeps its number.
+- Above the chart, the newest session's total and its change against the
+  session before, in the unit and in percent, no words about it.
+- A tap or drag shows the set at the point (date, set, weight x reps =
+  volume) and the header follows it with the set's comment and the day's
+  session comment. The drag finds the nearest set number, and every session
+  has a set 1, so a row of chips under the chart (date and total, which is
+  also the key) picks which session's line it reads. Tapping the chart
+  does not open the big view here, unlike the other graphs: the tap is the
+  reading.
+- Offered only when the movement is weight and reps. Fewer than two
+  sessions in the period: "Only one session in this period" or "No sessions
+  in this period".
+
+Tested in the Browser pane at 390 x 844 and 1280 x 900 on seeded rows: five
+sessions with a "wu" warmup each (header 3,485 lbs, −725 lbs, −17.2% vs the
+session before, all by hand), x labels 1 to 4, y from 0, newest 3px gold,
+before it 2px, older 1px muted; set 1's reading carried "felt strong" and
+"Session: Slept badly"; chips moved the reading to Nov 10 set 4 (840) and
+Nov 1 set 3 (1,080); an assisted pull up at 180 lb bodyweight read 130 x 8 =
+1,040 from 50 lb of help; a run offered no Volume By Set; no sideways
+scroll, every button 44px. Not seen on the iPhone.

@@ -52,16 +52,26 @@
    is not signed in, or a cloud that never answers, is backed up as it is and
    the file says so in `synced`. */
 (function () {
-  var B = window.MB_BACKUP = { state: 'waiting', rows: 0, json: '', why: '', synced: false };
+  var B = window.MB_BACKUP = { state: 'waiting', rows: 0, json: '', why: '', synced: false, took: [], inbox: '' };
   var $ = function (id) { return document.getElementById(id); };
   function show(state, detail) { $('state').textContent = state; if (detail != null) $('detail').textContent = detail; }
-  var start = Date.now(), MAX = 120000, QUIET = 10000;
+  var start = Date.now(), MAX = 120000, QUIET = 10000, WHOLE_MAX = 150000, waited = 0;
+
+  /* ?skip=tclip,smodel (2026-11-18): OUTER HEAVEN's half-hourly working copy (Backup.exe --out
+     state/mb-live --url ...?skip=) leaves out SPEAK's recordings, which it never reads: 33 of the
+     store's 41 MB that day. Only these device-only recording types can be skipped; the nightly copy
+     never passes it and keeps everything. The file names what it left out in `skipped`. */
+  var SKIPPABLE = ['tclip', 'smodel'];
+  var SKIP = (new URLSearchParams(location.search).get('skip') || '').split(',')
+    .filter(function (t) { return SKIPPABLE.indexOf(t) >= 0; });
 
   function build() {
     try {
       var rows = Rec.export();
+      if (SKIP.length) rows = rows.filter(function (r) { return SKIP.indexOf(r.type) < 0; });
       var bag = { kind: 'motherbase-backup', v: 1, app: '*', at: new Date().toISOString(),
                   from: 'nightly', synced: B.synced, rows: rows };
+      if (SKIP.length) { bag.from = 'working copy'; bag.skipped = SKIP; }
       B.json = JSON.stringify(bag);
       B.rows = rows.length;
       B.state = 'ready';
@@ -75,6 +85,7 @@
   function waitCloud() {
     var C = window.Cloud, s = C && C.state ? C.state() : null;
     if (!s || !s.on) { B.why = 'This store is not signed in to live sync, so it holds what this PC last had.'; return build(); }
+    start = Date.now();
     var quietSince = Date.now(), lastGot = s.gotAt;
     show('Waiting for live sync', 'Signed in as ' + (s.email || 'this account') + '.');
     var t = setInterval(function () {
@@ -91,10 +102,130 @@
     }, 1000);
   }
 
+  /* ── the inbox (2026-11-16) ──
+     A program on the PC cannot write to the store; this page can, signed in,
+     once a day. Backup.exe reads Documents/Motherbase inbox/*.json and hands
+     each file over as window.MB_INBOX = [{name, text}] before this page
+     loads. A file is {kind: 'motherbase-inbox', rows: [{type, date, key,
+     payload}], gone: [{type, date, key}]}. Only the types in INBOX_TYPES go
+     in, so nothing on the PC can write a set or a spend. Rec.set skips a row
+     whose payload has not changed, so sending the same file daily is
+     harmless; `gone` tombstones a piece its maker no longer has. The names
+     taken go back in MB_BACKUP.took and Backup.exe moves those files to
+     done/. First user: OUTER HEAVEN's knowledge job, `kpiece` rows for
+     ARC's knowledge banks. */
+  var INBOX_TYPES = { kpiece: 1, postspeech: 1, draftmade: 1, pnum: 1, wrun: 1, ask: 1, topic: 1 };
+  /* Alice's nightly question (2026-11-17) is a SPEAK jumping off point. Only
+     a `topic` with how 'alice' and a key starting alice- comes in, so the PC
+     can never write over his own prompts. SPEAK's topics are undated, so the
+     row is too, and it is merged, so SPEAK's `used` survives tomorrow's file. */
+  function inboxOk(r, before) {
+    if (r.type !== 'topic') return true;
+    if (!/^alice-/.test(r.key)) return false;
+    if (r.payload) return r.payload.how === 'alice' && r.payload.kind === 'jump' && typeof r.payload.text === 'string';
+    return !!before && before.how === 'alice';
+  }
+  /* A type merged field by field, never replaced (2026-11-17): ROOM's KEPT IT
+     on the wallpaper is a `wrun` with only `kept`, and the phone's run-through
+     that morning wrote `ran` on the same row. */
+  var MERGE_TYPES = { wrun: 1, ask: 1, topic: 1 };
+  /* An answer from OUTER HEAVEN's QUESTIONS tab (2026-11-17) is an `ask` row
+     keyed by its `Ask:` note, merged so a SPEAK `said` stays; the note is
+     ticked too, as SPEAK's own answer does, so the Todoist sync closes the
+     task. */
+  function askClose(key) {
+    Rec.all('note').forEach(function (n) {
+      if (n.key === key && !n.deleted && n.payload && !n.payload.done) Rec.patch('note', n.date, n.key, { done: 1 });
+    });
+  }
+  var FIX_TYPES = { exercise: 1, set: 1, excat: 1 };
+  function inbox() {
+    var files = window.MB_INBOX || [], put = 0, del = 0, bad = [];
+    files.forEach(function (f) {
+      var bag;
+      try { bag = JSON.parse(f.text); } catch (e) { bad.push(f.name); return; }
+      if (!bag || bag.kind !== 'motherbase-inbox') { bad.push(f.name); return; }
+      (bag.rows || []).forEach(function (r) {
+        if (!r || !INBOX_TYPES[r.type] || !r.key || !r.payload) return;
+        if (r.type === 'topic') r = { type: 'topic', date: null, key: r.key, payload: r.payload };
+        var before = Rec.get(r.type, r.date || null, r.key);
+        if (!inboxOk(r, before)) return;
+        if (r.type === 'topic' && !before && !r.payload.at) r.payload = Object.assign({ at: Date.now() }, r.payload);
+        if (MERGE_TYPES[r.type]) {
+          var same = before && Object.keys(r.payload).every(function (k) { return JSON.stringify(before[k]) === JSON.stringify(r.payload[k]); });
+          if (!same) { Rec.patch(r.type, r.date || null, r.key, r.payload); put++; }
+          if (r.type === 'ask' && r.payload.answeredAt) askClose(r.key);
+          return;
+        }
+        if (JSON.stringify(before) !== JSON.stringify(r.payload)) { Rec.set(r.type, r.date || null, r.key, r.payload); put++; }
+      });
+      (bag.gone || []).forEach(function (r) {
+        if (!r || !INBOX_TYPES[r.type] || !r.key) return;
+        if (r.type === 'topic') r = { type: 'topic', date: null, key: r.key };
+        var was = Rec.get(r.type, r.date || null, r.key);
+        if (!inboxOk(r, was)) return;
+        if (was) { Rec.del(r.type, r.date || null, r.key); del++; }
+      });
+      /* A data cleanup Claude built from a backup (2026-11-16, Tom: "clean up
+         my data"). Only from a file named train-cleanup-*.json, only TRAIN's
+         exercise, set and excat, and never a whole payload: `fix` merges the
+         named fields into a row that is still there (a row gone since is
+         left gone), `make` adds a row only where none is alive, `fixGone`
+         tombstones. Rows logged after the backup are untouched. */
+      if (/^train-cleanup-/.test(f.name)) {
+        (bag.fix || []).forEach(function (r) {
+          if (!r || !FIX_TYPES[r.type] || !r.key || !r.changes) return;
+          if (Rec.get(r.type, r.date || null, r.key) == null) return;
+          Rec.patch(r.type, r.date || null, r.key, r.changes); put++;
+        });
+        (bag.make || []).forEach(function (r) {
+          if (!r || !FIX_TYPES[r.type] || !r.key || !r.payload) return;
+          if (Rec.get(r.type, r.date || null, r.key) != null) return;
+          Rec.set(r.type, r.date || null, r.key, r.payload); put++;
+        });
+        (bag.fixGone || []).forEach(function (r) {
+          if (!r || !FIX_TYPES[r.type] || !r.key) return;
+          if (Rec.get(r.type, r.date || null, r.key) != null) { Rec.del(r.type, r.date || null, r.key); del++; }
+        });
+      }
+      B.took.push(f.name);
+    });
+    B.inbox = files.length ? files.length + ' inbox file' + (files.length === 1 ? '' : 's') + ': ' + put + ' rows in, ' + del + ' removed' +
+      (bad.length ? ', not read: ' + bad.join(', ') : '') : '';
+  }
+
   /* Rec.need: TRAIN's sets are kept out of an open until asked for (records.js,
-     KEPT OUT), and a backup without them is not a backup. */
+     KEPT OUT), and a backup without them is not a backup.
+
+     Rec.whole (2026-11-16): Rec.ready fires on localStorage alone when
+     IndexedDB is slow, and with STATUS.exe, SPEAK.exe and Main Menu.exe on the
+     same store it was slower than live sync's ten quiet seconds. Every caught-up
+     run from 06:56 that day saved the fast half, 4,700 rows of 26,000, over the
+     day's good file. So nothing is gathered until IndexedDB has really
+     answered, and a store it never answers for saves nothing: Backup.exe logs
+     FAILED and the last good file stays. */
+  function failWhole(why) {
+    B.state = 'error';
+    B.why = why + '; nothing saved, the last good file is kept';
+    show('Could not read the whole store', B.why);
+  }
   Rec.ready(function () {
-    (Rec.need ? Rec.need() : Promise.resolve()).then(function () { show('Store loaded', ''); setTimeout(waitCloud, 1500); });
+    var t0 = Date.now();
+    (Rec.need ? Rec.need() : Promise.resolve()).then(function () {
+      if (!Rec.whole) return { ok: true };
+      show('Waiting for the whole store', 'IndexedDB has not answered yet.');
+      return Promise.race([Rec.whole(), new Promise(function (res) {
+        setTimeout(function () { res({ ok: false, why: 'IndexedDB did not answer in ' + Math.round(WHOLE_MAX / 1000) + ' s' }); }, WHOLE_MAX);
+      })]);
+    }).then(function (w) {
+      waited = Math.round((Date.now() - t0) / 1000);
+      if (!w || !w.ok) return failWhole((w && w.why) || 'IndexedDB failed');
+      try { inbox(); } catch (e) { B.inbox = 'the inbox could not be read: ' + (e && e.message); }
+      /* a slow store is worth a line in backup.log, and the inbox line is the
+         one Backup.exe already writes */
+      if (waited >= 5) B.inbox = (B.inbox ? B.inbox + '; ' : '') + 'the store took ' + waited + ' s to load';
+      show('Store loaded', B.inbox); setTimeout(waitCloud, 1500);
+    });
   });
 })();
 </script>

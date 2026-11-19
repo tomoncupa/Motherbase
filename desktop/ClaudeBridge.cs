@@ -42,8 +42,9 @@ class ClaudeBridge
     readonly List<Dictionary<string, object>> msgs = new List<Dictionary<string, object>>();
     string session = "";
     bool open = false;
-    Process running;
-    string runningId;
+    /* written on the window's thread, read on the worker's */
+    volatile Process running;
+    volatile string runningId;
 
     static readonly Regex AUTH = new Regex(
         @"failed to authenticate|not logged in|please run /login|run /login|invalid api key|oauth|" +
@@ -173,6 +174,10 @@ class ClaudeBridge
         {
             var p = Process.Start(psi);
             running = p;
+            /* Stop pressed before claude.exe had started found nothing to
+               kill and left it running for up to six minutes, reading files
+               the next question then rewrote (2026-11-16). */
+            if (runningId != id) { try { p.Kill(); } catch { } if (running == p) running = null; return; }
             var errTask = p.StandardError.ReadToEndAsync();
             byte[] b = new UTF8Encoding(false).GetBytes(prompt);
             p.StandardInput.BaseStream.Write(b, 0, b.Length);

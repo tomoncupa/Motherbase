@@ -20,7 +20,7 @@ Home screen. On the shared foundation as of 2026-08-20: skin tokens, bottom tab 
 
 Tom: "Rather than resize my widgets when I resize my window, I just want more space to work with." One cell is now a fixed size, the setting `lifeos.cell`, captured once from what the stretched board gave at the window open that day (clamped 100-200px wide, 72-140px tall). The window only sets how many columns there are (`COLS`, never fewer than the cards use): wider adds empty columns on the right, a narrower window scrolls sideways instead of moving cards. Everything that said 12 now reads `COLS`. Phone unchanged. (Since 1.0.34 the cell is the constant `CELL` in index.html and `lifeos.cell` is not read; see below.)
 
-BODY HEATMAP ("Widget - Body Training Heatmap"): TRAIN's working sets over 7, 14 or 30 days on a front and back figure, brighter for more sets, with a ranked list. Counted like TRAIN's WEEKLY (warmups out, today's sets once done, `exercise.also` shares). Muscle-group names are read onto the body by `BODY_RULES`; an unreadable group other than cardio is listed as "Not on the body". `setIsWarm` copies `TRAIN.noteWarm`: change both.
+BODY HEATMAP ("Widget - Body Training Heatmap"): TRAIN's working sets over 7, 14 or 30 days on a front and back figure, brighter for more sets, with a ranked list. Counted like TRAIN's WEEKLY (warmups out, today's sets once done, `exercise.also` shares). Muscle-group names are read onto the body by `BODY_RULES`; an unreadable group other than cardio is listed as "Not on the body". `setIsWarm` copies `TRAIN.noteWarm`: change both. **Since HOME 1.0.128 (2026-11-17)** the heatmap and its recovery read each lift through `shared/muscles.js` `Muscles.forLift`, as TRAIN's VOLUME view does (`bodyShare`, `BODY_MUS` maps every master muscle onto a body part, the bigger share wins on one part); `BODY_RULES` is now only the fallback for a lift no rule knows.
 
 ## 2026-09-25, HOME 1.0.33: FORGE in the roster
 
@@ -535,3 +535,316 @@ Tom: "Creatine: build a muscle-stores view instead of a half-life." A tracker's 
 
 A store now keeps STORE_TAKE (0.5) of each dose until it is full and spills the rest; the 1.0.87 taper never read full on a steady daily dose. At or over STORE_SAT (90%) the strip says "Saturated until <day> with no dose". A reading on hover names the last dose before its own moment, not the latest, on every tracker.
 [TESTED in headless Chromium at 1920 and 375, set up through the dialog; WebKit review 210 of 210.]
+
+## 2026-10-29, HOME 1.0.89: HALF-LIFE grows with its trackers
+
+HALF-LIFE is a `fit` card: five trackers in the 6-row default cut the last two off. It grows to its strips as far as the window's bottom and scrolls inside past that, like every fit card.
+[TESTED in headless Chromium at 1920 and 375 with five trackers; WebKit review 210 of 210.]
+
+## 2026-10-29, HOME 1.0.90: a word that always counts one amount
+
+HALF-LIFE's Written as takes `word=amount`: that word, anywhere in a line, counts as that amount in the tracker's unit, once a day however many lines say it. A STATUS reading or a line written on a later day than its own (a backfill) counts at its own day's noon, not when it was typed.
+[TESTED against the live store in Chrome, in memory, before the tracker was changed.]
+
+## 2026-10-29, HOME 1.0.91: a tracker can skip a line
+
+An entry of `!words` in Written as stops any line holding those words counting for that tracker, for a line that names the word but was not a dose.
+[TESTED against the live store in Chrome.]
+
+## 2026-10-29, HOME 1.0.92: a daily aim line
+
+A HALF-LIFE tracker may carry `aim`, an amount a day, and `aimName`. Its strip then shows a line under the header: the average a day over the last AIM_DAYS (28) days, how many of those days had a dose, and Reached or Under against the aim, following the hovered point. Set in the dialog as Daily aim and Aim is for. For an effect studies tie to weeks of a daily amount rather than a level. A strip no longer shrinks below its own words (`flex:1 0 auto`): at phone width the header had pushed the chart out of the card.
+[TESTED in headless Chromium at 1920 and 375, set up through the dialog, with `word=amount` and `!words` in the same tracker; five-tracker fit check rerun.]
+
+## 2026-10-30, HOME 1.0.93: doses from BLOCK ticks, and a number written first
+
+A longer word in Written as also reads a number in front of it ("5g Word"); before, only a number after it counted. A tracker may carry `tick`, "Name=amount" (dialog: Ticked in BLOCK): a BLOCK tick of a block whose name starts with Name counts that amount, once a day, and only on a day with no other dose of that tracker, since a tick and a written line are the same dose. Its time is the tick's own stamp.
+[TESTED against the live store in Chrome, in memory: the other trackers unchanged.]
+
+## 2026-10-30, HOME 1.0.94: HALF-LIFE asks shared/dose.js
+
+What counts as a dose moved out of `WIDGETS.halflife.doses` into `shared/dose.js`, which STATUS's tiles read too, so the card and a tile can no longer disagree. `list()` is `Dose.trackers()`. A written number is multiplied by the tracker's `per`; a STATUS reading and its food are taken as they are (every tracker naming a measure had `per` 1).
+[TESTED: review 210/210 Chromium 390 and 195/195 at 1280, six new `dose:` smoke checks; WebKit could not launch.]
+
+
+## 2026-11-03, HOME 1.0.95: DAY PLAN
+
+Tom: "a big widget that just shows my score for the day as it is, then under the letter I can schedule what time I do the walking chunks, training, eating, and bed time." He picked the Main Menu board, usual times every day starts with and that can be moved for today only, and each time a journal event. **DAY PLAN** (4 x 6, `app: 'status'`): today's letter big in a ring of its rank colour, its word and percentage under it, the same letter STATUS's Today shows because both ask `shared/grade.js`; a tap opens STATUS. Under it WALKS, TRAINING, MEALS and BED, each time a button, + adds one (BED holds one). A time's dialog: the time, Every day (on for the first of its kind), REMOVE, SAVE; every change has Undo. The header says the next time ("next: walk at 12:15pm").
+- **Usual times** are one setting, `lifeos.dayplan` = [{id, kind, at}], written only when he saves with Every day on.
+- **A day's times are `note` events**, key `plan-<day>-<id>` (a today-only one `plan-<day>-x...`), `src: 'plan'`, `plan` the kind, text Walk, Train, Eat or Bed. The widget reads these rows, so moving one in STATUS's journal moves it here. A bed time before 5am is dated the next day.
+- **Usual times reach a day by `seed`**, on draw once the store is in: a `Rec.merge` stamped at that day's midnight, so any real edit or removal, from any device, beats it, and two devices make the same row. Only today is seeded, so a day the board was never opened gets no events.
+[TESTED: Chrome on the demo at 3840 wide: added from + WIDGET, letter E matching STATUS; add usual, add today-only, a 1am bed dated the next day, tomorrow seeded with no second copy, moved for today only with the usual time kept, REMOVE and Undo, the times in `Journal.notes`. Phone width only through the review run.]
+
+## 2026-11-04, HOME 1.0.96: LOG WEEK
+
+Tom: "a LOG widget that just shows day summary for the last 7 days and the week". A card (`logweek`) that only reads: each of the last seven days' summary (`day.note`, LOG's summary column), newest first, and above them every LOG week those days touch (`recap` keyed `week`, dated on the week's first day; LOG's weeks run 1, 8, 15, 22, 29 of the month, so seven days can touch two). An empty one says Not written. Pressing it opens LOG. It does not open LOG on the pressed day: LOG takes `{logDay}` only from its own side pane, and a LOG session would have to add that.
+
+[TESTED] Demo in Chrome: both weeks, a long summary wrapping, Today in gold, a real press opening LOG. Not seen with his real rows or on the phone.
+
+## 2026-11-04, HOME 1.0.97: LOG WEEK opens LOG on the day
+
+Tom said yes to it. A day or week pressed on LOG WEEK goes through `goTo(['log', d])`, which LOG 1.0.26 now answers: it moves there and outlines the day until his next touch. [TESTED] demo in Chrome, a real press.
+
+## 2026-11-04, HOME 1.0.98: DAY PLAN asks for step blocks and passive steps
+
+Tom: "it should also ask me how many blocks im planning to do my steps in, as well as a 'Passive steps throughout the day'". He picked splitting the rest. A STEPS line on DAY PLAN shows BLOCKS and PASSIVE; either opens STEP PLAN, saved as `lifeos.steplan` {blocks, passive}, the same every day. Each walk still to come shows its share of the steps left to S (`Grade.stepPlan`); blocks with no time yet show as + chips carrying the share. [TESTED] demo in Chrome: 3 blocks, 3,000 passive, one walk timed, 3,600 a walk. Not seen with his real rows.
+
+## 2026-11-04, HOME 1.0.99: Plan the day
+
+Tom: "an event that asks me to plan and prompt my day. It should ask me if block has the day scheduled or if anything is happening today out of the ordinary. It should ask you to finalize how my day is going." He picked a daily todo that launches its own sequence, for today or tomorrow, finished by the CLAUDE panel, which may set DAY PLAN times, the day's todos and the step blocks.
+
+- `PLANDAY.seed` (run from `drawHome`) makes today's todo, `planday-<day>`, "Plan the day", linked `mb:home/planday`, by a merge stamped at the day's midnight, so two devices make one row. An untouched one from the seven days before is deleted, so a skipped day does not follow him.
+- Pressing its words (TODAY, STATUS, QUESTS, LOG) opens three steps: which day (TOMORROW is the default after 6pm), what BLOCK's published `plan` has on it (YES, NOT QUITE, OPEN BLOCK; only NEXT when BLOCK has nothing there), and anything out of the ordinary. FINALIZE puts tomorrow's usual DAY PLAN times on (stamped now) so Claude moves them rather than adding beside them, sends the words to `MBClaude.ask`, and ticks today's todo. With no panel (phone, Chrome) the words are copied for Claude chat, or shown to copy.
+- From an app on its own, the link is `index.html?show=planday`. `mb:home` is a spot in `shared/ui.js` for this.
+
+[TESTED] demo in Chrome: the todo on TODAY pressed by mouse, all three steps, the words handed over, the todo ticked, the `?show=planday` address. Claude's `plan` and `steps` writes and their Undo through claude.js with a stand-in window. NOT tested in Main Menu.exe with the real panel and claude.exe.
+
+## 2026-11-05, HOME 1.0.100: + WIDGET opens again, and Plan the day is optional
+
+LOG WEEK (1.0.96) named a helper `days`, which every widget uses for its SHOW range, so ADD A WIDGET and LOG WEEK's own card menu threw on `W.days.map` and never opened. It is `week` now. Never give a widget a property named after a shared one (`days`, `menu`, `parts`, `periods`).
+
+Tom: clients too, "but make sure its optional". `lifeos.planday` is `off` once switched off, from "Stop adding this todo every day" in the first window or DAY PLAN's menu, and absent until then. Off deletes today's undone todo; on brings it back. The first window is 500 wide: at 400 CANCEL hung off its left edge.
+
+## 2026-11-05, HOME 1.0.101: the widget glitch cannot come back
+
+Tom: "make sure that gitch doesnt happen again". `WIDGET_SHAPE` beside `widgetMenu` lists every name the board reads off a widget and the shape it must be; `widgetFaults()` checks all of them, and `_review.html` fails the home screen on any fault and presses + WIDGET to count its rows (`reviewBoard`). Proved by planting the old `days` helper: the review failed, naming it. The board also stopped trusting a widget: `days` is only read when it is a list, a menu that throws gives no items (`menuOf`), and a widget whose row throws is left off ADD A WIDGET instead of taking the list with it. A new name the board reads goes in `WIDGET_SHAPE`.
+
+## 2026-11-09, HOME 1.0.102: WORK DONE has a smallest size, and ADD A WIDGET has a search box
+
+Tom sent WORK DONE at 4 columns by 6 rows: "the smallest the widget can functionally be". A widget may now carry `min: {w, h}` in columns and rows; `minSize(t)` is the one floor every resize path reads (the corner drag, Taller and Shorter, a widget dropped into an empty patch), and `fitGrid` draws a card saved smaller than its minimum at the minimum. WORK DONE's is 4 by 6 and its factory size is 6 by 6. `min` is in `WIDGET_SHAPE`.
+
+Tom: "I also want a search function when I add a new widget". A box at the top of ADD A WIDGET, focused on open with a mouse and left down on a phone. Every word must match. Names (and groups and ready-made versions) win: "work" gave every app card at first, because their lines say they work inside the card, so the one-line descriptions are searched only when no name matches. LAYOUT is hidden while searching.
+
+## 2026-11-09, HOME 1.0.104: TO WEIGH is ELEMENT DOSES, and ELEMENT runs unseen beside the board
+
+Tom: "It should tell me what my default AM doses are, then I can either edit the number, but I check box it to confirm I did that. Then the night intake is more flexible." The card had said "No plan today" since 25 Oct: ELEMENT wrote `mix.plan` only when opened. `mixFeed()` now loads `mix/index.html` once, in a hidden frame outside the grid, on the top page only, from the cards that read the plan (ELEMENT DOSES and DRINKS); ELEMENT redraws on every store write, so food logged anywhere moves the doses within seconds, and a plan left from yesterday is redrawn at most once a minute. The card (key still `toweigh`, his board keeps it) lists AM (every drink but the night one) then NIGHT, one line per powder with its grams in a box and a tick. A tick writes the `dose` row with the grams in the box and their mg at the plan's own strength, then `mixToStatus`. Typed grams not yet ticked are kept in memory for the day; on a ticked line they rewrite the row. Watched in the demo: pitcher 1 potassium edited to 2.000 g and ticked wrote 725 mg to the dose row and STATUS, and the 0.75 g came off pitcher 2 and the night drink; 200 g of beef liver logged moved the with-food zinc and magnesium; untick put every number back. ELEMENT's own rule shares a change across every dose not yet taken, AM included, so an untaken AM dose can move too.
+
+## 2026-11-09, HOME 1.0.105: Plan the day is Tom only for now
+
+Tom: "Make the plan the day task me only for now". `PLANDAY.on()` is false in a build with no `mine` app (`MINE_BUILD`), so the client copy never adds the todo, `seed` takes back today's untouched one it already added, and DAY PLAN's menu loses its switch there. `lifeos.planday` is untouched, so turning it back on for clients is taking `MINE_BUILD &&` out of `on`.
+
+## 2026-11-09, HOME 1.0.107: an empty patch offers one standard block
+
+Tom, of a dashed box covering a whole empty patch: "Why is this 1 giant widget? The underlying grid should be standard sized nodes and blocks". The hover hint (`#gaphint`) was the whole patch `gapAt` found. `watchGaps` now shows one 4 by 3 block, stepped in blocks from the patch's corner and smaller only where the patch is; the last step in a patch that is not a multiple of 3 rows overlaps the one before rather than shrinking. A click hands `widgetPicker` that block's corner and `room` (the patch right and down of it), and the widget keeps its own size cut to that room, so nothing below is pushed. [TESTED] demo in Chrome at 1889 wide: an 8 by 7 gap gave only 4 by 3 hints; DAY LOG added from the lower right one landed at 5,4, 4 by 3, RECORDS below unmoved. Not seen on his board.
+
+## 2026-11-09, HOME 1.0.108: blocks never overlap
+
+Tom chose 11 rows over shorter rows ("A"): his screen is 12 columns at 1920, 24 at 3840, 11 rows at about 1000px tall (worked out, not measured on his window). A patch's leftover edge is now a smaller block on the same lattice instead of a full block overlapping the one before, so a full-height patch reads as three 4 by 3 blocks and a 4 by 2 strip. [TESTED] demo in Chrome: an 8 by 7 gap gave 4 by 3 at rows 1 and 4 and a 4 by 1 strip at row 7; review 197/197.
+
+## 2026-11-09, HOME 1.0.109: CONSISTENCY counts meals not logged
+
+Tom: "Tracking number of tracked Vs untracked meals might help". He picked a count on STATUS's Food tab and this tile to show it. `sums` adds `unmeals`, every day row's count in the stretch (a day flagged not fully tracked before the count existed is 1). MEALS TRACKED reads "3.7 of 4.0 a day", then "93% tracked" with the change in that share against the stretch before. [TESTED] demo in headless Chromium, 2 meals not logged yesterday: 26 tracked, 2 not, "3.7 of 4.0 a day 93% tracked, down 7"; review 212/212 at 390. Not seen on his board.
+
+## 2026-11-10, HOME 1.0.110: LIFE fills its card
+
+Tom: "Give me dynamic resizing". The year squares were 20 columns always, so a short card scrolled. A ResizeObserver on the box under the age picks the column count that draws the squares biggest with every year showing (`fitYears`). Phone keeps 20 columns. [TESTED] Chrome, six card sizes, every year inside; WebKit 212/212.
+
+## 2026-11-11, HOME 1.0.111: LOG WEEK is typed into
+
+Tom: "Yes, make it editable". Each summary on LOG WEEK, a day's (`day.note`) and a week's (`recap` keyed `week`), is a box on the card. It saves the way LOG's summary dialog does (trimmed, merged into the row, the row deleted when empty), half a second after the last key and on leaving the box; Enter saves and leaves, Shift+Enter is a new line. The box grows with the text. The day or week name is the button that opens LOG there. [TESTED] demo in Chrome at 1918 wide, real clicks and keys: today and a two-line week saved and shown, a week cleared to no row, LOG's store reading the same row, the name opening LOG; review 212/212 in WebKit at 390.
+
+## 2026-11-16, HOME 1.0.114: THIS WEEK
+
+Tom, from Superfocus, "integrate this into quests and Motherbase", for people
+with no Todoist, and he picked a home card. THIS WEEK (`thisweek`, 4 by 5)
+lists every open QUESTS goal: its words (never cut), this week's call as a
+button with its colour on a dot (tap: That's right, another call, Clear my
+call, written by `Goals.mark`), the last 6 weeks' done counts with the number
+in each box, "Day X of Y", and one fix: the next task this week, Put on today
+(`Goals.toToday`, with Undo) or Add a task (opens QUESTS Goals). PLAN THE WEEK
+opens QUESTS's week draft (`goTo(['quest', 'week'])`). No goals: "No goals"
+and SET A GOAL. Every rule is `shared/goals.js`, the one QUESTS reads. Tested
+in headless Chromium at 1600 and 390 by clicking; review 197 of 197.
+
+## 2026-11-16, HOME 1.0.112: the size is his, the contents fit it
+
+Tom: "I don't want the size of the widget to change. I want the contents and the data display to change and to adjust the magnification ... I don't want limits to widget size, and I don't want, as much as possible, intra widget scrolling." Rules since:
+- A card is only ever the size he set. Fit cards no longer grow to their contents; Fit to contents is a one-press item on every card's menu (`needRows`), measured once.
+- No size limits: `minSize` is 1 by 1; a widget's `min` stays on it, unread.
+- Nothing scrolls inside a card on the desk (`overflow:hidden`); `cutCards` leaves off what does not fit at every size, not only small.
+- Shift+wheel zooms like Ctrl+wheel (deltaX counts: Windows turns Shift+wheel sideways); zoom runs 25% to 300%. Zoomed out, more rows fit.
+- Not done: a chart still shows a fixed number of days when zoomed out. Each chart widget would need its own "more days when there is room".
+[TESTED] demo in Chrome: no card spills, RECORDS shows 21, 24, 27 items at 100, 90, 80%; 1 by 1 allowed; WebKit 212/212.
+
+## 2026-11-16, HOME 1.0.113: half cells, and a board for smaller screens
+
+Tom: "a universal building block to build our widget system on", for iPads and other screen sizes.
+- The unit is half a cell (`U = 2`): a unit is (146 - gap) / 2 wide and 42 tall, so two units and the gap are one old cell and every card kept its pixel size. Spots, sizes, `boardReach2`, BLOCK's 4 by 3 patch and a new widget's `W.w`/`W.h` (and a preset's `w`/`h`) all count in units; widget definitions stay in old cells and are multiplied by `U` when added.
+- The board saves as `lifeos.layout2`. The old `lifeos.layout` is converted once in memory (`readLayout`, `toHalf`, after `splitOld`) and never written, so a device still on old code keeps its old board instead of drawing cards twice the size. A board emptied on purpose (`layoutEmpty`) never falls back to the old one.
+- Three boards: std (the card's own x, y, w, h), `W` for a window 2880px or wider, and `T` for one under 1440px (`TAB_BELOW`: an iPad on its side, a laptop, a half-snapped window). A board with no spot for a card gives it its 1920 width shared evenly across the row (`shareRow`) and lets the grid place it. A phone still stacks the std order.
+- The fewest columns a board draws is what fits the window at full size (was a flat 12 cells).
+[TESTED] Chrome at 1918: eight cards, same pixel sizes as 1.0.112; an old saved board converted (3 by 2 at 1,1 to 6 by 4; `W` 13,2 to 25,3), a half step 541px, old row untouched; at 1164: `tab`, 14 units, two cards a row, no sideways scroll. WebKit 212/212 on a clean checkout. [UNTESTED] the 3840 board, a real iPad.
+
+## 2026-11-16, HOME 1.0.115: zoomed out, WEIGHT shows more days
+
+Tom: "So if it gets too big, let it show less clusters of data. If it gets too small, let it show more." The days picked on a WEIGHT card are what it shows at 100%; the card's zoom divides them (`zoomDays`): 30 days at 50% is 60, at 25% is 120, at 200% is 15, never under 7, "all of it" unchanged, no zoom on a phone. The title names the stretch shown (`zoomDaysName`: "WEIGHT · 60 DAYS"). This is the pattern for every chart card with a days pick: read `zoomDays(cfg, cfg.days)` wherever it read `cfg.days`, and name it with `zoomDaysName`.
+[TESTED] demo in headless Chromium at 1918: 30-day card at 100/50/25/200% drew 30/60/120/15 days with axis dates to match, card 620 by 240 at every zoom, nothing spilling; three real Shift+wheel notches took a 90-day card to 75% and 120 days, Ctrl+wheel back to 90. [UNTESTED] his board.
+
+## 2026-11-16, in HOME 1.0.117: SLEEP and measure cards follow the zoom too
+
+The STATUS measure card (`measure`) and SLEEP read `zoomDays` like WEIGHT: 30 days of MOOD at 50% is 60, at 25% 120, at 200% 15; 7 nights of sleep at 50% is 14, at 25% 28, never under 7. The measure card's title names the stretch (`zoomDaysName`). These lines went out inside 6726841 (another session's GOALS commit, HOME 1.0.117), which staged the whole file while this change was uncommitted. Left as is, never rewrite a pushed commit. Zoomed to 200%, a card counts as small and hides its side note: that is 1.0.112's size rule, not this. Still fixed: TRAIN volume, HALF-LIFE, AVG WEIGHT (an average, so zoom would change its meaning; ask first).
+[TESTED] demo in headless Chromium at 1918: MOOD 30/60/120/15 days and SLEEP 7/14/28/7 nights at 100/50/25/200%, axis dates to match, card sizes unchanged, nothing spilling; WebKit 212/212 on clean 7901556. [UNTESTED] his board.
+
+1.0.116 and 1.0.117, the same day: THIS WEEK shows a goal fed by data
+(`aim.src`) with its line ("2 of 3 sessions this week", "Now 83, aim 80 by
+Dec 16. On pace: 81.5") and readings in the weeks' boxes. In Main Menu.exe
+(`window.MBClaude`) it adds PLAN WITH CLAUDE, which sends each goal, its call,
+its line and its next task to the CLAUDE panel as "Plan my week".
+
+## 2026-11-16, HOME 1.0.118: zoomed in, a card keeps its title and answer
+
+Tom asked for a sweep of what card zoom could have broken. Found: the size class (`data-sz`) is read in the card's zoom, so a card zoomed to 200% counted as small and its title bar lost the answer line, and at 300% a short card counted as too short for a title (`sz-xs`) and lost the title, its menu button and the bar that drags it. The title bar is never zoomed, so it now goes by the card's real size: `data-hs` (s or l, same thresholds) carries the header rules, and `sz-xs` reads the real height. The body's rules keep `data-sz` in the zoom. Rules since:
+- A rule that styles `.w-head` keys on `data-hs`; one that styles what is inside `.w-body` keys on `data-sz`.
+- A chart card with a days pick reads `zoomDays(cfg, cfg.days)` wherever it read `cfg.days`, and names the stretch with `zoomDaysName`. WEIGHT, the measure card and SLEEP do. A list card (RECORDS, UPCOMING) does not: zoomed out it already shows more rows.
+Swept and fine: the drag ghost and the + WIDGET picker titles, the phone (no zoom, picked days shown, no sideways scroll), redraw speed (a year of weigh-ins at 25% is 38 ms against 34 at 100%), no other file reads a card's zoom or title.
+[TESTED] demo in headless Chromium at 1918: WEIGHT, MOOD and SLEEP at 100/200/300% keep title, menu and answer; a really small SLEEP still drops its answer line at every zoom; phone at 390. [UNTESTED] his board.
+
+## 2026-11-16, HOME 1.0.119: a time frame he picks is locked (built the same day)
+
+Tom, answering the sweep: "If I chose a setting manually, the zooming in can't change it", and TRAIN volume and HALF-LIFE should follow the zoom "unless I lock a number". Claude's call, given to Tom: no lock button; picking a time frame from the card's menu IS the lock. To build:
+- Picking from Time frame (both menus, the card's and the one near `cfg.days = d[0]; redraw()`) sets `cfg.dlock = 1`; `zoomDays` returns `n` untouched when `cfg.dlock`. A new first item, "Follow the zoom", clears `dlock` (and keeps `days` as the 100% amount). The tick shows which.
+- Picks made before this (no `dlock`) keep following the zoom, so his board does not change under him.
+- TRAIN volume (`trainvol`, weeks) and HALF-LIFE then read `zoomDays` too.
+- AVG WEIGHT never follows the zoom (an average over the days he chose).
+- The time frame menu keeps ticking the picked days while a zoomed title says more: Tom, "leave it".
+- Zoom showing more data is a Motherbase rule only (Tom: "mobo only for now"), not ui-standards.
+
+Built as specified, in 1.0.119. `ZOOM_DAYS` names the five chart cards that follow the zoom (WEIGHT, the measure card, SLEEP, TRAIN volume, HALF-LIFE); `daysMenu` draws the Time frame list in both the card's menu and + WIDGET, with "Follow the zoom" first on those five. `zoomDays` never takes a pick under a week up to a week, so HALF-LIFE's 3 days zoomed in stays 3. Found on the way: `cutCards` took the body's bottom padding off at 100% while the body was drawn in its zoom, so a chart filling a card zoomed out counted as a few pixels over and was left off whole (HALF-LIFE's chart vanished at 50%); the padding is now scaled by the zoom.
+[TESTED] demo in headless Chromium at 1918, by clicking: WEIGHT followed the zoom (90 to 120 days at 75%), picking 30 days locked it through a further zoom, "Follow the zoom" gave 60 at 50%; the ticks move from Follow the zoom to the pick; TRAIN volume 8/16/4 weeks and HALF-LIFE 3/6/12/3 days at 100/50/25/200%, its chart drawn at every zoom. [UNTESTED] his board.
+
+## 2026-11-16, HOME 1.0.120: NEW CHAPTER
+
+Tom: "a reset widget that's just a reset button that removes itself". One
+button that opens QUESTS's New chapter. The card stamps `at` when added
+(`put`, only for this card); once a chapter starts after that, its draw takes
+the card off the layout, with Undo. Tested in headless Chromium.
+
+## 2026-11-16, HOME 1.0.121: the add-a-card hint stays in its patch
+
+Tom's screenshot: the dashed + box sat over WEIGHT and DESK TIME on his wide board. `gapAt` returned an empty patch that runs off the bottom of the board as only the pointer's cell, so the hint drew a full 4 by 3 block (8 by 6 units) from the pointer's column, over whatever stood beside or above it. It now returns the free run's width with `h: Infinity`, and `block` lays its lattice inside it like any bounded patch: cut at the sides, full blocks down. `room.h` is Infinity, so a widget added there keeps its own height. Rule: any patch the hint is drawn in is bounded at the sides.
+[TESTED] headless Chromium at 1918, a board shaped like his (a card above, DESK TIME to the right, the patch open below), the pointer at every empty spot: old code 620 by 240 hints over WEIGHT and DESK TIME (his screenshot's size), new code none in 631 spots. Ctrl+R: `tools/sw-check.py` 11 of 11 in WebKit and Chromium, "Ctrl+R once is running the push" included, on TRAIN. [UNTESTED] Ctrl+R inside Main Menu.exe (WebView2, browser keys on), his board.
+
+## 2026-11-16, HOME 1.0.122: the add-a-card hint is the smallest working card
+
+Tom: "Having a big dash box does not look refined at all. Just have it match ... the smallest widget size that actually has a function." Measured on the demo, every widget at each small size: 1 by 1 unit (67 by 30 px) shows something in 9 of 63, 2 by 1 in 16, 2 by 2 (146 by 72, one old cell) in 52, 4 by 3 in 59. The hint is now 2 by 2 units (`BW = BH = U`), replacing the 4 by 3 block of 2026-11-09, and a space smaller than that shows no hint, since no working card fits it. A widget added there still comes in at its own size, cut to the room.
+[TESTED] headless Chromium at 1918 and 1300: every hint 146 by 72, none over a card in 631 and 551 spots. Seen in passing, not from this change: on a reload mid-boot the demo logged "Sfx is not defined" and "Cannot access 'homeHeld' before initialization" (redrawHome reached before `let homeHeld`); not chased.
+
+## Needs from BLOCK, 2026-11-16: count from the new chapter
+
+BLOCK 1.0.26 counts its streaks from `Chapter.from('block')`. Three home cards should follow: STREAKS and EVERY & HABITS (`rhAnyState`, a copy of BLOCK's habit maths; BLOCK's `rhStreak` and `everyState` gained a `floor`) count from `Chapter.from('block')`, and CONSISTENCY, whose rows are TRAIN and STATUS facts, not ticks, counts its STATUS rows from `Chapter.from('status')` (STATUS's own cut is `countFrom()`, the later of that and its fresh start); TRAIN reads no chapter (Tom, 2026-11-16), so its rows stay as they are.
+
+## 2026-11-16, HOME 1.0.123: zoomed in, WORK DONE keeps its rows and CONSISTENCY stops spilling
+
+Tom's screenshot: CONSISTENCY's lines ran over the tile below ("^3" over CALORIES) and "100% tracked, same as before" was cut at "befor"; WORK DONE zoomed in vanished. Two causes. `cutCards` treated a table's body as one thing, so one row past the bottom took every row with it and only the column heads stayed; it now looks inside TBODY, THEAD and TFOOT and drops rows whole, and a group heading (COUNTS, AVERAGES) with none of its rows left goes too. CONSISTENCY's tiles are a fixed height (the grid's `1fr` rows) and their lines centred and overflowed both ways; a tile now starts at its top when it overflows (`justify-content: safe center`), hides what spills, and `cutCards` makes it fit: padding tightens first (`lc-tight`), then the change line goes, then the label, never the number. The change line and the unit wrap instead of running off the tile.
+[TESTED] headless Chromium at 1918, demo: WORK DONE 14 of 14 rows at 100%, 10 at 150%, 6 at 200%, 3 at 300%, none past the card (old code 1 of 14 from 150%); CONSISTENCY 8 by 5 at 100% keeps all three lines, at 125% and 150% and 8 by 4 the label and number, 8 by 3 the number, no tile spilling (old code spilled in every tile from 125%). A 4 by 4 card at 200% still has no room for the number; it is clipped inside its tile rather than drawn over the next. [UNTESTED] his board.
+
+## 2026-11-16, HOME 1.0.124: every card checked at every size and zoom (`tools/home-sweep.py`)
+
+Tom asked why 1.0.123's glitches were not caught: every check asked only whether something stuck out past a card's bottom, so tiles overlapping inside a card and a card gone blank both passed, and only the cards being changed were ever zoomed. `tools/home-sweep.py` puts each of the 63 widgets on the demo board alone at six sizes and four zooms and asks three things: EMPTY (shows nothing, with room for a 44px line), OVERLAP (two pieces of words drawn over each other) and CUT (words partly hidden by a box). Only rooms at least the smallest working card (2 by 2 units at 100%) are judged; a 1px brush of a line box is not counted. First run: 45 widgets failing.
+
+What `cutCards` learned: big type that does not fit shrinks first, 0.82 at a time and never under 12px (`cutSides`, `data-fit` keeps any size a widget set), then words still cut across or down are left off whole, last first, unless they are the last words in the card. Words ellipsed with "…" wrap instead (`sz-wrap`, DESIGN.md: his words are never ellipsed), unless that takes them past two lines: in a todo beside its tick in the smallest card, wrapping stood one word on each line and the card went blank.
+
+[TESTED] the sweep: 45 widgets failing on the first run, 9 now. Left: WEIGHT, SLEEP, the measure card and TRAIN volume print their axis numbers over each other in a short chart (`shared/chart.js`, foundation need below); IDEAS shows nothing at 2 by 2 (its words squeezed to a few pixels beside the tick and date, as before this change); EVENTS and MEALS keep a "…" at 2 by 2; BODY HEAT and the clock at 4 by 4 zoomed to 200%. [UNTESTED] his board.
+
+**Needs from the foundation (done the same day, from this session: `Chart.grid` and `c.labels` now skip words that would touch, shared/CLAUDE.md):** `Chart.grid` (shared/chart.js) prints a number at every step with no check that the numbers have room, so a chart under about 80px tall prints 80, 81 and 82 over each other (WEIGHT, SLEEP, the measure card, TRAIN volume at 2 by 2). It should skip labels that would come within a line of the one before, the way `timeAxis` already drops dates. `py -3 tools/home-sweep.py weight sleep measure trainvol` checks it.
+
+Also in 1.0.124, BODY HEATMAP: the muscles at 0 sets in the range are one line at the top of the list, "0 SETS Biceps, Calves" (Tom: "show sets done always so that I can see if I did 0 sets"). Tried first as greyed rows at the bottom; on his board the card is shorter than the list, so those were the first rows left off. [TESTED] demo with two muscles forced to 0, at the board's size and taller.
+
+## 1.0.126, 2026-11-16: EVERY & HABITS
+
+The card opens BLOCK on Schedule (`to: ['block', 'schedule']`). Empty, it says "No Every blocks or habits." with ADD ONE, which opens Schedule with the cursor in the Habits box. A habit row shows this period's ticks as dots (words past 14) and the streak; `rhStreakH` copies BLOCK's `rhStreak`, floored at BLOCK's chapter or count-from day. Checked equal to BLOCK on three tick patterns.
+
+## 2026-11-16, HOME 1.0.127: BODY HEATMAP's recovery from sets, and from the log when it can say
+
+Tom: recovery should not be "hyper individualized to me", and should follow "the number of sets done, or how well performance increases per session, calculated against time between sessions". It was 72 hours for every big muscle whatever it did (half a set from a row counted the same as ten sets of bench), and 24 to 48 by sets for small ones.
+- **Sets, for every muscle** (`bodyDose`): the window for a full day (6 sets) is 72 hours big, 48 small, the usual figures [ASSUMED, not measured on him]; 1 set is half of it, 9 or more a quarter more. A share from an exercise that also works the muscle counts as its share.
+- **The log, where it has evidence** (`bodyLearn`, any person's TRAIN rows, cached per day and set count): pairs of back-to-back days within 4 days that trained the muscle, the hours between, and the median change in estimated 1RM on the same plain-weight lifts. A gap counts with 8 pairs or more, and as not held only past a 2% drop. Held at the shortest gap: an upper bound, it can only shorten the window; not held: back by the first gap that did, it can only lengthen it. Scaled to the day's sets, weighed pairs / (pairs + 20).
+- **His log does not have the evidence yet.** Checked on the 16 Nov backup in a throwaway browser: most of his pairs per muscle are 4 days or more apart, and the close ones swing wildly (biceps +50% after a day, -17% after four: the lift and the rep range moving, not recovery). No muscle reaches 8 pairs within 4 days, so sets decide for every muscle today. A made-up log with clear evidence (30 hours apart 5% down, 50 hours 1% up, 20 cycles) gave "back only after about 48 hours".
+- The row's hover says why: the sets, and the log only when it moved the window.
+- **An untrained muscle is green, never grey** (Tom: "have the body show up as green, not empty and gray if I am untrained for a couple of days ... meant to motivate me to train more often, not guilt me"): ready, at the lowest brightness (0.4; trained muscles 0.4 to 1 by sets). After days off the whole body reads green and the card says "Every muscle is ready to train".
+
+## Vision goals (WOOP) in Plan the day and THIS WEEK (2026-11-17, 1.0.129; the step is VISION GOALS since 1.0.133)
+
+Tom said yes to all ten WOOP points and asked for them joined to plan
+tomorrow. Plan the day now asks, after Today or Tomorrow and before BLOCK,
+YOUR PLANS: for each goal with a WOOP (`Goals.cards()`, three at most), "If
+<if>, then <then>" and a time box. A time writes the timed todo
+`woop-<goal>-<day>` (src 'woop', `Goals.cue`) and `wrun.cue`; a blank leaves
+it or takes an untouched one back. That todo is the phone's cue and the moment
+ROOM's wallpaper lifts the goal's card. THIS WEEK adds under each WOOP goal
+its if-then and "Kept K of C planned days this week" (`Goals.kept`). The rule
+lives in `shared/goals.js`. Tested in headless Chromium at 1920 by clicking
+TOMORROW, typing 23:00 and NEXT; the THIS WEEK line by drawing the card.
+
+## NEXT (2026-11-17, 1.0.130)
+
+Tom: "a widget that only shows the next 1 or 3 next tasks". `WIDGETS.next`, 4
+by 2: open todos due today or late in QUESTS's Today order (late first by
+priority then time, then today's by the clock, untimed after), ticked through
+`Journal.tick` like TODO. Its menu: Show the next task / Show the next 3 tasks
+(`cfg.n`, 3 is the default), and Follow the QUESTS filter (part `qf`, on),
+which hides what QUESTS's Today filter hides (`Journal.filterShows`, one rule
+for both). The line under the title says how many the filter hid. Small and
+hover-free because ROOM's wallpaper will frame the board. Claude's call, open
+to Tom: the switch defaults to following the filter. Tested in headless
+Chromium by drawing the card after clicking a filter in QUESTS.
+
+**1.0.131, the same day** (Tom: "Quest widgets for 1 task, 3 task, tasks only
+in a certain project"): three cards in the picker, NEXT TASK (`next1`, 4x2),
+NEXT 3 TASKS (`next`, now 4x3 so the third row fits) and PROJECT TASKS
+(`projtasks`, 4x4). The count is no longer a menu choice; an old NEXT card
+with `cfg.n` 1 keeps showing one. PROJECT TASKS takes its project from the
+card's menu or its setup page (`cfg.proj`), else the project with the most
+open tasks, and names itself after it (#SKOOL): today's and late tasks in
+Today order, then later ones by date (with the day), then No date, 4 shown
+and "N more in QUESTS". It does not follow the QUESTS filter. Shared helpers
+`dueOfRow`, `openTodo`, `nextOrder`, `taskRows` sit above `tickRow`. Tested in
+headless Chromium at 1920 and 390: contents, the project pick, a tick from
+NEXT TASK.
+
+**1.0.132** (Tom: "why they wide purple and ugly", picked A, B and C): the three cards draw ruled lines, not plates (`rowlist ruled qrows`), the colour only on the tick box, and are 3 wide. C, the card shrinking to its rows, was not built: it is the auto-size Tom turned off on 2026-11-16 ("the overall widget size should be manually set"); Fit to contents on the card menu does it once.
+
+## One widget for ROOM's wallpaper (2026-11-17, 1.0.134)
+
+Tom wanted the wallpaper to carry the home screen's widgets ("Just put full
+widget functionality ... Copy the grid system"). OUTER HEAVEN frames this page
+once per widget instead of copying widgets:
+
+- **`?widget=<type>&n=<k>`** draws only the k-th card of that type on his
+  board, with its own settings, filling the page on a clear background
+  (`html.wmode`, set in the head before the first paint). No such card: a
+  fresh one at its factory size. Nothing in this mode saves the board: the
+  head's remove, menu and arrows are hidden and the head takes no press, so
+  the card cannot be dragged, sized or removed (`wmodeList`, a sparse list,
+  so card indices stay his board's).
+- **`?widget=list`** (and `sync`) draws nothing and posts
+  `{mbWidgets, cards, types, stickies, signedIn}` to the parent, on ready
+  and every minute (`wmodeTell`).
+- **Typing:** in this mode a focused box posts `{mbTyping: 1}` / `0` to the
+  parent, so the wallpaper behind the desktop knows when to hand it keys.
+- **STICKY NOTE has several notes:** `cfg.sk` (or `&key=` in this mode)
+  stores the note as the setting `lifeos.sticky.<key>`; no key is the old
+  `lifeos.sticky`. Its card menu gains Which note once a second note exists.
+- **Live sync in a frame:** `shared/cloud.js` connects from a frame named
+  `?sync=1` whose top is another site (the wallpaper), never from the
+  suite's own frames (`LEAD`).
+- Tested in headless Chromium from another origin: one card drawn, header
+  hidden, background clear, a keyed sticky saved and `mbTyping` sent.
+
+## A device's status note no longer rebuilds the board (2026-11-17, 1.0.135)
+
+- Found in the session "Graphics redraw glitch": each device saves its own
+  `device` row (`shared/report.js`) every few seconds, and live sync pulls in
+  every other device's. Each save reached `LifeOS.on`, and HOME rebuilt every
+  card. Charts stopped flashing in that session; the rebuild itself was left.
+- The kernel's `Rec.on` now skips a change made only of `device` rows. No
+  card draws them (DATA's device list is drawn when DATA opens). An empty
+  change list still refreshes, since it means anything may have changed.
+
+## 1.0.136, 2026-11-17: FLOW
+
+A card for BLOCK's Flow tab (Tom picked "the box you're on and what comes next on the home screen and the STATUS desktop widget"). Where he is in the flow BLOCK has open (`block.flowOpen`, else the first), one button per way out with its time and the sleep suggestion, Undo on a pick; not started shows Start at its first box; no flow shows MAKE ONE, which opens BLOCK on Flow (`show: 'flow'`). Every rule is `shared/flow.js`, loaded here. Driven in headless Chromium: drawn at Wake up bad with both ways out.
+
+## 1.0.139, 2026-11-18: FLOW is the travel card
+
+Tom: "put the block I'm currently on the top layer, and then show me the next 2 levels", travel down the list, "cool animations". The card body is `Flow.card` (shared/flow.js), the same card as the new FLOW phone app (`flow/`, now on the roster with `phone: 1`). Drawn `quiet` so a board redraw does not replay the lines; where he was looking survives a redraw. Mockup Tom saw: claude.ai/artifact/61ohjQ3WkohnRRVd1LdKsT. Driven in headless Chromium at 420 wide: drawn at Weigh in, travelled to Salt Drink. `.flnow` and `.flway` CSS are left unused.

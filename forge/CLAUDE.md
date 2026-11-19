@@ -1,5 +1,7 @@
 # FORGE (CLAUDE.md)
 
+**Muscles come from the suite's one rule** (1.0.6, 2026-11-16): `musShare`/`musOf` ask `shared/muscles.js` `Muscles.forLift` with TRAIN's exercise row (`mus`), this app's `ftag`, the master list, then the group, exactly as TRAIN does. The week's per-muscle chips count DIRECT sets (each set once, toward the main muscle), as TRAIN's first view. Every master muscle is offered in the pickers. (CLAUDE.md) Since 1.0.7 (2026-11-17) the muscle picker offers the master list's groups (no Adductors), an old forearm name in a tag or slot reads as Forearm Flex. or Ext., and a muscle slot fits a lift whose main muscle or filed group is that muscle (`fitsSlot` asks `Muscles.forLift`).
+
 Governs `forge/` only. The repo-root `CLAUDE.md` and `DOCTRINE.md` still apply
 and win any disagreement. COACH, TRAIN and FORGE are one system: read
 `coach/CLAUDE.md` and `train/CLAUDE.md` before changing what goes between them.

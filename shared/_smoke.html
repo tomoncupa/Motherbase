@@ -10,6 +10,14 @@
 <script src="day.js"></script>
 <script src="records.js"></script>
 <script src="journal.js"></script>
+<script src="dose.js"></script>
+<script src="grade.js"></script>
+<script src="chapter.js"></script>
+<script src="e1rm.js"></script>
+<script src="goals.js"></script>
+<script src="flow.js"></script>
+<script src="muscles.js"></script>
+<script src="muscle-key.js"></script>
 <script src="mobile.js"></script>
 <script src="sound.js"></script>
 <script src="ui.js"></script>
@@ -246,6 +254,27 @@ async function run() {
   const n2 = Rec.merge([newer]);
   ok('rec: newer row wins the merge', Rec.get(stamp, d, 'a').v === 42);
   ok('rec: merge is idempotent', n1 === 1 && n2 === 0);
+  /* 2026-11-16: 769 of a COACH client's rows came back wearing TRAIN's type
+     with the client's id (`local|cset|...` typed `set`), the copies TRAIN's
+     ?client= adapter hands out, and were counted as Tom's own sets. A copy
+     like that is refused, and one already stored is put back, key and all,
+     as a write stamped now so live sync carries it. */
+  ok('rec: a row whose id names another type is refused, and a stored one is put back', await (async () => {
+    const ct = stamp + 'c';
+    const orig = Rec.set(ct, d, 'p|k1', { v: 1 });
+    const dressed = Object.assign({}, orig, { type: stamp, key: 'k1', updated_at: new Date(Date.now() + 60000).toISOString() });
+    const refused = Rec.merge([dressed]) === 0 && !Rec.all(stamp).some(r => r.id === orig.id) &&
+      Rec.get(ct, d, 'p|k1').v === 1 && Rec.misfits() > 0;
+    const sid = 'local|' + ct + '|' + d + '|p-k2', old = '2026-10-08T09:27:02.494Z';
+    localStorage.setItem('mb.r.' + sid, JSON.stringify({ id: sid, user_id: 'local', type: stamp, date: d, key: 'k2',
+      payload: { v: 2 }, updated_at: old, deleted: false }));
+    Rec.reload();
+    const back = Rec.row(ct, d, 'p|k2');
+    const fixed = !!back && back.id === sid && back.type === ct && back.key === 'p|k2' && back.updated_at > old &&
+      !Rec.all(stamp).some(r => r.id === sid) && JSON.parse(localStorage.getItem('mb.r.' + sid)).type === ct;
+    Rec.del(ct, d, 'p|k1'); Rec.del(ct, d, 'p|k2');
+    return refused && fixed;
+  })());
 
   /* ---- two devices, one row, different fields ----
      Tom, 2026-09-15: a phone and a laptop each change a different part of the
@@ -362,12 +391,12 @@ async function run() {
      them the moment anything asks, and must not lose a patch, a delete or an
      older copy that turns up before they are in. Each frame is its own page
      load; the rows are this run's own and are deleted at the end. */
-  const lazyFrame = extra => new Promise(res => {
+  const lazyFrame = (extra, pre) => new Promise(res => {
     const fr = document.createElement('iframe');
     fr.style.cssText = 'position:absolute;width:1px;height:1px;border:0;left:-9px';
     document.body.appendChild(fr);
     fr.contentDocument.open();
-    fr.contentDocument.write('<scr' + 'ipt src="day.js"></scr' + 'ipt><scr' + 'ipt src="records.js"></scr' + 'ipt>' + (extra || ''));
+    fr.contentDocument.write((pre || '') + '<scr' + 'ipt src="day.js"></scr' + 'ipt><scr' + 'ipt src="records.js"></scr' + 'ipt>' + (extra || ''));
     fr.contentDocument.close();
     const t0 = Date.now();
     (function wait() {
@@ -421,6 +450,46 @@ async function run() {
     fr = await lazyFrame('<scr' + 'ipt>window.__n = Rec.all("set").length;</scr' + 'ipt>'); R = fr.contentWindow.Rec;
     ok('rec: a page that reads sets while it boots has them all by Rec.ready',
       R.loaded('set') && R.all('set', { date: lzD }).length === 1 && R.timing().lazy.set > 0);
+    fr.remove();
+
+    /* Rec.whole, 2026-11-16: a store whose IndexedDB answers after Rec.ready
+       has given up waiting must not call itself whole until it does. The
+       backup saved 4,700 rows of 26,000 for want of this. A frame whose
+       IndexedDB open answers 3.5 s late, past IDBWAIT; a row over 64KB lives
+       in IndexedDB alone, so it is the row that is missing until then. */
+    const bigK = 'smoke-whole-' + Date.now(), bigId = Rec.idOf(stamp, null, bigK);
+    Rec.set(stamp, null, bigK, { s: 'x'.repeat(70000) });
+    await Rec.saved();
+    const late = '<scr' + 'ipt>(function(){var real=indexedDB.open.bind(indexedDB);indexedDB.open=function(n,v){' +
+      'var q=real(n,v),f={};q.onupgradeneeded=function(){f.result=q.result;f.onupgradeneeded&&f.onupgradeneeded();};' +
+      'q.onsuccess=function(){setTimeout(function(){f.result=q.result;f.onsuccess&&f.onsuccess();},3500);};' +
+      'q.onerror=function(){f.error=q.error;f.onerror&&f.onerror();};return f;};})();</scr' + 'ipt>';
+    fr = await lazyFrame('', late); R = fr.contentWindow.Rec;
+    let wholeAt = 0;
+    const wp = R.whole().then(w => { wholeAt = Date.now(); return w; });
+    await new Promise(r => setTimeout(r, 50));
+    const readyHalf = R.hydrated && R.stats().idbSlow && !R._rows[bigId] && !wholeAt;
+    const w = await wp;
+    ok('rec: Rec.whole waits for an IndexedDB that answers after Rec.ready, and then holds its rows',
+      readyHalf && w.ok === true && !!R._rows[bigId]);
+    fr.remove();
+    Rec.del(stamp, null, bigK);
+
+    /* todoist.js, 2026-11-16: a Todoist row that has been through live sync
+       comes back with its keys sorted and its empty lists and nulls gone. It
+       must still read as unchanged, or every pass rewrites every row: 461 rows
+       every pass in every STATUS that day, round live sync and back. Only the
+       comparison is driven; nothing here reads the store or calls Todoist. */
+    fr = await lazyFrame('<scr' + 'ipt src="todoist.js"></scr' + 'ipt>');
+    const TS = fr.contentWindow.TodoistSync;
+    const tdRow = { kind: 'todo', t: 1, made: '2026-11-16', at: null, dur: null, ord: 0, done: 0, cancelled: 0, src: 'todoist', rep: null,
+      text: 'Smoke', pri: 0, proj: 'skool', tags: [], due: '', td: { id: 'x', raw: null, rec: null, done: 0, projId: 'p', sec: '', secName: '', parent: '', desc: '', labels: [], text: 'Smoke', due: '', at: null } };
+    const strip = x => Array.isArray(x) ? (x.length ? x.map(strip) : undefined) : (x && typeof x === 'object')
+      ? Object.keys(x).sort().reduce((o, k) => { const v = strip(x[k]); if (v != null) o[k] = v; return o; }, {}) : x;
+    const back = JSON.parse(JSON.stringify(strip(tdRow)));
+    ok('todoist: a row back from live sync, keys sorted and empties gone, reads as unchanged',
+      !!TS && !!TS._same && TS._same(tdRow, back) && !TS._same(tdRow, Object.assign({}, back, { text: 'Smoke 2' })) &&
+      !TS._same(tdRow, Object.assign({}, back, { tags: ['a'] })));
     fr.remove();
     await Rec.need('set');
     Rec.del('set', lzD, lzA); Rec.del('set', lzD, lzB);
@@ -616,6 +685,31 @@ async function run() {
       return a === 1 && b === 2 && n === 3;
     })();
   })());
+  /* One level under every stuck drag (2026-11-16): BLOCK, the home screen
+     and FORGE each left something lifted when the release was never heard.
+     The shared drag must end exactly once whichever way it ends. */
+  ok('mobile: a drag ends exactly once: tap, drop, cancelled pointer, Escape, blur, unheard release, a throw, a new drag', (() => {
+    const fire = (type, o) => window.dispatchEvent(new PointerEvent(type, Object.assign({ bubbles: true, cancelable: true, pointerId: 9, pointerType: 'touch', clientX: 10, clientY: 10, buttons: 1 }, o || {})));
+    const log = [], down = { pointerId: 9, pointerType: 'touch', clientX: 10, clientY: 10 };
+    const mk = () => ({ start: () => log.push('start'), move: () => log.push('move'), drop: () => log.push('drop'), tap: () => log.push('tap'), cancel: (e, d) => log.push('cancel:' + d.why) });
+    const take = () => { const s = log.join(); log.length = 0; return s; };
+    Mobile.drag(down, mk()); fire('pointerup'); const tap = take();
+    Mobile.drag(down, mk()); fire('pointermove', { clientX: 40 }); const busy = Mobile.dragging(); fire('pointerup', { clientX: 40 }); fire('pointerup'); const drop = take();
+    Mobile.drag(down, mk()); fire('pointermove', { clientX: 40 }); fire('pointercancel'); fire('pointerup'); const cxl = take();
+    Mobile.drag(down, mk()); fire('pointermove', { clientX: 40 }); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); const esc = take();
+    Mobile.drag(down, mk()); fire('pointermove', { clientX: 40 }); window.dispatchEvent(new Event('blur')); const blur = take();
+    Mobile.drag({ pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 }, mk());
+    fire('pointermove', { pointerId: 1, pointerType: 'mouse', clientX: 40, buttons: 1 }); fire('pointermove', { pointerId: 1, pointerType: 'mouse', clientX: 50, buttons: 0 }); const lost = take();
+    const ce = console.error; console.error = () => {};
+    Mobile.drag(down, { move: () => { throw new Error('smoke'); }, cancel: (e, d) => log.push('cancel:' + d.why) }); fire('pointermove', { clientX: 40 });
+    console.error = ce; const thrown = take();
+    Mobile.drag(down, mk()); Mobile.drag(down, {}); const replaced = take(); Mobile.drag.cancel();
+    const ends = Mobile.drag.log.slice(-8).map(x => x.state + ':' + x.why).join();
+    return tap === 'tap' && busy === 'dragging' && drop === 'start,move,drop' &&
+      cxl === 'start,move,cancel:pointercancel' && esc === 'start,move,cancel:escape' && blur === 'start,move,cancel:blur' &&
+      lost === 'start,move,cancel:lost' && thrown === 'cancel:error' && replaced === 'cancel:replaced' &&
+      Mobile.dragging() === '' && /cancelled:asked$/.test(ends);
+  })());
   /* This one exists because it broke: a menu item ran 60ms after the tap,
      so a typing box it opened was focused outside the gesture and an iPhone
      showed the caret with no keyboard (KITCHEN's Count, 2026-09-30). The
@@ -754,6 +848,15 @@ async function run() {
   })());
   ok('ui: the new components are all there',
     ['segmented', 'toggle', 'row', 'field', 'undo'].every(k => typeof UI[k] === 'function'));
+  ok('ui: Ctrl+Z presses the undos newest first, and leaves a text box alone', (() => {
+    const got = [], z = t => t.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    UI.undo('one', () => got.push(1)); UI.undo('two', () => got.push(2));
+    const box = document.createElement('input'); document.body.appendChild(box);
+    z(box); const typed = got.length === 0;
+    box.remove();
+    z(document.body); z(document.body);
+    return typed && got.join() === '2,1';
+  })());
   ok('ui: the segmented control marks exactly one live tab', (() => {
     const seg = UI.segmented([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], 'a', () => {});
     return seg.querySelectorAll('button.on').length === 1;
@@ -922,6 +1025,16 @@ async function run() {
      write a note, because a note is STATUS's data. */
   const J = window.Journal;
   ok('journal: loaded, with the four kinds', !!J && J.KINDS.map(k => k.id).join() === 'todo,entry,event,idea');
+  /* QUESTS's Today filter, read by QUESTS and the home screen's NEXT card:
+     any pick inside a field, every field across, off keeps everything, and a
+     list live sync dropped is an empty one. Pure, nothing written. */
+  ok('journal: the Today filter shows only what was picked, and off shows all', (() => {
+    const f = { on: 1, proj: ['skool', ''], pri: [1, 4] }, S = p => J.filterShows(p, f);
+    return S({ proj: 'skool', pri: 1 }) && S({ pri: 0 }) && S({ proj: 'skool' }) &&
+      !S({ proj: 'tom', pri: 1 }) && !S({ proj: 'skool', pri: 2 }) &&
+      J.filterShows({ proj: 'tom' }, { on: 0, proj: ['skool'] }) && !J.filterOn({ on: 1 }) &&
+      J.filterShows({ tags: ['phone'] }, { on: 1, tags: ['phone'] }) && !J.filterShows({}, { on: 1, tags: ['phone'] });
+  })());
   /* A3, 2026-10-01: STREAKS said "Entrys", because the name a kind is
      published under was its label plus an s. Read off a stand-in store, so
      nothing is written: the name each kind is published under. */
@@ -973,6 +1086,277 @@ async function run() {
     return a !== b && A && A.t > 0 && A.made === t && A.dur === 45 && A.text === 'Walk' && A.at === null &&
       B && /^\d\d:\d\d$/.test(B.at) && C && C.text === 'at 8 is words here' && C.pri === 2 && C.kind === 'todo';
   })());
+  /* 2026-11-16, from the state-machine sweep: a todo could be done and
+     cancelled at once. Cancelling a done one undoes its tick; ticking a
+     cancelled one uncancels it. */
+  ok('journal: cancelling a done todo clears its done day; ticking a cancelled one uncancels it', (() => {
+    const t = Day.today(), real = window.Rec, rows = {};
+    const keep = (k, p) => { rows[k] = JSON.parse(JSON.stringify(p)); };
+    window.Rec = { appId: 'smoke', all: () => [], has: () => false, setting: () => null, del: () => {},
+      get: (ty, dd, k) => (ty === 'note' && rows[k]) ? JSON.parse(JSON.stringify(rows[k])) : null,
+      set: (ty, dd, k, p) => { if (ty === 'note') keep(k, p); },
+      patch: (ty, dd, k, ch) => { if (ty === 'note') keep(k, Object.assign({}, rows[k], ch)); } };
+    let a, b, A, B;
+    try {
+      rows.a = { kind: 'todo', text: 'smoke a', done: 0, t: 1 };
+      rows.b = { kind: 'todo', text: 'smoke b', done: 0, t: 1, cancelled: 1 };
+      J.tick(t, 'a', { publish: false }); J.cancel(t, 'a', true); A = rows.a;
+      J.tick(t, 'b', { publish: false }); B = rows.b;
+    } finally { window.Rec = real; }
+    return A.cancelled === 1 && !A.done && !A.doneOn && !A.doneAt && B.done === 1 && !B.cancelled && B.doneOn === t;
+  })());
+  /* ---- doses ----
+     shared/dose.js is the one answer to "how much was taken, and when", read
+     by HOME's HALF-LIFE card and STATUS's tiles. Through a stand-in store, so
+     nothing real is written. */
+  const doseRun = (fn) => {
+    const real = window.Rec, D = n => '2001-03-0' + n, at = (n, h) => new Date(D(n) + 'T' + h + ':00').getTime();
+    const line = (n, k, text, kind, extra) => ({ key: k, date: D(n), payload: Object.assign({ kind: kind || 'entry', text: text, t: at(n, '08:00'), done: 0, cancelled: 0 }, extra || {}) });
+    const rows = {
+      field: [{ key: 'sm', date: null, payload: { id: 'sm' } }],
+      activity: [{ key: 'smoke.am', date: null, payload: { name: 'Smoke check' } }],
+      ev: [{ key: 'sm', date: D(3), payload: { e: [{ t: at(4, '09:00'), v: 7 }] } }],
+      note: [line(1, 'a', '5g Smk'), line(1, 'b', 'pill now'), line(1, 'c', 'pill again'), line(1, 'd', 'bought pill box'),
+        line(2, 'e', 'Smk 3'), line(2, 'f', 'Smk 4', 'todo'), line(2, 'g', 'Smk 9', 'idea')],
+      tick: [{ key: 'smoke.am', date: D(2), payload: { src: 'block' } }, { key: 'smoke.am', date: D(4), payload: { src: 'block', ts: at(4, '07:00') } }],
+    };
+    window.Rec = { appId: 'smoke', all: (ty, o) => (rows[ty] || []).filter(r => !o || o.date == null || r.date === o.date),
+      get: (ty, d, k) => { const r = (rows[ty] || []).filter(r => r.date === d && r.key === k)[0]; return r ? r.payload : null; },
+      map: ty => { const m = {}; (rows[ty] || []).forEach(r => { m[r.key] = r.payload; }); return m; }, on: () => {}, ready: () => Promise.resolve() };
+    try { return fn({ name: 'Smoke', field: 'sm', match: 'Smk, pill=50, !bought', tick: 'Smoke=10', per: 1 }, D, at); } finally { window.Rec = real; }
+  };
+  /* e1rm.js: one estimated 1RM for the suite (decision D4, 2026-11-18).
+     100 x 5 must read 112.5 on every screen; reps in reserve add to reps;
+     reps count at most 12, so a long set never blows the estimate up. */
+  ok('e1rm: Brzycki, 100 x 5 is 112.5, 2 in reserve reads as 7 reps, reps capped at 12, no weight or reps is 0', !!window.E1RM &&
+    E1RM.calc(100, 5) === 112.5 && E1RM.calc(100, 5, 2) === 120 && E1RM.calc(100, 20) === E1RM.calc(100, 12) &&
+    E1RM.calc(100, 40) === 144 && E1RM.calc(0, 5) === 0 && E1RM.calc(100, 0) === 0 && E1RM.calc(100, 5, null) === 112.5 &&
+    Math.abs(E1RM.weightFor(E1RM.calc(100, 5), 5) - 100) < 1e-9);
+  /* muscle-key.js: one key over every muscle list (decision D3). The home
+     body map reads its parts from it, so the map below is the one HOME
+     carried by hand until 2026-11-18: the same muscles must light the same
+     parts. */
+  ok('muscle key: the master list: 27 in order, same headings, every home part and Automagic group a real one, no AnaTOMy id in two muscles', (() => {
+    if (!window.MuscleKey || !window.Muscles) return false;
+    const K = MuscleKey.LIST, seen = {};
+    if (K.map(m => m.name).join('|') !== Muscles.LIST.join('|')) return false;
+    return K.every(m => m.region === Muscles.REGION[m.name] &&
+      (m.home === null || MuscleKey.HOME_PARTS.indexOf(m.home) >= 0) &&
+      (m.automagic === null || MuscleKey.AUTOMAGIC.indexOf(m.automagic) >= 0) &&
+      (m.fma === null || (Number.isInteger(m.fma) && m.fma > 0)) &&
+      m.anatomy.concat(m.mesh.map(x => 'mesh:' + x)).every(x => !seen[x] && (seen[x] = 1)));
+  })());
+  ok('muscle key: the HOME body map is the one it carried by hand, part for part', (() => {
+    if (!window.MuscleKey) return false;
+    const was = { 'Upper Chest': 'chest', 'Lower Chest': 'chest', Lats: 'lats', 'Upper Back': 'traps',
+      'Upper Traps': 'traps', 'Lower Traps': 'traps', 'Lower Back': 'lowback', 'Front Delts': 'delts',
+      'Side Delts': 'delts', 'Rear Delts': 'delts', 'Rotator Cuff': 'delts', Biceps: 'biceps', Triceps: 'triceps',
+      'Forearm Flex.': 'forearms', 'Forearm Ext.': 'forearms', Abs: 'core', Obliques: 'core', Serratus: 'core',
+      Quads: 'quads', Hamstrings: 'hams', Glutes: 'glutes', Adductors: 'glutes', Calves: 'calves', Tibialis: 'calves' };
+    const now = MuscleKey.homeMap(), big = MuscleKey.HOME_BIG;
+    return JSON.stringify(Object.keys(now).sort().map(k => [k, now[k]])) === JSON.stringify(Object.keys(was).sort().map(k => [k, was[k]])) &&
+      Object.keys(big).sort().join() === 'chest,glutes,hams,lats,lowback,quads' && MuscleKey.get('Forearm Flexors').name === 'Forearm Flex.';
+  })());
+  /* muscles.js: the master list. One level under the symptom: a specific
+     name must land on its own rule before a general one swallows it, so
+     these are the pairs that went wrong once (2026-11-16). */
+  const musRule = n => { const m = window.Muscles && Muscles.of(n); return m ? m.rule : null; };
+  ok('muscles: loaded, every share names a muscle on the list, every share 0 to 1', !!window.Muscles && Muscles.RULES.every(r =>
+    Object.keys(r.share).every(k => Muscles.LIST.indexOf(k) >= 0 && r.share[k] > 0 && r.share[k] <= 1)));
+  ok('muscles: a specific name beats the general rule it contains', [
+    ['Hanging Leg Raise', 'Ab work'], ['Leg Press Calf Raise', 'Calf raise'], ['Bb Row Machine SLDL', 'Stiff-leg deadlift'],
+    ['Straight-Arm Cable Pushdown', 'Straight-arm pulldown'], ['Cable Overhead Triceps Extension', 'Overhead tricep extension'],
+    ['Woodchop', 'Oblique work'], ['Trap Bar Shrug', 'Shrug'], ['Vertical Bench Curl', 'Bicep curl'], ['Dumbbell Kickback', 'Tricep extension'],
+    ['Bent Row (Open trap bar)', 'Bent-over row'], ['Rowing Machine', 'Rowing machine'], ['Jump Rope', 'Burpee']
+  ].every(p => musRule(p[0]) === p[1]));
+  ok('muscles: shorthand and brands come off (SLDL, RDL, OHP, LGNDRY alone matches nothing)',
+    musRule('SLDL') === 'Stiff-leg deadlift' && musRule('SL RDL') === 'Single-leg RDL' && musRule('BB OHP') === 'Overhead press' &&
+    musRule('LGNDRY Chest Press') === 'Bench press' && musRule('LGNDRY') === null);
+  ok('muscles: Tom\'s calls hold (chin up Biceps 1 Lats 0.8, a dip is triceps unless a chest dip, prehab files under Prehab)', (() => {
+    const c = Muscles.of('Chin Up'), d = Muscles.of('Dips'), cd = Muscles.of('Chest Dips'), er = Muscles.of('Cable External Rotation');
+    return c.share.Biceps === 1 && c.share.Lats === 0.8 && d.main === 'Triceps' && cd.main === 'Lower Chest' && er.group === 'Prehab';
+  })());
+  ok('muscles: one order for every app: own correction, then FORGE tag, then the list, then the TRAIN group', (() => {
+    const own = Muscles.forLift('Chin Up', { Lats: 1, Biceps: 0.5 }, ['Biceps'], 'Back');
+    const tag = Muscles.forLift('Chin Up', null, ['Upper Back', 'Biceps'], 'Back');
+    const list = Muscles.forLift('Chin Up', null, null, 'Back');
+    const grp = Muscles.forLift('LGNDRY', null, null, 'Chest', { Triceps: 0.5 });
+    return own.src === 'own' && own.main === 'Lats' && tag.src === 'tag' && tag.main === 'Upper Back' && tag.share.Biceps === 0.5 &&
+      list.src === 'list' && list.main === 'Biceps' && grp.src === 'group' && grp.main === 'Chest' && grp.share.Triceps === 0.5;
+  })());
+  ok('muscles: Adductors counts but files under Glutes, and the old forearm names read as Forearm Flex. and Ext.', (() => {
+    const ad = Muscles.of('Hip Adduction Machine'), own = Muscles.forLift('Wrist Thing', { 'Forearm Flexors': 1, 'Forearm Extensors': 0.5 });
+    return ad.main === 'Adductors' && ad.group === 'Glutes' && Muscles.GROUP_LIST.indexOf('Adductors') < 0 &&
+      own.main === 'Forearm Flex.' && own.share['Forearm Ext.'] === 0.5 && Muscles.LIST.indexOf('Forearm Flexors') < 0;
+  })());
+  ok('dose: loaded', !!window.Dose && typeof Dose.all === 'function' && typeof Dose.day === 'function');
+  ok('dose: a number before or after the word, word=amount once a day, !words skipped, open todos and ideas left out', doseRun((x, D) => {
+    const a = Dose.all(x).filter(d => d.src === 'journal').map(d => d.date.slice(8) + ':' + d.v).join();
+    return a === '01:5,01:50,02:3';
+  }));
+  ok('dose: a BLOCK tick counts only on a day with no other dose', doseRun((x, D) => {
+    const b = Dose.all(x).filter(d => d.src === 'block');
+    return b.length === 1 && b[0].date === D(4) && b[0].v === 10;
+  }));
+  ok('dose: a backfilled reading counts on its own day and keeps the time stored on it', doseRun((x, D, at) => {
+    const r = Dose.all(x).filter(d => d.src === 'reading')[0];
+    return !!r && r.date === D(3) && r.t === new Date(D(3) + 'T12:00:00').getTime() && r.et === at(4, '09:00') && r.v === 7;
+  }));
+  ok('dose: one day at a time gives exactly what every day gives', doseRun((x, D) => {
+    const all = JSON.stringify(Dose.all(x)), days = JSON.stringify([1, 2, 3, 4].reduce((o, n) => o.concat(Dose.day(x, D(n))), []).sort((a, b) => a.t - b.t));
+    return all === days && Dose.all(x).length === 5;
+  }));
+  ok('dose: a measure no tracker names gives its readings alone', doseRun((x, D) => {
+    const d = Dose.day({ field: 'sm' }, D(3));
+    return d.length === 1 && d[0].src === 'reading' && Dose.day({ field: 'sm' }, D(1)).length === 0;
+  }));
+  /* Tom, 2026-11-09: a Cobra's time edited in STATUS did not move the
+     caffeine timer. STATUS saves an edited time as `at`; `t` stays when
+     the meal was logged. */
+  ok('dose: a meal counts at the time typed on it, else when it was logged', (() => {
+    const real = window.Rec, D = '2001-03-05', t = new Date(D + 'T09:00:00').getTime();
+    const meal = [{ key: 'm1', date: D, payload: { name: 'Cobra', caff: 80, t: t, at: '14:30' } },
+      { key: 'm2', date: D, payload: { name: 'Tea', caff: 20, t: t } }];
+    window.Rec = { appId: 'smoke', all: ty => ty === 'meal' ? meal : [],
+      get: (ty, d, k) => ty === 'field' && k === 'cf' ? { id: 'cf', from: 'caff' } : null, map: () => ({}), on: () => {}, ready: () => Promise.resolve() };
+    try {
+      const d = Dose.day({ field: 'cf' }, D);
+      return d.length === 2 && d[0].food === 'Tea' && d[0].t === t &&
+        d[1].food === 'Cobra' && d[1].t === new Date(D + 'T14:30:00').getTime();
+    } finally { window.Rec = real; }
+  })());
+  /* Tom, 2026-11-09: "status should let me log 0 hours of sleep". A typed 0
+     was dropped as if nothing was logged; a blank still is nothing. */
+  ok('dose: a reading of 0 is a reading, a blank one is not', (() => {
+    const real = window.Rec, D = '2001-03-05', t = new Date(D + 'T09:00:00').getTime();
+    const ev = { z: [{ t: t, v: 0 }], b: [{ t: t, v: '' }, { t: t + 1, v: null }] };
+    window.Rec = { appId: 'smoke', all: ty => ty === 'ev' ? Object.keys(ev).map(k => ({ key: k, date: D, payload: { e: ev[k] } })) : [],
+      get: (ty, d, k) => ty === 'ev' && d === D && ev[k] ? { e: ev[k] } : null, map: () => ({}), on: () => {}, ready: () => Promise.resolve() };
+    try {
+      const z = Dose.day({ field: 'z' }, D);
+      return z.length === 1 && z[0].v === 0 && Dose.day({ field: 'b' }, D).length === 0;
+    } finally { window.Rec = real; }
+  })());
+  /* ---- the day's letter ----
+     shared/grade.js is the one answer to "what letter is this day", read by
+     STATUS's Today and HOME's DAY PLAN. Through a stand-in store, on STATUS's
+     default ladders: sleep 8 is S, steps 10000 is A, protein and calories on
+     target are S, so the day is S; a day with nothing on it is all F. */
+  const gradeRun = (fn) => {
+    const real = window.Rec, D = '2001-04-02', at = new Date(D + 'T09:00:00').getTime();
+    const rows = {
+      field: [{ key: 'sleep', date: null, payload: { id: 'sleep', label: 'Sleep', on: 1 } }, { key: 'steps', date: null, payload: { id: 'steps', label: 'Steps', on: 1 } }],
+      ev: [{ key: 'sleep', date: D, payload: { e: [{ t: at, v: 8 }] } }, { key: 'steps', date: D, payload: { e: [{ t: at, v: 10000 }] } }],
+      meal: [{ key: 'm1', date: D, payload: { t: at, p: 175, kcal: 2220 } }],
+    };
+    window.Rec = { appId: 'smoke', hydrated: true, loaded: () => true, setting: () => null,
+      all: (ty, o) => (rows[ty] || []).filter(r => !o || o.date == null || r.date === o.date),
+      get: (ty, d, k) => { const r = (rows[ty] || []).filter(r => r.date === d && r.key === k)[0]; return r ? r.payload : null; },
+      map: ty => { const m = {}; (rows[ty] || []).forEach(r => { m[r.key] = r.payload; }); return m; }, on: () => {}, ready: () => Promise.resolve() };
+    try { return fn(D); } finally { window.Rec = real; }
+  };
+  ok('grade: loaded', !!window.Grade && typeof Grade.day === 'function' && Grade.RANKS.length === 7);
+  ok('grade: each pillar reads its own ladder and the day is the average of the letters', gradeRun(D => {
+    const g = Grade.day(D), L = {}; g.parts.forEach(p => { L[p.id] = p.letter; });
+    return L.sleep === 'S' && L.steps === 'A' && L.protein === 'S' && L.kcal === 'S' && g.letter === 'S' && g.parts.length === 4;
+  }));
+  ok('grade: a day with nothing on it starts at F, and protein over its target is full marks', gradeRun(D => {
+    const g = Grade.day('2001-04-03');
+    return g.letter === 'F' && g.pct === 0 && g.pending.length === 4 && Grade.pillarLetter('protein', 220, 175) === 'S';
+  }));
+  ok('grade: eating under for free still needs two thirds of the target, or it is an F', Grade.pillarLetter !== null && Grade.accuracy(300, 2220, 'under') === 0 && Grade.accuracy(1400, 2220, 'under') === 0 && Grade.accuracy(1500, 2220, 'under') === 100 && Grade.accuracy(2220, 2220, 'under') === 100 && Grade.accuracy(2400, 2220, 'under') < 100);
+  /* ---- a goal's week ----
+     shared/goals.js is the one answer to "how is this goal doing this week",
+     read by QUESTS's Goals screen and HOME's THIS WEEK card. Through a
+     stand-in store: done 3 days ago is on track, 10 days adjust, 30 off, a
+     goal made today with nothing done has no call, his mark wins, and a task
+     in a project that serves the goal counts. */
+  const goalRun = (fn) => {
+    const real = window.Rec, t = Day.today(), rows = { aim: [], note: [], project: [] };
+    const todo = (k, p) => rows.note.push({ key: k, date: Day.shift(t, -40), payload: Object.assign({ kind: 'todo', text: k, done: 0 }, p) });
+    window.Rec = { appId: 'smoke', setting: () => null,
+      all: ty => rows[ty] || [], map: ty => { const m = {}; (rows[ty] || []).forEach(r => { m[r.key] = r.payload; }); return m; },
+      get: (ty, d, k) => { const r = (rows[ty] || []).filter(r => r.key === k)[0]; return r ? r.payload : null; } };
+    try { return fn(t, rows, todo); } finally { window.Rec = real; }
+  };
+  ok('goals: loaded', !!window.Goals && typeof Goals.health === 'function' && typeof Goals.next === 'function');
+  ok('goals: the call is read from days since a task serving it was done', goalRun((t, rows, todo) => {
+    const made = Day.shift(t, -60), mk = k => ({ key: k, made: made, by: Day.shift(t, 30), state: '' });
+    todo('a', { aim: 'g1', done: 1, doneOn: Day.shift(t, -3) });
+    todo('b', { aim: 'g2', done: 1, doneOn: Day.shift(t, -10) });
+    todo('c', { aim: 'g3', done: 1, doneOn: Day.shift(t, -30) });
+    return Goals.health(mk('g1')).v === 'on' && Goals.health(mk('g2')).v === 'adj' && Goals.health(mk('g3')).v === 'off' &&
+      Goals.health({ key: 'g4', made: t, state: '' }).v === '' && Goals.health(mk('g1')).weeks.length === Goals.WEEKS;
+  }));
+  ok('goals: his own call for the week wins, and a project serving the goal counts', goalRun((t, rows, todo) => {
+    rows.project.push({ key: 'run', date: null, payload: { name: 'Run', aim: 'g1' } });
+    todo('p', { proj: 'run', done: 1, doneOn: Day.shift(t, -2) });
+    const a = { key: 'g1', made: Day.shift(t, -60), state: '', marks: {} };
+    const h1 = Goals.health(a);
+    a.marks[h1.ws] = { v: 'adj' };
+    const h2 = Goals.health(a);
+    return h1.v === 'on' && h2.v === 'adj' && h2.auto === 'on' && h2.mark === 'adj';
+  }));
+  ok('goals: the fix is the next task this week, else one to put on today, else add one', goalRun((t, rows, todo) => {
+    todo('later', { aim: 'g1', due: '' });
+    const a = { key: 'g1', state: '' }, b = { key: 'g2', state: '' };
+    const n1 = Goals.next(a), n2 = Goals.next(b);
+    todo('soon', { aim: 'g1', due: t });
+    const n3 = Goals.next(a);
+    return n1.kind === 'sched' && n1.x.key === 'later' && n2.kind === 'add' && n3.kind === 'next' && n3.x.key === 'soon';
+  }));
+  ok('goals: a goal fed by data counts TRAIN sessions and BLOCK habit days a week, plans and warmups as TRAIN does', goalRun((t, rows) => {
+    const ws = Goals.weekStart(t), lw = Day.shift(ws, -7);
+    rows.set = [0, 2, 4].map(o => ({ key: 's' + o, date: Day.shift(lw, o), payload: { ex: 'b', kg: 100, r: 5, done: 1 } }))
+      .concat([{ key: 'p', date: ws, payload: { ex: 'b', kg: 200, r: 5, plan: 1, done: 0 } }]);
+    rows.tick = [{ key: 'walk.am', date: ws, payload: { qty: 1 } }, { key: 'walk', date: lw, payload: { qty: 1 } }, { key: 'walker', date: lw, payload: { qty: 1 } }];
+    const made = Day.shift(t, -30);
+    const tr = Goals.health({ key: 'a', made: made, state: '', src: { kind: 'train', n: 3 } });
+    const hb = Goals.health({ key: 'b', made: made, state: '', src: { kind: 'tick', act: 'walk', n: 2 } });
+    return tr.v === 'on' && tr.weeks[Goals.WEEKS - 2].n === 3 && tr.weeks[Goals.WEEKS - 1].n === 0 &&
+      hb.weeks[Goals.WEEKS - 1].n === 1 && hb.weeks[Goals.WEEKS - 2].n === 1 && hb.v === 'adj';
+  }));
+  ok('goals: a lift reads its best estimated 1RM, working sets only, and a measure is held to its pace line', goalRun((t, rows) => {
+    rows.set = [{ key: 'w', date: Day.shift(t, -1), payload: { ex: 'b', kg: 150, r: 5, done: 1, note: 'wu' } },
+      { key: 'x', date: Day.shift(t, -1), payload: { ex: 'b', kg: 100, r: 1, done: 1 } }];
+    rows.ev = [{ key: 'kg', date: Day.shift(t, -1), payload: { e: [{ t: 1, v: 90 }, { t: 2, v: 84 }] } }];
+    const lift = Goals.health({ key: 'l', made: Day.shift(t, -10), by: Day.shift(t, 10), state: '', src: { kind: 'lift', ex: 'b', target: 100, start: 90 } });
+    const a = { key: 'm', made: Day.shift(t, -10), by: Day.shift(t, 10), state: '', src: { kind: 'ev', field: 'kg', target: 80, start: 90 } };
+    const m = Goals.health(a);
+    a.src.target = 70;
+    const slow = Goals.health(a);
+    return lift.v === 'on' && /Reached/.test(lift.line) && m.v === 'on' && slow.v === 'adj' && Goals.startOf({ kind: 'ev', field: 'kg' }) === 84;
+  }));
+  ok('goals: three weeks under half offers a smaller count, one step past his best; Keep it waits three weeks', goalRun((t, rows) => {
+    const ws = Goals.weekStart(t);
+    rows.set = [1, 2, 3].map(w => ({ key: 's' + w, date: Day.shift(ws, -7 * w + 1), payload: { ex: 'b', kg: 50, r: 5, done: 1 } }));
+    const a = { key: 'g', made: Day.shift(t, -40), state: '', src: { kind: 'train', n: 4 } };
+    const s1 = Goals.stuck(a);
+    const kept = Goals.stuck(Object.assign({}, a, { keepUntil: Day.shift(t, 5) }));
+    const fine = Goals.stuck(Object.assign({}, a, { src: { kind: 'train', n: 2 } }));
+    const quiet = Goals.stuck({ key: 'q', made: Day.shift(t, -60), state: '' });
+    return s1 && s1.n === 2 && kept === null && fine === null && quiet && quiet.days === 28;
+  }));
+  ok('chapter: each app counts from its own day, before the start allowed, everything kept on request', goalRun((t, rows) => {
+    rows.chapter = [{ key: 'c1', date: null, payload: { name: 'Old', start: Day.shift(t, -100), from: {}, t: 1 } },
+      { key: 'c2', date: null, payload: { name: '', start: Day.shift(t, -3), from: { status: Day.shift(t, -59), train: 'all' }, t: 2 } }];
+    return Chapter.current().key === 'c2' && Chapter.from('quest') === Day.shift(t, -3) && Chapter.from('status') === Day.shift(t, -59) &&
+      Chapter.from('train') === null && Chapter.from('quest', Day.shift(t, -50)) === Day.shift(t, -100) && Chapter.list().length === 2;
+  }));
+  ok('chapter: a goal counts only from QUESTS chapter day, so old misses are no call and no week', goalRun((t, rows, todo) => {
+    todo('old', { aim: 'g', done: 1, doneOn: Day.shift(t, -30) });
+    const a = { key: 'g', made: Day.shift(t, -90), state: '' };
+    const before = Goals.health(a);
+    rows.chapter = [{ key: 'c', date: null, payload: { start: Day.shift(t, -2), from: {}, t: 1 } }];
+    const after = Goals.health(a);
+    return before.v === 'off' && after.v === '' && after.weeks[0].n === '' && Goals.stuck(a) === null;
+  }));
+  ok('goals: a measure reads the last 7 days on average, so one heavy morning does not flip the call', goalRun((t, rows) => {
+    rows.ev = [83, 83, 83, 83, 83, 83].map((v, i) => ({ key: 'kg', date: Day.shift(t, -1 - i), payload: { e: [{ t: 1, v: v }] } }))
+      .concat([{ key: 'kg', date: t, payload: { e: [{ t: 1, v: 87 }] } }]);
+    const h = Goals.health({ key: 'm', made: Day.shift(t, -10), by: Day.shift(t, 10), state: '', src: { kind: 'ev', field: 'kg', target: 80, start: 88 } });
+    return h.v === 'on' && /Now 83\.6/.test(h.line);
+  }));
   ok('journal: a range on a todo is its start and its end; on an entry a start and a length', (() => {
     const t = Day.shift(Day.today(), -2), real = window.Rec, rows = {};
     window.Rec = { appId: 'smoke', all: () => [], set: (ty, dd, k, p) => { if (ty === 'note') rows[k] = p; }, del: () => {} };
@@ -1088,6 +1472,58 @@ async function run() {
     return open === 'Move to tomorrow,Move to a day,Link it,Cancel it' && done === 'Link it,Cancel it' &&
       J.menuItems({ kind: 'entry' }).length === 0;
   })());
+  /* ---- a flow: a day planned as branches (BLOCK's Flow tab, 2026-11-17) ----
+     shared/flow.js is where he is, what comes next and when, for BLOCK,
+     HOME's FLOW card and STATUS's widget. Through a stand-in store. */
+  const flowRun = (fn) => {
+    const realR = window.Rec, realJ = window.Journal, rows = {}, id = (ty, d, k) => ty + '|' + (d || '') + '|' + k;
+    window.Rec = { appId: 'smoke', setting: () => null,
+      set: (ty, d, k, p) => { rows[id(ty, d, k)] = { type: ty, date: d || null, key: k, payload: JSON.parse(JSON.stringify(p)) }; },
+      get: (ty, d, k) => { const r = rows[id(ty, d, k)]; return r ? JSON.parse(JSON.stringify(r.payload)) : null; },
+      del: (ty, d, k) => { delete rows[id(ty, d, k)]; },
+      patch: (ty, d, k, c) => { const r = rows[id(ty, d, k)]; if (r) Object.assign(r.payload, c); },
+      all: (ty, o) => Object.values(rows).filter(r => r.type === ty && (!o || o.date == null || r.date === o.date)).map(r => ({ key: r.key, date: r.date, payload: JSON.parse(JSON.stringify(r.payload)) })) };
+    window.Journal = { add: (d, kind, text, ex) => { const k = 'j' + Object.keys(rows).length; window.Rec.set('note', d, k, Object.assign({ kind: kind, text: text }, ex)); return k; }, publishNotes: () => {} };
+    try { return fn(rows); } finally { window.Rec = realR; window.Journal = realJ; }
+  };
+  const flowMake = () => {
+    const f = Flow.make('Low day'), b = {};
+    [['alarm', 't'], ['late', 'r'], ['bad', 'r'], ['teeth', 'g'], ['salt', 'g'], ['caf', 'g'], ['games', 'r']].forEach(x => { b[x[0]] = Flow.addBox(f, { name: x[0], kind: x[1] }); });
+    const a = { ign: Flow.addArrow(f, b.alarm, b.late, { label: 'Ignore' }), lb: Flow.addArrow(f, b.late, b.bad), bt: Flow.addArrow(f, b.bad, b.teeth, { gap: 0, sleep: 'short' }),
+      ts: Flow.addArrow(f, b.teeth, b.salt, { gap: 0 }), sc: Flow.addArrow(f, b.salt, b.caf, { gap: 75 }), bg: Flow.addArrow(f, b.bad, b.games) };
+    return { f: f, b: b, a: a };
+  };
+  ok('flow: loaded', !!window.Flow && typeof Flow.reach === 'function' && Flow.TYPES.join() === 'flow,fbox,farrow,fwalk');
+  ok('flow: a pick moves him on, ticks a green box, writes a STATUS entry, and undo takes all three back', flowRun(rows => {
+    const x = flowMake(), t0 = Date.now() - 60e3, day = Day.of(t0);
+    Flow.reach(x.f, x.b.alarm, null, t0); Flow.reach(x.f, x.b.late, x.a.ign, t0 + 1);
+    Flow.reach(x.f, x.b.bad, x.a.lb, t0 + 2); const un = Flow.reach(x.f, x.b.teeth, x.a.bt, t0 + 3);
+    const h = Flow.here(x.f, t0 + 4);
+    const ticked = !!Rec.get('tick', day, 'teeth') && !Rec.get('tick', day, 'late');
+    const notes = Rec.all('note').map(r => r.payload.text);
+    un();
+    const back = Flow.here(x.f, t0 + 5);
+    return h.box.id === x.b.teeth && h.ways.length === 1 && ticked && notes.indexOf('late (Ignore)') > -1 &&
+      back.box.id === x.b.bad && !Rec.get('tick', day, 'teeth') && Rec.all('note').length === 3;
+  }));
+  ok('flow: a gap times the boxes ahead from the moment he reached this one', flowRun(() => {
+    const x = flowMake(), t0 = Date.now() - 60e3;
+    Flow.reach(x.f, x.b.teeth, null, t0);
+    const tm = Flow.times(x.f, t0 + 1);
+    return tm[x.b.salt] === t0 && tm[x.b.caf] === t0 + 75 * 60e3;
+  }));
+  ok('flow: short sleep picks its arrow, a red box with no way back is named, and the floor is met only when every floor box is reached', flowRun(() => {
+    const x = flowMake(), t0 = Date.now() - 60e3, day = Day.of(t0);
+    Rec.set('ev', day, 'sleep', { e: [{ t: 1, v: 5 }] });
+    Flow.reach(x.f, x.b.bad, null, t0);
+    const sug = Flow.suggest(x.f, t0 + 1);
+    const nw = Flow.noWayBack(x.f);
+    Flow.patchBox(x.f, x.b.teeth, { floor: 1 }); Flow.patchBox(x.f, x.b.salt, { floor: 1 });
+    Flow.reach(x.f, x.b.teeth, x.a.bt, t0 + 2);
+    const half = Flow.floorMet(day);
+    Flow.reach(x.f, x.b.salt, x.a.ts, t0 + 3);
+    return sug && sug.arrow.id === x.a.bt && sug.short && nw.length === 1 && nw[0] === x.b.games && !half && Flow.floorMet(day);
+  }));
   /* ---- moving a todo to a day you name ----
      One level under "it only goes to tomorrow": tomorrow was a shortcut for a
      date, so the thing to check is that ANY date lands in `due`, which is the
@@ -2900,6 +3336,16 @@ async function run() {
     return c.step === 2.5 && labs.indexOf('2.5') > -1 && labs.indexOf('7.5') > -1 && labs.indexOf('3') < 0;
   })());
 
+  /* 2026-11-16: the home screen's WEIGHT at 2 by 2 printed 80, 81 and 82 on
+     top of each other. Every number on the side has its height to itself. */
+  ok('chart: a short chart never prints two side numbers over each other', (() => {
+    const c = Chart.make({ w: 140, h: 60 });
+    c.ySet(80, 84, 1).grid();
+    const ys = [].slice.call(c.el.querySelectorAll('.mb-lab')).map(n => +n.getAttribute('y')).sort((a, b) => a - b);
+    const size = parseFloat(document.documentElement.style.getPropertyValue('--f-1')) || 12;
+    return ys.length >= 2 && ys.every((y, i) => !i || y - ys[i - 1] >= size);
+  })());
+
   /* The chart engine, rewritten 2026-09-14 so a chart says its answer first
      and can be read closer by dragging. One check per promise it makes. */
   const offstage = (w, h) => {
@@ -2931,6 +3377,18 @@ async function run() {
       res(first > 0 && first === later && !!svg && svg.style.position === 'absolute');
     }, 120);
   }));
+  ok('chart: a chart redrawn in a new box does not draw itself in again', () => {
+    /* a screen that rebuilt on every store write replayed every chart's
+       draw-in each time, and a run of writes flashed (2026-11-09) */
+    const put = n => {
+      const box = offstage(300, 120);
+      Chart.mount(box, { label: 'Smoke redraw, ' + n + ' points' }, c => { c.xLinear(0, 1).yFit([0, 1]).line([[0, 0], [1, 1]]); });
+      const anim = box.querySelector('svg').classList.contains('mb-anim');
+      box.remove();
+      return anim;
+    };
+    return put(3) === true && put(4) === false;
+  });
   ok('chart: a bar is at most 24 wide, round at the top, and one can be lit', () => {
     const box = offstage(600, 150);
     const c = Chart.make({ w: 600, h: 150 });
@@ -3630,6 +4088,12 @@ async function run() {
       put(E(F.id), mk('f', ago(100), 'ancient'));
       await Cloud._push(); await settle();
       L.below = CDB[E(F.id)].payload.v === 'here';
+      /* 2026-11-17: 1,023 rows arriving one merge each froze the home screen
+         116 s, one redraw a row. A burst of rows is one merge. */
+      { let calls = 0; const m0 = S2.merge; S2.merge = l => { calls++; return m0(l); };
+        for (let i = 0; i < 40; i++) put(E('local|x||burst' + i), mk('burst' + i, ago(0.1), i));
+        await settle();
+        L.burst = calls === 1 && !!S2._rows['local|x||burst39']; L.burstN = calls; S2.merge = m0; }
       wipe();
 
       /* The daily check. The cloud holds g (live) and h (a tombstone) this
@@ -3683,6 +4147,7 @@ async function run() {
     ok('live sync: back online, the cloud is read again before anything goes up', !!(L.reread && L.back), say);
     ok('live sync: the window starts two days before the last row heard', !!L.window, say);
     ok('live sync: a row pushed below the window over a newer one is put back', !!L.below, say);
+    ok('live sync: rows that arrive together go into the store as one merge', !!L.burst, say + ' — merges: ' + L.burstN);
     ok('live sync: the daily check fetches rows this device lacks, tombstones too', !!L.fetched, say);
     ok('live sync: the daily check leaves purged old ticks and test rows alone', !!L.left, say);
     ok('live sync: the daily check sends rows the cloud lacks', !!L.up, say);
@@ -3811,7 +4276,7 @@ async function run() {
     const hung = await open('../quest/index.html?nosw=1&boot=hang', W => gone(W) ? { why: W.Boot.why } : null, 9000);
     ok('boot: a start screen whose loop never runs is taken off by the hard stop', !!hung && hung.why === 'stop', ' — ' + JSON.stringify(hung));
     /* not STATUS: it opens straight onto its page, Tom, 2026-10-18 */
-    const pages = ['', 'quest/', 'train/', 'checkin/', 'kitchen/', 'sheet/', 'system/', 'speak/'];
+    const pages = ['', 'quest/', 'train/', 'checkin/', 'kitchen/', 'sheet/', 'system/', 'speak/', 'flow/'];
     const late = [];
     for (const p of pages) {
       const html = await fetch('../' + p + 'index.html', { cache: 'no-store' }).then(r => r.ok ? r.text() : '', () => '');
@@ -4050,6 +4515,49 @@ async function run() {
       return /Opened in \d+(\.\d)? s here/.test(pane.textContent);
     })());
     if (was) Rec.set('device', null, id, was); else Rec.del('device', null, id);
+  }
+
+  /* ---- phone: what the iPhone's Shortcut sends (2026-11-16) ----
+     Parcels go straight into Phone._take, no database. Every row is dated
+     1999 and deleted after, so a run on a real device leaves nothing but
+     tombstones from 1999. */
+  for (let i = 0; i < 60 && !window.Phone; i++) await new Promise(r => setTimeout(r, 50));
+  ok('phone: io.js brings phone.js in after cloud.js', !!window.Phone && !!document.getElementById('mb-phone-js'));
+  if (window.Phone) {
+    const P = window.Phone, D = '1999-01-02';
+    const pd = P._perDay('1999-01-01 7,512\n' + D + ' 8514\n2999-01-01 5');
+    ok('phone: a day per line is read, commas and all, and a future day is left out',
+      pd.length === 2 && pd[0][0] === '1999-01-01' && pd[0][1] === 7512 && pd[1][1] === 8514);
+    const lone = P._perDay('4321');
+    ok('phone: a lone number is today', lone.length === 1 && lone[0][0] === Day.today() && lone[0][1] === 4321);
+    /* a push id made the way Firebase makes one, for a known moment */
+    const C64 = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz', when = 1794800000000;
+    let id = '', n = when; for (let i = 0; i < 8; i++) { id = C64.charAt(n % 64) + id; n = Math.floor(n / 64); }
+    ok('phone: when a parcel was sent is read off its push id', P._pushTime(id + 'abcdefghijkl') === when);
+    const had = Rec.get('ev', D, 'steps');
+    Rec.set('ev', D, 'steps', { e: [{ t: 1, v: 6000 }] });
+    const n1 = P._take({ k: 'steps', v: D + ' 8514' }, Date.now());
+    const n2 = P._take({ k: 'steps', v: D + ' 8514' }, Date.now());
+    P._take({ k: 'steps', v: D + ' 9001' }, Date.now());
+    const e = (Rec.get('ev', D, 'steps') || {}).e || [];
+    ok('phone: steps land as one phone reading that a newer figure replaces, the typed one kept',
+      n1 === 1 && n2 === 0 && e.length === 2 && e.some(x => x.v === 6000 && !x.src) &&
+      e.filter(x => x.src === 'phone').length === 1 && e.find(x => x.src === 'phone').v === 9001);
+    if (had) Rec.set('ev', D, 'steps', had); else Rec.del('ev', D, 'steps');
+    const t0 = new Date(1999, 0, 2, 9, 0).getTime();
+    const a1 = P._take({ k: 'app', v: 'Smoke App open' }, t0);
+    const a2 = P._take({ k: 'app', v: 'Smoke App close' }, t0 + 600000);
+    const a3 = P._take({ k: 'app', v: 'Smoke App close' }, t0 + 900000);
+    const ar = Rec.get('papp', D, 'smoke-app') || {};
+    ok('phone: an app open then close is one span; a close with no open adds nothing',
+      a1 === 1 && a2 === 1 && a3 === 0 && ar.name === 'Smoke App' && ar.spans && ar.spans.length === 1 &&
+      ar.spans[0][1] - ar.spans[0][0] === 600000 && !ar.open);
+    Rec.del('papp', D, 'smoke-app');
+    const pl = P._take({ k: 'place', v: '14.599512,120.984222' }, t0);
+    const pr = Rec.get('pplace', D, String(t0)) || {};
+    ok('phone: a place lands as its own dated row', pl === 1 && pr.lat === 14.59951 && pr.lon === 120.98422);
+    Rec.del('pplace', D, String(t0));
+    ok('phone: a parcel it does not know changes nothing', P._take({ k: 'safari', v: 'x' }, t0) === 0 && P._take(null, t0) === 0);
   }
 
   /* every promised check settles before anything is counted */

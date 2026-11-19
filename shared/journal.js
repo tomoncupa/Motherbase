@@ -594,7 +594,7 @@ function tick(date, key, opts) {
     R.set('note', d, copyKey, Object.assign({}, cur, {
       t: Date.now(), made: d, ord: R.all('note', { date: d }).length,
       done: 1, doneAt: stamp, doneOn: d, by: stamp, byAuto: 1, byWas: null,
-      due: due, rep: null, of: key,
+      due: due, rep: null, of: key, cancelled: 0,
     }));
     if (next) R.set('note', date, key, Object.assign({}, cur, { due: next }));
     pub([d, date]);
@@ -603,14 +603,18 @@ function tick(date, key, opts) {
   }
 
   const was = !!cur.done;
-  R.set('note', date, key, Object.assign({}, cur, {
+  const next = Object.assign({}, cur, {
     done: was ? 0 : 1,
     by: was ? (cur.byWas || null) : stamp,
     byWas: was ? null : (cur.byAuto ? (cur.byWas || null) : (cur.by || null)),
     byAuto: was ? 0 : 1,
     doneAt: was ? null : stamp,
     doneOn: was ? null : d,
-  }));
+  });
+  /* ticking a cancelled todo means it got done after all: it stops being
+     cancelled, so a line is never done and cancelled at once (2026-11-16) */
+  if (!was && cur.cancelled) next.cancelled = 0;
+  R.set('note', date, key, next);
   pub([date]);
   return { round: false, done: !was, next: null, text: cur.text, at: cur.at || null,
     undo() { R.set('note', date, key, cur); pub([date]); } };
@@ -781,7 +785,14 @@ function moveToTomorrow(date, key, src, from) {
 /* Cancelled is not deleted. A task you decided not to do is a real outcome,
    and deleting it pretends it was never planned. */
 function cancel(date, key, on, src) {
-  return patchNote(date, key, on ? { cancelled: 1, done: 0 } : { cancelled: 0 }, src);
+  if (!on) return patchNote(date, key, { cancelled: 0 }, src);
+  /* Cancelling a done todo undoes the tick the way unticking does: its done
+     day and time go, so it no longer shows as done on that day anywhere
+     (2026-11-16; it kept doneOn, doneAt and by). */
+  const cur = Rec().get('note', date, key) || {};
+  const ch = { cancelled: 1, done: 0 };
+  if (cur.done || cur.doneOn) Object.assign(ch, { doneAt: null, doneOn: null, by: cur.done ? (cur.byWas || null) : (cur.by || null), byWas: null, byAuto: 0 });
+  return patchNote(date, key, ch, src);
 }
 
 /* ── which day ──
@@ -905,7 +916,36 @@ function dedupeSoon() {
 }
 if (g.Rec && g.Rec.ready) g.Rec.ready(() => { try { dedupe(); } catch (e) { console.warn('[journal] dedupe', e); } });
 
+/* ── QUESTS's Today filter ──
+   Tom, 2026-11-17: "I may not want all of today's tasks visible at a
+   glance". One setting, quest.todayFilter = {on, proj: [key or ''], pri:
+   [1 to 4, 4 is none], tags: [slug]}. QUESTS's Today and the home screen's
+   NEXT card both ask these, so the two cannot disagree. Inside one field any
+   pick matches; across fields every field must. `on` 0 keeps the picks for
+   the next time. Hiding is a view: nothing here writes a todo. Live sync
+   drops an empty list, so a missing list is an empty one. */
+function todayFilter() {
+  const R = Rec(), f = R && R.setting ? R.setting('quest', 'todayFilter') : null;
+  return f && typeof f === 'object' ? f : {};
+}
+const fList = (f, k) => Array.isArray(f[k]) ? f[k] : [];
+function filterOn(f) {
+  f = f || todayFilter();
+  return !!(f.on && (fList(f, 'proj').length || fList(f, 'pri').length || fList(f, 'tags').length));
+}
+function filterShows(p, f) {
+  f = f || todayFilter();
+  if (!filterOn(f)) return true;
+  p = p || {};
+  const pj = fList(f, 'proj'), pr = fList(f, 'pri'), tg = fList(f, 'tags');
+  if (pj.length && pj.indexOf(p.proj || '') < 0) return false;
+  if (pr.length && pr.indexOf(+p.pri || 4) < 0) return false;
+  if (tg.length && !(p.tags || []).some(t => tg.indexOf(t) > -1)) return false;
+  return true;
+}
+
 g.Journal = {
+  todayFilter: todayFilter, filterOn: filterOn, filterShows: filterShows,
   KINDS: KINDS,
   bare: bare, place: place, onDay: onDay, notes: notes,
   parseLine: parseLine, clockMins: clockMins, minsHM: minsHM, endAt: endAt, spanMins: spanMins,

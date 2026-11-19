@@ -135,13 +135,13 @@ index.html         the home screen
 _review.html       the review every client push must pass
 sw.js              the offline cache. `?nosw=1` turns it off
 shared/            the foundation. Its own brief holds the debt and findings
-desktop/           STATUS.exe and Main Menu.exe, Windows, Tom only. README.md
+desktop/           STATUS.exe, Main Menu.exe and the Setup clients install. README.md
 tools/             build-client.py and helpers. Not build steps
 _template/         the starter app to copy
 <app>/index.html   one app per folder; <app>/CLAUDE.md is that app's brief
 ```
 
-**Phone or desktop:** `train/` and `bullet/` are phone apps; BULLET is never opened on a PC (Tom, 2026-10-02). `status/`, `quest/`, `checkin/`, `system/`, `speak/` and `kitchen/` are for
+**Phone or desktop:** `train/`, `bullet/` and `flow/` are phone apps; BULLET is never opened on a PC (Tom, 2026-10-02). `status/`, `quest/`, `checkin/`, `system/`, `speak/` and `kitchen/` are for
 everywhere. Every other app, including the home screen and `wealth/`, is a
 desktop app. See hard constraint 10. What each one is for, in Tom's words, is
 the table at the top of "The apps" in `DOCTRINE.md`.
@@ -164,7 +164,13 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `records.js` | The store. Rows, merging, subscriptions. The one file to be careful with. |
 | `day.js` | One definition of "today" for the whole suite. |
 | `chart.js` | Every chart. Answer first (`Chart.header`), drawn at the box's real size (`Chart.mount`), latest value marked, one bar lit, drag to explore (`c.scrub`), pies with a key and ranked shares for part of a whole, rings, sparklines and legends. Theme tokens only. |
+| `flow.js` | A day planned as branches, since 2026-11-17: BLOCK's Flow tab draws and edits it, HOME's FLOW card and STATUS's widget follow it, all through this one file. Where he is, the ways out, a pick (a tick for a green box and a STATUS entry), times from arrow gaps, the floor and the sleep suggestion. |
+| `dose.js` | One answer to "how much of this was taken, and when", since 2026-10-30. A dose is a STATUS reading, the food behind a measure, a journal line or a BLOCK tick, as a HOME HALF-LIFE tracker (`lifeos.halflife.<id>`) says. `Dose.all(x)` and `Dose.day(x, date)` run the same rule; HOME's HALF-LIFE card and STATUS's `entries()` both ask it, so the two screens cannot disagree. Anything else that shows a dose asks it too. |
+| `grade.js` | One answer to "what letter is this day", since 2026-11-03. Every pillar's ladder, the average of the letters, read from STATUS's settings. STATUS's Today and HOME's DAY PLAN card both ask `Grade.day`, so they cannot disagree. A grading rule changes here, never in an app. |
+| `e1rm.js` | One estimated 1RM, since 2026-11-18: Brzycki, reps in reserve added, reps counted at most 12. TRAIN, HOME, COACH and the goals all ask `E1RM.calc`, so 100 x 5 reads 112.5 everywhere. |
+| `muscle-key.js` | One muscle key, since 2026-11-18: each of the 27 muscles with its FMA ID, HOME body-map part, Automagic group and AnaTOMy ids. HOME's body map reads it. |
 | `journal.js` | The bullet system. `Journal.add` is the one way to write a new line, since 2026-09-18: STATUS, LOG, QUESTS, the home screen's DOING box and the status check all call it, so every line carries when it was written. `moveTo` sends a todo to any day and `moveToTomorrow` is that with one date filled in; the menu carries both, so LOG and QUESTS got it without being edited. One journal line: its kinds, which day it shows on, the time typed into it, how it is drawn (mark, words, then "7:00pm - 7:31pm"), time order by its start, ticking, Move to tomorrow, Cancel it, and a repeat's next round. STATUS names the `note` shape and wins any disagreement; STATUS, LOG, QUESTS and the home screen all read this, so a todo bullet looks and behaves the same in each. |
+| `todoist.js` | The Todoist sync, `TodoistSync`, since 2026-11-16 (from QUESTS): open Todoist tasks in as `td-<id>` todos, ticks, dates and deletes back. QUESTS and STATUS both call `TodoistSync.start`, so it runs wherever STATUS is open; `quest/CLAUDE.md`, Todoist sync, has the rules. |
 | `skins.js` + `skins.json` | Themes, and the colour layer on top of them. |
 | `sound.js` | Sound themes and instruments, synthesised, no audio files. |
 | `mobile.js` | The touch layer. Sheets, swipes, safe areas, keyboard, back stack, haptics. |
@@ -177,6 +183,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `range.js` | A training history as a woodblock print, since 2026-09-22; rebuilt as 0.2.0 on 2026-09-25, one picture since 0.3.0 on 2026-09-26. Every training block a mountain, taller for more volume a week; a month outside a block a hill; every session a tree standing on the mountain over its day, taller for more sets, blossoming on a record day. No base switch; a PRINT switch (FUJI, INK, DUSK) says how it is drawn and the caller keeps it. Drawn in 1024px tiles, only near the screen. TRAIN's Profile and COACH draw it. `Range.fromRows` builds it from TRAIN-shaped rows and counts what Profile counts (comment warmups out). Writes colours down for the same reason. |
 | `notice.js` | The status window LOOK and, since 2026-09-25, NOTICE's ENGINE: `Notice.parse` (text in), `Notice.draw` (the window, 1080 wide), `Notice.compose` (on a story or post). NOTICE and SHEET both draw with it; NOTICE keeps its made-up rewards and hands them in as `o.rewards`. The four palettes and the cut-corner shape. NOTICE strokes it on a canvas to make a picture, STATUS clips a real panel to it for the status check. The one place in the suite that carries hex colours on purpose, for the reason NOTICE always had: the window is the art, not the furniture, so a Hunter window is blue in every theme. Nothing here reaches an app's own chrome. |
 | `report.js` | Each device's own note, added 2026-09-30: one `device` row per device (when it last opened anything, what live sync last did, every app version opened there, its last five uncaught errors and promise rejections). Fetched by `io.js` like `cloud.js`; `io.js` itself catches errors from its own first line until this arrives, so a page that dies while booting is still reported. DATA lists every device under LIVE SYNC (`IO.deviceRow`). Claude reads every device's row on the PC in the nightly backup file. Writes only what changed, never inside TRAIN on a client. The global is `DeviceReport`: WebKit already owns `Report`. |
+| `phone.js` | What the iPhone sends, added 2026-11-16 (Tom: steps, location, screen time, "as automatic and as low friction as possible"). An iPhone Shortcut posts `{k, v}` to LIVE SYNC's `phone/<code>` inbox with no sign-in; this file, in any signed-in top page, claims each parcel by a deleting transaction and writes rows: steps and sleep as STATUS `ev` readings marked `src: 'phone'` (a newer phone figure replaces the older one), `pplace` and `papp`. Settings, DATA, LIVE SYNC, YOUR IPHONE makes the code. Fetched by `io.js` after `cloud.js`. Screen Time and Safari history cannot leave an iPhone; `CLOUD.md`, Your iPhone, has the Shortcut and the database rule. |
 | `cloud.js` | LIVE SYNC: Firebase beside the sheet, added 2026-09-20. One row per row at `/u/<uid>/rows/<id>`, pushed on change and listened for by `updated_at`, merged through `Rec.merge` like anything else. Fetched by `io.js` rather than by a tag in every app, the way `mobile.js` fetches `sw.js`, so no app was edited. Only the TOP document connects, because `records.js` already shares merged rows across the origin and fourteen frames would be fourteen connections. A row over 64KB is skipped AND THE BOUNDARY STILL PASSES IT, or one photo would jam every sync after it. Does nothing until a config is pasted. See `CLOUD.md`. |
 | `demo.js` | The DEMO, added 2026-09-30: any address with `?demo=1` opens the suite on a made-up person (Jamie Cruz, a coach: sixteen weeks of TRAIN, STATUS, KITCHEN, CHECK IN, BLOCK, QUESTS, LOG, six made-up COACH clients and WEALTH), made fresh each day from a fixed seed. The switch is the top of `skins.js`, which loads first everywhere: for that browser tab it gives localStorage, IndexedDB, the BroadcastChannel and the storage event an `mbdemo:` namespace of their own (every key in the tab's sessionStorage and no IndexedDB for the store, never Tom's fast half or its quota; closing the tab ends it), and `io.js` fetches no `cloud.js` or `report.js` and switches the sheet off. A gold DEMO tab on the right edge; LEAVE DEMO (or `?demo=0`) wipes all of it and opens the real suite. Fetched only in the demo. |
 | `claude.js` | The CLAUDE panel, added 2026-10-04 (Tom: "A and B", ask about his data and log by talking). Main Menu.exe injects it on every suite page (`desktop/ClaudeBridge.cs`); anywhere else it does nothing. The window runs the bundled claude.exe on his subscription (Sonnet, Read/Grep/Glob only) in `%LOCALAPPDATA%\Motherbase\claude`, never the repo, against a copy of every row; the page applies the writes Claude returns, each with Undo. The conversation lives in the window, so it follows him between apps. |
@@ -272,9 +279,13 @@ An app may read any type. It writes only the types it owns.
 | `acct` | **status** | account id | `{name, order}` |
 | `shot` | **status** | photo id | a shrunk photo of a label or receipt |
 | `habit` | quest, later | | a todolist, once STATUS took the measurements |
-| `project` | **quest**; **arc** makes one named after a skill tree's map | slug of the hashtag | `{name, slot, ord}` — a Todoist project. `slot` is a theme colour slot, never a hex |
+| `project` | **quest**; **arc** makes one named after a skill tree's map | slug of the hashtag | `{name, slot, ord, aim}` — a Todoist project. `slot` is a theme colour slot, never a hex; `aim` the goal it serves |
+| `chapter` | **the shared layer** (`shared/chapter.js`); QUESTS's New chapter writes it | id, undated | `{name, start, from:{app: date or 'all'}, t}` — where each app counts from in this chapter. Nothing before it is deleted |
+| `aim` | **quest** | id, undated | `{text, tag, h, why, made, by, state, doneOn, ord, log}` — one goal on QUESTS's Goals screen: `h` is `1m` `6m` `1y` `5y` `10y`, `tag` the name typed after `^` on a todo (which then carries `aim`, the key), `state` `''`, `done` or `dropped`, `log` the check-ins `[{d, text}]`. Not `goal`, which is TRAIN's. See `quest/CLAUDE.md`, Goals ; `src` what feeds it and `woop` `{outcome, obstacle, if, then, odds, oddsWs, pic}` (`shared/goals.js`) |
+| `wrun` | **quest**; **home** writes `cue`, ROOM writes `kept` through the inbox (merged, never replaced) | the aim key, dated | `{ran, cue, kept, t}` — one day of a goal's WOOP: the run-through done, the time its if-moment was planned for (also the todo `woop-<aim>-<day>`, src `woop`), and KEPT IT 1 or NOT TODAY 0. Kept days are counted by `Goals.kept` |
+| `pnum` | **OUTER HEAVEN** through the inbox (`posts`); **quest** when typed (`members`, `revenue`) | the number's name, dated | `{v, src}` — one work number on one day: posts that day, Skool members then, revenue in that day. Read by `Goals` for Work numbers goals |
 | `excat` | **train** | category id | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex |
-| `exercise` | **train** | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup, bar, wu}` — `setup` is the setup fields he names for it, each a toggle or a setting; `bar` 1 or 0 overrides reading a barbell lift off the name; `wu` `kg` or `lb` is its own weight unit (`unit` is not, see `train/CLAUDE.md`) |
+| `exercise` | **train** | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup, bar, wu, assist}` — `setup` is the setup fields he names for it, each a toggle or a setting; `bar` 1 or 0 overrides reading a barbell lift off the name; `assist` 1 or 0 overrides reading an assisted machine off the name (the weight is help, less is stronger); `wu` `kg` or `lb` is its own weight unit (`unit` is not, see `train/CLAUDE.md`); `mus` `{Muscle: share}` is what it trains when he has set it, read by every app through `shared/muscles.js` `Muscles.forLift` |
 | `set` | **train** | timestamp id | one logged set, weight stored in kg with the unit it was typed in; `warm` a warmup marked by hand, `su` the setup it was done with, `rir` reps in reserve (5 means five or more) and `q` set quality 1 to 4, both from the comment box. Warmups and split sets are also read from its comment, never stored |
 | `session` | **train** | `''` | `{start, end, note, from, order, name, vs}` — the day's timing and comment, the day it was copied from, its exercise order, its name, and a day picked to compare it with |
 | `phase` | **train** | phase id | `{name, start, end}` — a training block. Not `block`: BLOCK is another app and has nothing to do with training beyond a tick. `end` is optional |
@@ -300,8 +311,17 @@ An app may read any type. It writes only the types it owns.
 | `attempt` | **arc** | `mapId\|nodeId`, dated | `{hit, miss, t}` — one skill's hits and misses on one day. A ticked QUESTS todo ARC made for the skill and a met SPEAK take on the skill's drill count as hits too. Open, passed and review due are worked out from these, never stored on the node |
 | `recap` | **log** | `week`, `month`, `quarter` or `year`, dated on the period's first day | `{text}` — what he wrote about that period |
 | `cell` | **log** | column id (`done`), dated | `{text}` — one day's entry in one of LOG's text columns, such as "What got done today". Kept apart from `day.note` on purpose |
-| `take` | **speak** | timestamp id, dated | `{drill, skill, style, dur, m, goals, pass, asr, cam, tx, prompt}` — one practice take: every number the ear read, each goal as it stood with `got` and `ok`, and the transcript if there was one. The day's warm-up is one `take` with `drill: 'warm'` |
+| `take` | **speak** | timestamp id, dated | `{drill, skill, style, dur, m, goals, pass, asr, cam, tx, prompt, tw, sh}` — one practice take (`tw` each word's time and sureness from SPEAK.exe's transcriber): every number the ear read, each goal as it stood with `got` and `ok`, and the transcript if there was one. The day's warm-up is one `take` with `drill: 'warm'` |
 | `topic` | **speak** | id | `{text, kind}` — his own prompt: a topic, a story, or three bullets |
+| `answer` | **speak** | the take's key, dated as the take | `{q, src, term, bracket, subj, text, words, dur, at}` — the answer bank (fitness, productivity, philosophy, behaviour change): one spoken answer to a FITNESS TOPIC question, its full transcript. Other work (Skool, content) reads it from the backup or the sheet |
+| `ask` | **speak**; **OUTER HEAVEN** through the inbox (merged, and the note ticked) | the `Ask:` note's key, undated | `{q, kind, answer, optId, ranking, brackets, note, said, take, dest, context, onRecord, tdId, askedAt, answeredAt}` — Tom's answer to a question any producer asked through a Todoist `Ask:` task. Claude files it at `dest`; see `tom-context/fitness-knowledge-bank.md` |
+| `splan` | **speak** | `''`, dated the practice day it read | `{n, met, top: {id, n}, head, cue, drills: [{id, why}], by, no, mark, at}` — the next day's plan made from that day's takes: by the numbers (`by: 'rules'`), then by Claude in SPEAK.exe (`by: 'claude'`). `no` the faults he marked wrong. TODAY shows the newest one from before today |
+| `story` | **speak** | `st-<take key>-<n>` when Claude found it in a take, `st-<time>` when typed, undated | `{title, moment, line, src, from, fromKind, fromTitle, fromDate, at, gone, scan}` — one story from his own life: `moment` the five-second change in it, `line` a way in, `src` `found` or `tom`, `from` the take or `kpiece` it was found in (`fromKind` `ramble` or `post` for a piece). `gone` is Not a story. `st-<piece key>-scan` with `scan: 1` and no title only marks a RAMBLES piece or post as read. A telling is a take whose `p.story` is the key, never stored here |
+| `smodel` | **speak** | timestamp id, undated | `{name, mime, dur, f0, at, data, pad}` — a clip he shadows: its sound and its pitch line (semitones, a tenth of a second each), padded past 64KB so it stays on the device like `tclip`. A take shadowed keeps both lines on `take.sh` |
+| `speaker` | **speak** | id, undated | `{name, text, at}` — a speaker Tom compares his voice with: their pasted transcript |
+| `draft` | **speak** | the take's key, dated as the take | `{take, prompt, tx, fmt, state, vers: [{text, by, ask, at}], cur}` — a take being refined into content, every version kept (12 at most). OUTER HEAVEN reads it from the nightly backup. See `speak/CLAUDE.md`, Possible content |
+| `tclip` | **speak** | the take's key, dated as the take | `{mime, dur, data, pad}` — the take's sound, or picture and sound when the camera was on, padded past 64KB so it never syncs and stays on the device that made it. See `speak/CLAUDE.md` |
+| `script` | **speak** | id, undated | `{title, text, at}` — a talk he writes, one line per thought, rehearsed through SPEAK's SCRIPT steps |
 | `cset` `cex` `cphase` `csession` | **coach** | `pid\|` + the key the row had in the client's TRAIN; dated as it was | a client's set, exercise, block and day, exactly as their TRAIN wrote it, merged with its own updated_at so a second file only adds what is new |
 | `cexcat` `csgroup` `cgoal` `cprogram` `cprogday` `cprogex` | **coach**; **train** writes all of these and the four above when opened as `train/index.html?client=<pid>` | the same | the rest of a client's TRAIN. That address points TRAIN's store at the client (the top of `train/index.html`), so COACH's LOG A SESSION is the real TRAIN on their rows. A set Tom logs there is keyed `pid\|k-...` and bills in WEALTH like one from the old quick logger |
 | `cprog` | **coach** | `c-<pid>` for a client's first sets, an id for a library program | `{name, pid, days:[{name, ex:[{name, sets:[{kg, r}]}]}]}` — one row per program, because a program is written, sent and sold as one piece. Only the first set of each exercise is sent. `cperson` gains `box` and `slot` from COACH, by patch |
@@ -319,7 +339,12 @@ An app may read any type. It writes only the types it owns.
 | `kdish` | **kitchen** | timestamp id, undated | `{name, items:[{food, mult}], ord}` — a saved meal. `items` is never empty: removing the last item removes the meal |
 | `kskip` | **kitchen** | the meal's key, dated the meal's date | `{skip: 1}` — this logged meal did not come out of the kitchen, so it takes no stock off. Kept off `meal`, the way WEALTH's `mark` is kept off `spend` |
 | `device` | **the shared layer** (`shared/report.js`); every device writes its own | a random id this browser made once, kept in localStorage `mb.device`, undated | `{name, seen, sync, syncedAt, revived, v: {app: version}, errs: [{t, app, m, at}], errN, open: {app: {s, p, r, at}}}` — how this device is doing. `revived` is the last time live sync remade a connection that died asleep, and why. `open` is each app's last open in seconds (`s` drawn and ready, `p` first paint, `r` Rec.ready), shown in DATA as "Opened in X s". An iPhone home-screen app has storage of its own, so it is a device of its own |
+| `kpiece` | **OUTER HEAVEN** (`jobs/knowledge.py`), through Backup.exe's inbox; **arc** reads it | `skool|<course>|<page>` or `ramble|<thread id>`, undated | `{src, title, text, subj, ref, born}` — one piece of what Tom made for ARC's knowledge banks: a Skool lesson page (`src: 'skool'`, `subj` from its course, `ref` the course) or a RAMBLES thread (`src: 'ramble'`, no subj). See `arc/CLAUDE.md`, Knowledge banks |
+| `postspeech` | **OUTER HEAVEN**, through Backup.exe's inbox; **speak** reads it | the post's id, dated the post day | how Tom spoke in one posted Story or reel, shaped like a `take`: `{m, hits, ev, tx, kind, link, raw, how}`; `raw` false for a reel CLIP cut (ums and gaps removed). Ums are a floor, pauses from Whisper word times. Spec in the SPEAK side-session notes |
+| `draftmade` | **OUTER HEAVEN**, through Backup.exe's inbox; **speak** reads it | the take's key, undated | `{take, doc, post, day, kind, permalink, grade, at}` — a SPEAK draft was posted. SPEAK marks its own `draft` done from it; the inbox never writes `draft` |
+| `flow` `fbox` `farrow` `fwalk` | **block** (`shared/flow.js`); **home** and **status** write `fwalk` on a pick | `flow` the flow id; `fbox` `farrow` `fid\|id`; `fwalk` the flow id, dated the day the walk began | `flow` `{name, start, ord, short}`; `fbox` `{name, kind: g r t d, x, y, at, floor}`; `farrow` `{a, b, label, gap (minutes, 0 immediately), sleep: 'short' or 'enough'}`; `fwalk` `{steps: [{box, arrow, t, j, jd, n}]}`, `j` the STATUS entry the step wrote, `n` the lines written while there `[{k, d}]`. See `block/CLAUDE.md`, the Flow tab |
 | `buy` | **receipts**; **kitchen** writes it too, for a purchase typed by hand, since clients have no RECEIPTS | `<receipt key>-<line>`, dated the receipt day; KITCHEN's is a timestamp id, dated the day bought | `{food, text, qty, unit, each, amount, shop, receipt}` — one line off a receipt. `unit` is `kg`, `g`, `L`, `ml`, `pc` or blank, and any field may be missing. KITCHEN's is `{food, text, qty, unit, t, src: 'kitchen'}` and never comes with a `spend` |
+| `phone` `pplace` `papp` | **the shared layer** (`shared/phone.js`) | `phone` undated `''`; `pplace` the send time, dated; `papp` the app's slug, dated | `phone` `{at, k, n}`: when the iPhone was last heard and with what. `pplace` `{lat, lon, t}`: where the phone was when the Shortcut ran. `papp` `{name, spans: [[from, to]], open}`: one app's open spans that day, from the Shortcut's app automations, a span past 4 hours dropped as a missed close |
 
 ### Many writers is fine. Replacing a payload you did not read is not
 
@@ -526,6 +551,17 @@ and for LIVE SYNC to catch up, and writes the home screen's "Back up
 everything" file to `Documents/Backups/Motherbase nightly`, outside any repo,
 the last 30 kept, `backup.log` beside them. Any app's DATA, Restore merges it
 back. `desktop/README.md` has the rest.
+
+**The inbox** (2026-11-16): the one door from a program on the PC into the
+store. Backup.exe hands every `*.json` in `Documents/Motherbase inbox` to
+`tools/backup.html` before it loads; a file is `{kind: 'motherbase-inbox',
+rows: [{type, date, key, payload}], gone: [{type, date, key}]}`, only the
+types in the page's `INBOX_TYPES` go in, and taken files
+move to `done/`. Once a day, signed in, so rows reach every device through
+live sync. `Backup.exe --force` runs it now. A file named `train-cleanup-*.json`
+may also carry `fix` (fields merged into TRAIN `exercise`, `set` or `excat`
+rows still alive), `make` and `fixGone`: Claude's data cleanups, built from a
+backup, never a whole payload (2026-11-16).
 
 The Data button turns amber once a backup is 14 days old. LIVE SYNC carries
 no photos (a row over 64KB), so a backup or the sheet is still the only copy
@@ -807,7 +843,11 @@ answer, or take it out.
 - **Staging a whole file commits another session's half-done edit in it.**
   WEALTH 1.0.30 shipped a foundation session's broken icon line that way.
   Before `git add <file>`, read `git diff <file>` and stop if you did not
-  write every hunk.
+  write every hunk. It happened again 2026-11-16: a GOALS commit (6726841)
+  carried a HOME session's untested zoom hunks out under HOME 1.0.117. To
+  commit only yours: save `git diff <file>` to a patch, keep your hunks,
+  `git apply --cached` it, and check `git diff --cached <file>` before
+  committing.
 - **Never pick your own elements by a short class name alone.** `Chart.header`
   draws its date line as `.w`, the home screen's card class, and `fitGrid`
   took those lines for cards, threw during boot and left the dock and clock
@@ -905,6 +945,13 @@ answer, or take it out.
   only a stored `warm` and counted 12,370 sets where Profile says 12,209
   (2026-09-25). COACH, SHEET and any widget reading sets need the same rule,
   and a stored 0 beats the comment.
+- **A reader of a set's weight as strength must know an assisted lift.** On
+  an assisted machine `kg` is help, so less is stronger: the name says
+  "assist" unless `exercise.assist` is 1 or 0. Records compare the help
+  negated; volume and 1RM use bodyweight minus help, or leave the set out
+  with no weigh-in. 70 lb of help x 13 outranked 50 x 16 everywhere until
+  TRAIN 1.0.83, COACH 1.0.30 and SHEET 1.0.7 (2026-11-16). `range.js` knows no
+  exercise, so its callers hand it the load.
 - **When the Browser pane is not drawing, a coordinate click lands on
   nothing** and screenshots time out; typing into a box that never got focus
   is lost too. Focus the box and press the real control with `.click()` from
@@ -927,6 +974,11 @@ answer, or take it out.
   by the id it derives from type, date and key, so a hand-made `id` is a
   second row that `Rec.all` and `Rec.map` list and `Rec.get` cannot see, and
   the app shows a ghost (2026-09-25). Seed test rows with `Rec.set`.
+  Since 2026-11-16 `Rec.merge` refuses a row whose id names a different
+  type than its `type`: TRAIN's `?client=` adapter hands out copies with the
+  client's id and TRAIN's type, and 769 came back on the PC as Tom's own sets
+  and exercises. Never pass a row from `Rec.all`, `Rec.export` or `Rec.on`
+  inside a `?client=` TRAIN into another store.
 - **A bulk merge of sets on a page that has not read them is held, not
   written** (2026-09-30). `Rec.merge` of a kept-out type before it is in
   queues the rows until it arrives, so they are compared with the stored
@@ -1011,7 +1063,10 @@ answer, or take it out.
   old node is gone, the release is never heard, and the ghost stays on the
   page for good (COACH's box, 2026-10-08). Put `pointermove`/`pointerup`/
   `pointercancel` on `window` for the length of the drag and remove them on
-  release.
+  release. Since 2026-11-16 a new pointer drag uses `Mobile.drag`, which
+  does that and always ends once (drop, tap or cancel: a cancelled pointer,
+  blur, hidden, Escape, an unheard release); BLOCK and the home screen use
+  it, and a board asks `Mobile.dragging()` before redrawing.
 - **Anything that measures itself while built off the page measures 0.**
   An app that builds columns detached and appends them after (COACH past
   1560px) hands a shared component a box with no width, so it cannot
@@ -1058,9 +1113,23 @@ answer, or take it out.
   code. Tom's iPhone TRAIN app was on 1.0.61 three days after 1.0.62
   shipped the fix he said was missing (2026-10-18).
 
+- **A fact the suite shows in two places must be read by one rule.** A dose can be a STATUS reading, a journal line or a BLOCK tick; HOME's HALF-LIFE card learned the line and the tick and STATUS's tile did not, so the same day read 10g on one screen and blank on the other (2026-10-30). `shared/dose.js` is now the one reader. When a fix teaches the suite a new way to record a fact, put it where every screen that shows the fact reads it, and check each screen.
+- **A set's weight is not "heavier is stronger" and is not always above zero.** An assisted lift's weight is help (less is stronger) and any lift can be logged below zero (-20 on a pull-up is help) since TRAIN 1.0.83 and 1.0.85. A reader of TRAIN's `set` rows compares `TRAIN.wk` (help negated) and asks `TRAIN.weighed(s)`, never `kg > 0`, and gets volume from `TRAIN.load` (bodyweight plus or minus, null with no weigh-in). COACH (`loadOf`, `goesBelow`) and SHEET copy the rule; range.js, HOME and any widget reading sets need it too (2026-11-16).
 - Commands run from the Claude app see a frozen copy of `%LOCALAPPDATA%`, not the live one.
   A scheduled task's state there (RECEIPTS `seen.json`) reads weeks stale from a Claude
   session; check the task's own `status.json` or Task Scheduler's last run instead.
+- **`build-client.py` empties the client folder before copying, and a locked file stops it halfway.** A file open elsewhere (`shared/icons/ragnarok/form.png`, 2026-11-16) threw PermissionError with 422 client files already deleted. Nothing was committed: `git checkout -- .` in the client folder put it back and the second run passed. Read `git status` in the client folder after every build; a list of D lines is this.
+- **Committing your hunks around another session's, check what landed.** `git apply --cached --unidiff-zero` of a hand-split `-U0` patch put a two-line comment 100 lines from where it belonged (2026-11-16, HOME 1.0.113). After applying, `git diff index.html` must show only the other session's lines; anything of yours there landed wrong.
+- **`Rec.ready` is not the whole store.** After 2.5 s it fires on
+  localStorage alone if IndexedDB is slow, and with the desktop programs
+  sharing one store it was slower than that: every caught-up nightly backup
+  on 2026-11-16 saved 4,700 rows of 26,000. Anything that must see every row
+  waits on `Rec.need()` and then `Rec.whole()` (`shared/CLAUDE.md`, Ready is
+  not whole).
+- **A big single-file app can already hold the name you pick.** HOME's `const BKEY` clashed with the backup key 2000 lines further down and the whole page died on a SyntaxError (2026-11-16). Grep `\bNAME\b` before adding a top-level const.
+- **A test copy of a desktop program runs on his real screen.** A scratch STATUS.exe's status check took the whole screen mid-test, and two copies each drew an overlay so he saw double (2026-11-16). Switch the check off in a test copy first (`S.set('desk.on', 0)`), close it with `CloseMainWindow` when done, and reopen his real one without `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`.
+- **WebView2, the engine inside every desktop program, has no speech-to-text.** The browser's SpeechRecognition exists there but never hears anything, so every SPEAK take made in SPEAK.exe had no transcript, and every test passed because the tests plugged in a fake transcript in headless Chromium (2026-11-16). SPEAK.exe now transcribes on the PC with CLIP's faster-whisper (`desktop/SpeakRefine.cs`, `Hear`). Anything that needs a feature of the engine itself (speech, a permission, a codec) is tested once inside the real program, not only in a test browser with the feature faked.
+- **WinForms `TopMost = true` is ignored from a program that is not in front.** STATUS.exe needed `SetWindowPos(HWND_TOPMOST, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)` too (`Pin` in `desktop/StatusApp.cs`, 2026-11-16).
 
 ---
 
@@ -1089,6 +1158,7 @@ own brief since 2026-09-22.
 | `coach/` | COACH, Tom's clients in a PC box. Tom only. Brief: `coach/CLAUDE.md`. |
 | `forge/` | FORGE, the program builder. Weeks of days of exercises, sent through COACH to TRAIN. Tom only, desktop only. Brief: `forge/CLAUDE.md`. |
 | `receipts/` | RECEIPTS, a receipt photo turned into rows. Tom only. Brief: `receipts/CLAUDE.md`. |
+| `flow/` | FLOW, BLOCK's flow on the phone: the travel card (`Flow.card`), today's notes and bullets. Phone, client build. Brief: `flow/CLAUDE.md`. |
 | `bullet/` | BULLET, one screen that writes a bullet. An address on no roster or dock, found from STATUS, Settings, BULLETS. Client build. Brief: `bullet/CLAUDE.md`. |
 | `sheet/` | CHARACTER SHEET. Feats from TRAIN and STATUS as NOTICE windows, with a history; the pixel character is paused. Held out of the client build for now. Brief: `sheet/CLAUDE.md`. |
 | `kitchen/` | KITCHEN, the shelf, the week of meals and targets and gaps. Client build. Brief: `kitchen/CLAUDE.md`. |
@@ -1171,7 +1241,8 @@ briefs). A session works on one module:
   names any uncommitted file in an app clients get, because it packages every
   client app and would ship another session's half-finished work. `--dirty`
   overrides it only when the change is yours and finished.
-- **Wrap at around 200k tokens**, or when the module's task is done.
+- **Wrap when the module's task is done.** A hook tells Tom once at 200k and
+  asks once at 300k; never suggest it otherwise (Tom, 2026-11-16).
 
 - **Look before you write:** a fresh read of the file right before editing it.
 - **After a structural change, tell Tom to restart his other sessions.** They
@@ -1208,5 +1279,11 @@ Then: `py -3 tools/build-client.py`, commit the generated folder with what
 changed and why, and push. Nothing in that folder is ever edited by hand.
 
 A change clients cannot see is one to an app they do not have (`wealth/`,
-`arc/`, `speak/`, `system/`, `form/`, `portion/`, `coach/`, `forge/`), to `tools/`, to
-`desktop/`, or to a brief. Those need no rebuild. Building it is fine.
+`arc/`, `speak/`, `system/`, `form/`, `portion/`, `coach/`, `forge/`), to `tools/`, or to
+a brief. Those need no rebuild. Building it is fine.
+
+**A change to a desktop program's `.cs` is one clients CAN see** (since
+2026-10-28 their copies update themselves). `desktop/build.ps1` makes a new
+`Motherbase Setup <date>.exe` every time; commit it with the old one's removal,
+then rebuild and push the client copy, and installed copies take it within six
+hours. Tom never asks for a new version: the session that changed the program ships it.
