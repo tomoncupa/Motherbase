@@ -296,52 +296,31 @@ function clock(ms) {
 const CS = {};
 let inks = {}, cardCssDone = false;
 const CARD_CSS = `
-.flc{display:flex;flex-direction:column;gap:var(--s-3,12px);position:relative;min-width:0}
-.flc-trail{display:flex;gap:var(--s-1,4px);align-items:center;flex-wrap:wrap}
-.flc-crumb{position:relative;display:inline-flex;align-items:center;gap:var(--s-1,4px);min-height:var(--s-6,32px);padding:0 var(--s-2,8px);
-  border:1px solid var(--border,GrayText);border-radius:var(--radius-sm,4px);background:var(--bg,Canvas);color:var(--text-2,CanvasText);
-  font:inherit;font-size:var(--f-1,12px);cursor:pointer}
-.flc-crumb::after{content:'';position:absolute;left:0;right:0;top:50%;height:var(--tap,44px);transform:translateY(-50%)}
-.flc-crumb i{width:var(--s-2,8px);height:var(--s-2,8px);border-radius:var(--radius-sm,4px);background:var(--k)}
-.flc-sep{color:var(--text-muted,GrayText);font-size:var(--f-1,12px)}
-.flc-stage{position:relative;display:flex;flex-direction:column;gap:var(--s-4,16px);min-width:0}
-.flc-b{position:relative;border:0;font:inherit;background:var(--k);color:var(--ink);border-radius:var(--radius-sm,4px);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer;
-  -webkit-user-select:none;user-select:none;overflow:hidden;overflow-wrap:normal;word-break:normal;line-height:1.2}
-.flc-b.grow{aspect-ratio:auto!important;overflow:visible;overflow-wrap:anywhere}
-.flc-top{aspect-ratio:2.618/1;padding:var(--s-3,12px);cursor:default;overflow:visible}
-.flc-top .in{display:flex;flex-direction:column;align-items:center;max-width:100%}
+.flc{display:flex;flex-direction:column;position:relative;min-width:0}
+.flc-stage{position:relative;display:flex;flex-direction:column;min-width:0}
+.flc-b{position:relative;border:0;font:inherit;color:var(--text-1,CanvasText);border-radius:var(--radius-sm,4px);
+  display:flex;flex-direction:column;justify-content:center;text-align:left;cursor:pointer;
+  -webkit-user-select:none;user-select:none;overflow:hidden;overflow-wrap:normal;word-break:normal;line-height:1.2;
+  font-family:var(--font-display,inherit);font-weight:var(--w-bold,600)}
+.flc-b:not(.mb-plate){background:var(--surface-1,Canvas);border:1px solid var(--k);box-shadow:inset var(--s-1,4px) 0 0 var(--k)}
+.flc-top{min-height:var(--s-10,96px);padding:var(--s-3,12px) var(--s-4,16px);cursor:default;z-index:1}
+.flc-top .n{font-size:var(--f-5,20px)}
 .flc-notes{display:flex;flex-direction:column;gap:var(--s-1,4px);margin-top:var(--s-2,8px);font-family:var(--font-body,inherit);
-  font-size:var(--f-1,12px);font-weight:var(--w-body,500);line-height:1.3;opacity:.9;max-width:100%}
+  font-size:var(--f-1,12px);font-weight:var(--w-body,500);color:var(--text-2,CanvasText);line-height:1.3}
 .flc-note{display:block}
-.flc-top .n{font-family:var(--font-display,inherit);font-size:var(--f-5,20px);font-weight:var(--w-bold,700);line-height:1.2}
-.flc-top .s{font-size:var(--f-1,12px);margin-top:var(--s-1,4px);opacity:.85}
-.flc-top.now{box-shadow:0 0 0 3px var(--surface-1,Canvas),0 0 0 5px var(--accent,Highlight)}
-.flc-top.now::after{content:'';position:absolute;inset:-5px;border-radius:var(--radius-md,8px);box-shadow:0 0 0 2px var(--accent,Highlight);
-  animation:flc-pulse 2.4s ease-out infinite;pointer-events:none}
-@keyframes flc-pulse{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.06)}}
-.flc-acts{display:flex;gap:var(--s-2,8px);flex-wrap:wrap}
-.flc-acts .mb-btn{flex:1}
-.flc-row{display:grid;grid-template-columns:repeat(var(--n,3),minmax(0,1fr));gap:var(--s-4,16px);position:relative;z-index:1}
-.flc-col{display:flex;flex-direction:column;min-width:0}
-.flc-zone{display:flex;align-items:flex-end;justify-content:center;min-height:var(--s-8,64px);padding:var(--s-5,24px) 0 var(--s-2,8px)}
-.flc-zone2{display:flex;align-items:center;justify-content:center;min-height:var(--s-7,48px);padding:var(--s-2,8px) 0}
-.flc-tag{position:relative;z-index:2;width:100%;padding:var(--s-1,4px) var(--s-2,8px);border:1px solid var(--border-strong,GrayText);
-  border-radius:var(--radius-sm,4px);background:var(--bg,Canvas);color:var(--text-2,CanvasText);font-size:var(--f-1,12px);line-height:1.3;
-  text-align:center;overflow-wrap:anywhere}
-.flc-mid{aspect-ratio:1.618/1;padding:var(--s-2,8px);font-weight:var(--w-body,500)}
-.flc-sm{aspect-ratio:1.618/1;padding:var(--s-2,8px);opacity:.85}
-.flc-row.one{grid-template-columns:minmax(0,62%);justify-content:center}
-.flc-row2{gap:var(--s-2,8px)}
-.flc-row2 .flc-sm{width:80%;align-self:center}
-.flc-row2.one{grid-template-columns:minmax(0,46%)}
-.flc-pager{display:flex;justify-content:center}
-.flc-more,.flc-say{font-size:var(--f-1,12px);color:var(--text-muted,GrayText);text-align:center;margin-top:var(--s-1,4px)}
+.flc-dot{position:relative;z-index:1;width:var(--s-5,24px);height:var(--s-5,24px);margin-left:calc(var(--s-6,32px)/2 - var(--s-5,24px)/2);
+  border-radius:50%;background:var(--accent,Highlight);box-shadow:0 0 0 var(--s-1,4px) color-mix(in srgb,var(--accent,Highlight) 25%,transparent)}
+.flc-ways{display:flex;flex-direction:column;gap:var(--s-3,12px);padding:var(--s-6,32px) 0 0 var(--s-6,32px);position:relative;z-index:1}
+.flc-way{min-height:var(--s-8,64px);padding:var(--s-2,8px) var(--s-4,16px)}
+.flc-way .w{display:block;font-family:var(--font-body,inherit);font-weight:var(--w-body,500);font-size:var(--f-1,12px);color:var(--text-2,CanvasText);margin-top:var(--s-1,4px)}
+.flc-way.sug{outline:2px solid var(--accent,Highlight);outline-offset:2px}
+.flc-say{font-size:var(--f-1,12px);color:var(--text-muted,GrayText)}
+.flc-ways .flc-say{padding:var(--s-2,8px) 0}
 .flc-wires{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:0}
-.flc-wires path{fill:none;stroke:var(--border-strong,GrayText);stroke-width:1.5}
+.flc-wires path{fill:none;stroke:var(--border-strong,GrayText);stroke-width:2;stroke-linejoin:round}
+.flc-wires .hd{fill:var(--border-strong,GrayText);stroke:none}
 .flc-ghost{position:absolute;pointer-events:none;z-index:5;margin:0}
-@media (hover:hover){.flc-mid:hover,.flc-sm:hover{filter:brightness(1.08)}}
-@media (prefers-reduced-motion:reduce){.flc-top.now::after{animation:none}}
+@media (hover:hover){.flc-way:hover{filter:brightness(1.1)}}
 `;
 function cardCss() {
   if (cardCssDone || typeof document === 'undefined' || !document.head) return;
@@ -499,261 +478,135 @@ function card(host, o) {
   if (!fid || !get(fid)) { host.appendChild(E('div', 'flc-say', 'No flows.')); if (o.empty) o.empty(host); return; }
   const h = here(fid), real = h && h.box ? h.box.id : null;
   let st = CS[fid];
-  if (!st || st.now !== real || !box(fid, st.view)) st = CS[fid] = { now: real, view: real || (h && h.start ? h.start.id : null), trail: [] };
-  if (!st.view) { host.appendChild(E('div', 'flc-say', 'This flow has no start box yet.')); return; }
+  if (!st || st.now !== real) st = CS[fid] = { now: real };
   paint(host, fid, st, o);
 }
 
+/* Top down, one step at a time (Tom, 2026-11-19: "Travel should be from top
+   down", "just show the next set of options", lines like his 2020 chart, no
+   arrow words, no "you are here"). The block he is at sits on top; one line
+   runs down the left and branches right into every way out, each with an
+   arrowhead, as his chart's Down time fans. Pressing a way IS going there:
+   the step is written (with Undo), the block rises to the top and the next
+   ways drop in below. Before the day starts, a gold point stands on top and
+   the start block is the one way. */
 function paint(host, fid, st, o) {
   host.innerHTML = '';
   const all = arrows(fid), bs = {}; boxes(fid).forEach(b => { bs[b.id] = b; });
-  const v = bs[st.view], now = st.view === st.now, started = !!st.now;
-  if (st.trail.length) {
-    const tr = E('div', 'flc-trail');
-    st.trail.forEach((id, i) => {
-      const b = bs[id]; if (!b) return;
-      const c = E('button', 'flc-crumb', '<i style="--k:' + kvar(b.kind) + '"></i>' + X(String(b.name).split(',')[0]));
-      c.type = 'button'; c.title = b.name;
-      c.onclick = () => back(host, fid, st, o, i, c);
-      tr.appendChild(c); tr.appendChild(E('span', 'flc-sep', '›'));
-    });
-    host.appendChild(tr);
-  }
+  const cur = st.now ? bs[st.now] : null, start = get(fid) && bs[get(fid).start];
   const stage = E('div', 'flc-stage');
   host.appendChild(stage);
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'flc-wires');
   stage.appendChild(svg);
-  const wk = now ? active(fid) : null, last = wk && wk.steps[wk.steps.length - 1];
-  const lines = (last && last.n || []).map(x => R().get('note', x.d, x.k)).filter(x => x && x.text).slice(-3);
-  const top = E('div', 'flc-b flc-top' + (now ? ' now' : ''),
-    '<span class="in"><span class="n">' + X(v.name) + '</span><span class="s">' + (now ? 'You are here' : !started && !st.trail.length ? 'Not started' : 'Looking ahead') + '</span>' +
-    (lines.length ? '<span class="flc-notes">' + lines.map(x => '<span class="flc-note">' + X(x.text) + '</span>').join('') + '</span>' : '') + '</span>');
-  top.style.setProperty('--k', kvar(v.kind)); top.style.setProperty('--ink', ink(v.kind));
+  let top;
+  if (cur) {
+    const wk = active(fid), last = wk && wk.steps[wk.steps.length - 1];
+    const lines = (last && last.n || []).map(x => R().get('note', x.d, x.k)).filter(x => x && x.text).slice(-3);
+    top = E('div', 'flc-b flc-top mb-plate', '<span class="n">' + X(cur.name) + '</span>' +
+      (lines.length ? '<span class="flc-notes">' + lines.map(x => '<span class="flc-note">' + X(x.text) + '</span>').join('') + '</span>' : ''));
+    top.style.setProperty('--c', kvar(cur.kind)); top.style.setProperty('--k', kvar(cur.kind));
+  } else top = E('div', 'flc-dot');
   top.dataset.top = '1';
   stage.appendChild(top);
-  if (!now) {
-    const acts = E('div', 'flc-acts');
-    const go = E('button', 'mb-btn go mb-press mb-tap', started || st.trail.length ? "I'M HERE" : 'START HERE');
-    go.type = 'button'; go.onclick = () => arrive(host, fid, st, o);
-    acts.appendChild(go);
-    if (started) { const bk = E('button', 'mb-btn mb-press mb-tap', 'BACK TO NOW'); bk.type = 'button'; bk.onclick = () => backNow(host, fid, st, o); acts.appendChild(bk); }
-    stage.appendChild(acts);
-  }
-  /* up to three ways out across the card (Tom, 2026-11-18: "up to three
-     different pathways"); more than three page through MORE WAYS. Last
-     night's sleep puts its way first. */
-  let ways = all.filter(a => a.a === v.id && bs[a.b]);
-  const sug = now ? suggest(fid) : null;
+  let ways = cur ? all.filter(a => a.a === cur.id && bs[a.b]) : start ? [{ id: null, b: start.id }] : [];
+  const sug = cur ? suggest(fid) : null;
   if (sug) ways = [ways.find(w => w.id === sug.arrow.id)].concat(ways.filter(w => w.id !== sug.arrow.id)).filter(Boolean);
-  const pages = Math.ceil(ways.length / 3) || 1;
-  st.page = (st.page || 0) % pages;
-  const shown = ways.slice(st.page * 3, st.page * 3 + 3);
-  const row = E('div', 'flc-row');
-  row.style.setProperty('--n', Math.max(1, shown.length));
-  row.classList.toggle('one', shown.length === 1);
-  if (!ways.length) row.appendChild(E('div', 'flc-say', 'Nothing comes after this block.'));
-  const tag = words => words ? E('span', 'flc-tag', X(words)) : null;
-  shown.forEach(w => {
-    const col = E('div', 'flc-col');
-    const z1 = E('div', 'flc-zone'), t1 = tag(w.label || gapWords(w.gap));
-    if (t1) z1.appendChild(t1);
-    if (sug && sug.arrow.id === w.id) z1.appendChild(Object.assign(E('span', 'flc-tag', 'Slept ' + hours(sug.hours)), { style: 'border-color:var(--accent);color:var(--accent);margin-left:var(--s-1)' }));
-    col.appendChild(z1);
-    const b = bs[w.b], m = E('button', 'flc-b flc-mid', X(b.name));
-    m.title = b.name;
-    m.type = 'button'; m.style.setProperty('--k', kvar(b.kind)); m.style.setProperty('--ink', ink(b.kind));
-    m.dataset.id = w.b;
-    m.onclick = () => travel(host, fid, st, o, [w.b], m);
-    col.appendChild(m);
-    row.appendChild(col);
+  const list = E('div', 'flc-ways');
+  if (!ways.length) list.appendChild(E('div', 'flc-say', cur ? 'Nothing comes after this block.' : 'This flow has no start block yet.'));
+  ways.forEach(w => {
+    const b = bs[w.b], isSug = sug && sug.arrow.id === w.id;
+    const m = E('button', 'flc-b flc-way mb-plate mb-press' + (isSug ? ' sug' : ''), '<span class="n">' + X(b.name) + '</span>' +
+      (isSug ? '<span class="w">Slept ' + hours(sug.hours) + '</span>' : ''));
+    m.type = 'button'; m.title = b.name; m.dataset.id = w.b;
+    m.style.setProperty('--c', kvar(b.kind)); m.style.setProperty('--k', kvar(b.kind));
+    m.onclick = () => go(host, fid, st, o, w, m);
+    list.appendChild(m);
   });
-  stage.appendChild(row);
-  /* Level two (Tom, 2026-11-19: "branching paths, not just linear lines ...
-     each level gets smaller boxes ... and this around convergence points"):
-     every block the shown paths lead to, smaller, each once. A block two
-     paths both lead to is drawn once and both lines meet it. Blocks already
-     on level one are not drawn again. Four at most; the rest are counted. */
-  const kids = [], seen = {}, lv1 = {};
-  shown.forEach(w => { lv1[w.b] = 1; });
-  shown.forEach(w => all.filter(a => a.a === w.b && bs[a.b] && !lv1[a.b] && a.b !== v.id).forEach(n => {
-    if (!seen[n.b]) { seen[n.b] = { id: n.b, from: [], arrows: [] }; kids.push(seen[n.b]); }
-    seen[n.b].from.push(w.b); seen[n.b].arrows.push(n);
-  }));
-  const row2 = E('div', 'flc-row flc-row2');
-  if (kids.length) {
-    const sh2 = kids.slice(0, 4);
-    row2.style.setProperty('--n', sh2.length);
-    row2.classList.toggle('one', sh2.length === 1);
-    sh2.forEach(k => {
-      const c = bs[k.id], col = E('div', 'flc-col');
-      col.dataset.from = k.from.join(' ');
-      const z2 = E('div', 'flc-zone2'), a0 = k.arrows[0];
-      const words = k.arrows.length === 1 ? (a0.label || gapWords(a0.gap)) : '';
-      const t2 = tag(words);
-      if (t2) z2.appendChild(t2);
-      col.appendChild(z2);
-      const sm = E('button', 'flc-b flc-sm', X(c.name));
-      sm.type = 'button'; sm.title = c.name; sm.style.setProperty('--k', kvar(c.kind)); sm.style.setProperty('--ink', ink(c.kind));
-      sm.onclick = () => travel(host, fid, st, o, [k.from[0], k.id], sm);
-      col.appendChild(sm);
-      row2.appendChild(col);
-    });
-    stage.appendChild(row2);
-    if (kids.length > 4) stage.appendChild(E('div', 'flc-more', '+' + (kids.length - 4) + ' more beyond these'));
-  }
-  if (pages > 1) {
-    const pg = E('div', 'flc-pager'), mb = E('button', 'mb-btn mb-press mb-tap', 'MORE WAYS (' + (ways.length - shown.length) + ')');
-    mb.type = 'button'; mb.onclick = () => { st.page = (st.page + 1) % pages; paint(host, fid, st, o); rise(host); };
-    pg.appendChild(mb); stage.appendChild(pg);
-  }
-  /* The words fit their block (Tom, 2026-11-18: "make the words fit into
-     the blocks ... proportion and beauty"). Blocks keep the golden ratio;
-     each row takes the one size its longest name fits at, on whole words. */
+  stage.appendChild(list);
+  /* his words are never cut: each block shrinks its name to fit, then wraps */
   const fitAll = () => {
-    fitTop(top);
-    [['.flc-mid', 20], ['.flc-sm', 14]].forEach(([q, max]) => {
-      const els = [...stage.querySelectorAll(q)];
-      if (!els.length) return;
-      const f = Math.min(...els.map(e => fit(e, max, 12)));
-      els.forEach(e => { e.style.fontSize = f + 'px'; e.classList.toggle('grow', !fits(e)); });
-      if (els.some(e => e.classList.contains('grow'))) { els.forEach(e => e.classList.add('grow')); const hm = Math.max(...els.map(e => e.offsetHeight)); els.forEach(e => { e.style.minHeight = hm + 'px'; }); }
-    });
-    /* one height per row of tags, so the paths read as one design */
-    ['.flc-zone', '.flc-zone2'].forEach(q => {
-      const els = [...stage.querySelectorAll(q)];
-      els.forEach(e => { e.style.minHeight = ''; });
-      if (els.length < 2) return;
-      const hmax = Math.max(...els.map(e => e.offsetHeight));
-      if (hmax) els.forEach(e => { e.style.minHeight = hmax + 'px'; });
-    });
+    if (cur) fitName(top.querySelector('.n'), 20, 14);
+    list.querySelectorAll('.flc-way .n').forEach(n => fitName(n, 18, 12));
   };
   fitAll();
-  if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => { if (host.contains(top)) { fitAll(); wires(stage, svg, top, row, false); } });
-  const draw = () => wires(stage, svg, top, row, !o.quiet);
+  const draw = () => wires(stage, svg, top, list, !o.quiet);
+  if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => { if (host.contains(top)) { fitAll(); wires(stage, svg, top, list, false); } });
   if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(draw); else draw();
   o.quiet = false;
 }
+/* one line where it fits, from max down to min; under min it wraps */
+function fitName(n, max, min) {
+  if (!n) return;
+  n.style.whiteSpace = 'nowrap';
+  for (let f = max; f >= min; f--) { n.style.fontSize = f + 'px'; if (n.scrollWidth <= n.clientWidth + 1) return; }
+  n.style.whiteSpace = ''; n.style.fontSize = min + 'px';
+}
 
-/* right-angle wires: the top block down to each block in row two, and each
-   of those down to its first next block */
-function wires(stage, svg, top, row, grow) {
+/* His chart's lines: one trunk down the left from the block on top, a
+   right-angle branch with a rounded corner into each way, an arrowhead at
+   each end. */
+function wires(stage, svg, top, list, grow) {
   const o = stage.getBoundingClientRect();
   if (!o.width) return;
   const R2 = e => { const r = e.getBoundingClientRect(); return { x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height }; };
-  const t = R2(top), d = [];
-  /* below the I'M HERE row when it is showing, so no line runs between the buttons */
-  const acts = stage.querySelector('.flc-acts'), y0 = acts ? R2(acts).y + R2(acts).h : t.y + t.h;
-  const mids = [...row.querySelectorAll('.flc-mid')];
-  if (mids.length) {
-    const busY = R2(row).y + 12, xs = mids.map(k => { const r = R2(k); return r.x + r.w / 2; }).concat(t.x + t.w / 2);
-    d.push('M' + (t.x + t.w / 2) + ',' + y0 + ' L' + (t.x + t.w / 2) + ',' + busY);
-    d.push('M' + Math.min(...xs) + ',' + busY + ' L' + Math.max(...xs) + ',' + busY);
-    mids.forEach(k => {
-      const r = R2(k), cx = r.x + r.w / 2;
-      d.push('M' + cx + ',' + busY + ' L' + cx + ',' + (r.y - 1));
-    });
-    const row2 = stage.querySelector('.flc-row2');
-    if (row2) {
-      const midOf = {}; mids.forEach(k => { midOf[k.dataset.id] = R2(k); });
-      const y2 = R2(row2).y + 10;
-      row2.querySelectorAll('.flc-col').forEach(col => {
-        const sm = col.querySelector('.flc-sm'); if (!sm) return;
-        const f = R2(sm), fx = f.x + f.w / 2;
-        col.dataset.from.split(' ').forEach(pid => {
-          const pr = midOf[pid]; if (!pr) return;
-          const px = pr.x + pr.w / 2;
-          d.push('M' + px + ',' + (pr.y + pr.h) + ' L' + px + ',' + y2 + ' L' + fx + ',' + y2 + ' L' + fx + ',' + (f.y - 1));
-        });
-      });
-    }
-  }
-  svg.innerHTML = d.map(p => '<path d="' + p + '"/>').join('');
+  const t = R2(top), ways = [...list.querySelectorAll('.flc-way')];
+  if (!ways.length) { svg.innerHTML = ''; return; }
+  const x0 = R2(list).x / 2, y0 = t.y + t.h, rad = 6, hd = 5, d = [], heads = [];
+  ways.forEach(w => {
+    const r = R2(w), y = r.y + r.h / 2, x1 = r.x - 2;
+    d.push('M' + x0 + ',' + y0 + ' L' + x0 + ',' + (y - rad) + ' Q' + x0 + ',' + y + ' ' + (x0 + rad) + ',' + y + ' L' + (x1 - hd) + ',' + y);
+    heads.push('M' + x1 + ',' + y + ' L' + (x1 - hd * 1.6) + ',' + (y - hd) + ' L' + (x1 - hd * 1.6) + ',' + (y + hd) + 'Z');
+  });
+  svg.innerHTML = d.map(p => '<path d="' + p + '"/>').join('') + heads.map(p => '<path class="hd" d="' + p + '"/>').join('');
   if (!grow || still()) return;
-  svg.querySelectorAll('path').forEach((p, i) => {
+  svg.querySelectorAll('path:not(.hd)').forEach((p, i) => {
     const L = p.getTotalLength ? p.getTotalLength() : 0; if (!L) return;
     p.style.strokeDasharray = L; p.style.strokeDashoffset = L;
-    p.animate([{ strokeDashoffset: L }, { strokeDashoffset: 0 }], { duration: 380, delay: 160 + i * 25, easing: 'cubic-bezier(.3,.7,.2,1)', fill: 'forwards' });
+    p.animate([{ strokeDashoffset: L }, { strokeDashoffset: 0 }], { duration: 420, delay: 120 + i * 50, easing: 'cubic-bezier(.3,.7,.2,1)', fill: 'forwards' });
   });
+  svg.querySelectorAll('.hd').forEach((p, i) => p.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, delay: 460 + i * 50, fill: 'backwards' }));
 }
-function rise(host) {
+/* the next ways drop in from above, one after another */
+function drop(host) {
   if (still()) return;
-  host.querySelectorAll('.flc-col').forEach((c, i) => c.animate([{ opacity: 0, transform: 'translateY(28px)' }, { opacity: 1, transform: 'none' }],
-    { duration: 360, delay: 180 + i * 60, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' }));
-  const a = host.querySelector('.flc-acts');
-  if (a) a.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, delay: 300, fill: 'backwards' });
+  host.querySelectorAll('.flc-way, .flc-ways .flc-say').forEach((c, i) => c.animate([{ opacity: 0, transform: 'translateY(-16px)' }, { opacity: 1, transform: 'none' }],
+    { duration: 320, delay: 200 + i * 60, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' }));
 }
-/* The block clicked is lifted out and flown to the top slot, the old
-   picture lifts and fades, and what comes after rises in beneath. */
-function travel(host, fid, st, o, path, from) {
+/* Pressing a way: the step is written, the block pressed flies up into the
+   top slot, the old top lifts away, and the ways after it drop in. One Undo. */
+function go(host, fid, st, o, w, from) {
+  const b = box(fid, w.b);
+  const un = reach(fid, w.b, w.id);
   const pos = getComputedStyle(host).position;
   if (pos === 'static') host.style.position = 'relative';
   const hr = host.getBoundingClientRect(), f = from.getBoundingClientRect();
   const ghost = from.cloneNode(true); ghost.classList.add('flc-ghost');
   Object.assign(ghost.style, { left: (f.left - hr.left) + 'px', top: (f.top - hr.top) + 'px', width: f.width + 'px', height: f.height + 'px' });
-  const oldStage = host.querySelector('.flc-stage'), so = oldStage.getBoundingClientRect();
-  const old = oldStage.cloneNode(true); old.classList.add('flc-ghost');
-  Object.assign(old.style, { left: (so.left - hr.left) + 'px', top: (so.top - hr.top) + 'px', width: so.width + 'px' });
-  st.trail.push(st.view);
-  for (let i = 0; i < path.length - 1; i++) st.trail.push(path[i]);
-  st.view = path[path.length - 1];
-  paint(host, fid, st, o);
-  if (still()) return;
-  host.appendChild(old); host.appendChild(ghost);
-  const tb = host.querySelector('[data-top]'), t = tb.getBoundingClientRect();
-  tb.style.visibility = 'hidden';
-  old.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-24px) scale(.97)' }], { duration: 260, easing: 'ease-in', fill: 'forwards' }).onfinish = () => old.remove();
-  const end = () => { ghost.remove(); tb.style.visibility = ''; };
-  const an = ghost.animate([
-    { left: ghost.style.left, top: ghost.style.top, width: ghost.style.width, height: ghost.style.height },
-    { left: (t.left - hr.left) + 'px', top: (t.top - hr.top) + 'px', width: t.width + 'px', height: t.height + 'px' }
-  ], { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' });
-  an.onfinish = end;
-  setTimeout(end, 700);             /* a page not being drawn never finishes an animation */
-  rise(host);
-}
-/* travelling back: the small block clicked grows into the top slot */
-function back(host, fid, st, o, i, from) {
-  const f = from.getBoundingClientRect();
-  st.view = st.trail[i]; st.trail = st.trail.slice(0, i);
-  paint(host, fid, st, o);
-  if (still()) return;
-  const tb = host.querySelector('[data-top]'), t = tb.getBoundingClientRect();
-  tb.style.transformOrigin = '0 0';
-  tb.animate([
-    { transform: 'translate(' + (f.left - t.left) + 'px,' + (f.top - t.top) + 'px) scale(' + (f.width / t.width) + ',' + (f.height / t.height) + ')', opacity: .6 },
-    { transform: 'none', opacity: 1 }], { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)' });
-  rise(host);
-}
-function backNow(host, fid, st, o) {
-  const i = st.trail.indexOf(st.now), c = host.querySelectorAll('.flc-crumb')[i];
-  if (i > -1 && c) return back(host, fid, st, o, i, c);
-  st.view = st.now; st.trail = []; paint(host, fid, st, o); rise(host);
-}
-/* I'M HERE: every block from where he is to where he looked is reached, in
-   order, each by the arrow between them. One undo takes them all back. */
-function arrive(host, fid, st, o) {
-  const path = st.trail.concat(st.view);
-  if (path[0] === st.now) path.shift();
-  const all = arrows(fid), t0 = Date.now(), undos = [];
-  let prev = st.now;
-  path.forEach((id, i) => {
-    const a = prev ? all.find(x => x.a === prev && x.b === id) : null;
-    const un = reach(fid, id, a ? a.id : null, t0 + i);
-    if (un) undos.push(un);
-    prev = id;
-  });
-  const b = box(fid, st.view);
+  const oldTop = host.querySelector('[data-top]'), ot = oldTop.getBoundingClientRect();
+  const old = oldTop.cloneNode(true); old.classList.add('flc-ghost');
+  Object.assign(old.style, { left: (ot.left - hr.left) + 'px', top: (ot.top - hr.top) + 'px', width: ot.width + 'px', height: ot.height + 'px' });
   delete CS[fid];
   if (o.onPick) o.onPick();
+  o.quiet = false;
   card(host, o);
-  const tb = host.querySelector('[data-top]');
-  if (tb && !still()) tb.animate([{ filter: 'brightness(1.35)', transform: 'scale(1.03)' }, { filter: 'none', transform: 'none' }], { duration: 600, easing: 'ease-out' });
-  rise(host);
-  if (undos.length && g.UI && g.UI.undo) g.UI.undo('At ' + X(b ? b.name : ''), () => { undos.reverse().forEach(u => u()); delete CS[fid]; card(host, o); if (o.onPick) o.onPick(); });
+  if (!still()) {
+    host.appendChild(old); host.appendChild(ghost);
+    const tb = host.querySelector('[data-top]'), t = tb.getBoundingClientRect();
+    tb.style.visibility = 'hidden';
+    old.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-32px)' }], { duration: 260, easing: 'ease-in', fill: 'forwards' }).onfinish = () => old.remove();
+    const end = () => { ghost.remove(); old.remove(); tb.style.visibility = ''; };
+    ghost.animate([
+      { left: ghost.style.left, top: ghost.style.top, width: ghost.style.width, height: ghost.style.height },
+      { left: (t.left - hr.left) + 'px', top: (t.top - hr.top) + 'px', width: t.width + 'px', height: t.height + 'px' }
+    ], { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' }).onfinish = end;
+    setTimeout(end, 700);             /* a page not being drawn never finishes an animation */
+    drop(host);
+  }
+  if (un && g.UI && g.UI.undo) g.UI.undo('At ' + X(b ? b.name : ''), () => { un(); delete CS[fid]; card(host, o); if (o.onPick) o.onPick(); });
 }
 
 g.Flow = {
-  VERSION: '0.4.0', card: card, fit: fit, note: note, sample: sample, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
+  VERSION: '0.5.0', card: card, fit: fit, note: note, sample: sample, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
   list: list, get: get, boxes: boxes, arrows: arrows, box: box, arrow: arrow, outOf: outOf,
   make: make, patchFlow: patchFlow, delFlow: delFlow,
   addBox: addBox, patchBox: patchBox, delBox: delBox,
