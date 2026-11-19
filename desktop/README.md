@@ -153,6 +153,29 @@ client build**: commit the rebuilt `Motherbase Setup.exe` with them, then
 To test on this PC without touching your own shortcuts:
 `"Motherbase Setup.exe" --dir <folder> --address http://127.0.0.1:8811/`.
 
+## Personal Design Toolkit
+
+Tom, 2026-11-19: "Turn this into an Exe, Name it Personal Design Toolkit."
+A separate program, not part of Motherbase: 214 behaviour change tools as
+fill-in worksheets, each writing its own summary, with a personal board and
+the best next steps for every tool. The same page is the claude.ai artifact
+Pattern Toolwall.
+
+Double click **Personal Design Toolkit.exe**. It writes the page to
+`%LOCALAPPDATA%\Personal Design Toolkit\app` and opens it in Edge (or
+Chrome) as an app window with its own profile there, so entries stay on that
+PC. Nothing syncs and no account is used: **Save a backup** and **Restore a
+backup** in its top bar are the only way to move or keep entries. The Ask
+Claude reflection is hidden in it; the summaries work without it.
+
+Unsigned, so Windows may say "Windows protected your PC" the first time:
+More info, Run anyway.
+
+Rebuild after changing anything in `toolkit/page`:
+`py -3 desktop/toolkit/build.py`. It needs Go, and `go-winres` for the icon
+(`go install github.com/tc-hib/go-winres@v0.3.3`). Without Go it still writes
+`toolkit/toolwall.html`, the page to republish as the artifact.
+
 ## Building it
 
 Only needed if the `.cs` files change. Editing STATUS never needs a rebuild.
@@ -173,6 +196,7 @@ three Microsoft WebView2 files in `lib\`.
 | `build.ps1` | rebuilds it, even while it is open: the running copy is moved aside as `.old` |
 | `status.ico` `menu.ico` | the icons built into STATUS.exe and Main Menu.exe, cut from `status/icon-512.png` and the root `icon-512.png`. A shortcut reads the file's icon, never the window's |
 | `lib\` | Microsoft's WebView2 files, so there is nothing to download |
+| `Personal Design Toolkit.exe` | the toolkit program, built from `toolkit/` (`main.go` the launcher, `page/` the page in parts, `winres/` its icon and version, `build.py` rebuilds it) |
 | `data\` | its store. Deleting this empties it; it refills from sync |
 | `status-app.txt` | your shortcut, always-on-top and widget position |
 | `status-app.log` | what happened on the last run, for when something misbehaves |
