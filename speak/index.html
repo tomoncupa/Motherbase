@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.55, 2026-11-18">
+<meta name="mb-version" content="1.0.56, 2026-11-19">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -106,6 +106,18 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .stat .d{font-size:var(--f-2);color:var(--text-2);margin-top:var(--s-1);line-height:var(--lh-body)}
 .stat.met .v{color:var(--success)}
 .stat.miss .v{color:var(--warn)}
+.more summary{font-size:var(--f-2);color:var(--text-muted);cursor:pointer;min-height:var(--tap);display:flex;align-items:center}
+.more p{font-size:var(--f-2);color:var(--text-2);line-height:var(--lh-body);margin:0 0 var(--s-1);max-width:75ch}
+.endc{margin-top:var(--s-3)}
+.endc .endh{margin:var(--s-1) 0}
+.endg{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--tap),1fr));gap:var(--s-1);margin:var(--s-2) 0}
+.endg .mb-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:var(--s-1) 0;min-height:var(--tap);color:var(--text-muted);font-family:var(--font-mono);font-size:var(--f-1)}
+.endg .mb-btn svg{width:100%;max-width:var(--tap);height:auto;display:block}
+.endg .mb-btn svg line{stroke:currentColor;stroke-width:2.5;stroke-linecap:round}
+.endg .mb-btn svg circle{fill:currentColor}
+.endg .mb-btn.f{color:var(--warn)}
+.endg .mb-btn.on{box-shadow:inset 0 0 0 2px currentColor}
+.endsay{min-height:var(--tap)}
 .acts{display:flex;gap:var(--s-2);flex-wrap:wrap;margin-top:var(--s-3)}
 .acts .mb-btn{display:inline-flex;align-items:center;gap:var(--s-2)}
 .chartbox{margin-top:var(--s-2)}
@@ -549,13 +561,15 @@ function Ear(sr) {
         else if (r.b - r.a >= PAUSE && la >= 0) { lines.push([la, lb]); la = -1; }
       });
       if (la >= 0) lines.push([la, lb]);
-      const drops = [], fadeAt = [];
+      const drops = [], fadeAt = [], lineAt = [];
       lines.forEach(([a0, b0]) => {
         if (b0 - a0 < 80) return;
         let hs = 0, hn = 0, ts = 0, tn = 0;
         for (let k = a0; k < b0; k++) { if (!on[k]) continue; if (k < b0 - 25) { hs += dbs[k]; hn++; } else { ts += dbs[k]; tn++; } }
         if (hn < 20 || tn < 8) return;
         const dr = hs / hn - ts / tn; drops.push(dr);
+        /* each line's start and end loudness, for the endings chart (1.0.56) */
+        lineAt.push([(from + a0) * 0.01, (from + b0) * 0.01, hs / hn, ts / tn]);
         if (dr >= 6) fadeAt.push([(from + b0 - 25) * 0.01, 0.6]);
       });
       const dsort = drops.slice().sort((x, y) => x - y);
@@ -577,7 +591,7 @@ function Ear(sr) {
         loud: dbN ? dbS / dbN : null, floor: floor, speakAt: speakAt,
         longestSound: longestOn * 0.01,
         fade: dsort.length >= 4 ? dsort[Math.floor(dsort.length / 2)] : null,
-        fadeShare: dsort.length >= 4 ? drops.filter(x => x >= 6).length / drops.length : null, fadeAt: fadeAt,
+        fadeShare: dsort.length >= 4 ? drops.filter(x => x >= 6).length / drops.length : null, fadeAt: fadeAt, lineAt: lineAt,
         pauseCv: pauseCv,
       };
     },
@@ -2341,6 +2355,99 @@ function moments(f, player) {
   paintIcons(box);
   return box;
 }
+/* LINE ENDINGS (SPEAK 1.0.56). Tom, 2026-11-18: "better data visualization
+   so that I can see what you mean when I finish my endings off". One tile per
+   line: its left dot is the line's loudness, its right dot the last quarter
+   second, on one scale for the whole take; a drop of 6 dB or more is drawn in
+   warn. A tap plays the line and names its reading under the tiles. Needs
+   `ev.ln`, kept from 1.0.56 on, so older takes have no chart. */
+function endsChart(t, player) {
+  const ln = (t.ev || {}).ln;
+  if (!ln || ln.length < 2) return null;
+  const drop = l => l[2] - l[3], faded = ln.filter(l => drop(l) >= 6).length;
+  let hi = -Infinity, lo = Infinity;
+  ln.forEach(l => { hi = Math.max(hi, l[2], l[3]); lo = Math.min(lo, l[2], l[3]); });
+  const span = Math.max(12, hi - lo), y = v => (4 + (hi - v) / span * 32).toFixed(1);
+  const box = el('div', 'endc');
+  box.appendChild(el('h3', null, 'LINE ENDINGS'));
+  box.appendChild(el('p', 'endh', '<b>' + faded + ' of ' + ln.length + '</b> lines faded at the end.'));
+  box.appendChild(el('p', 'muted', 'Each tile is one line: left dot its start, right dot its last word, the number how far it fell in dB (decibels).'));
+  const grid = el('div', 'endg'), say = el('p', 'endsay muted', player ? 'Tap a tile to hear that line.' : 'No recording kept, so the lines cannot be played.');
+  ln.forEach((l, i) => {
+    const dr = drop(l), f = dr >= 6;
+    const b = el('button', 'mb-btn mb-press mb-tap' + (f ? ' f' : ''),
+      '<svg viewBox="0 0 40 40" aria-hidden="true"><line x1="9" y1="' + y(l[2]) + '" x2="31" y2="' + y(l[3]) + '"/><circle cx="9" cy="' + y(l[2]) + '" r="3.5"/><circle cx="31" cy="' + y(l[3]) + '" r="3.5"/></svg>' +
+      '<span>' + (dr >= 0.5 ? '−' + Math.round(dr) : dr <= -0.5 ? '+' + Math.round(-dr) : '0') + '</span>');
+    const read = 'Line ' + (i + 1) + ' at ' + mmss(l[0]) + ': ' + (dr >= 0.5 ? 'the end fell ' + r1(dr) + ' dB under the start' : dr <= -0.5 ? 'the end rose ' + r1(-dr) + ' dB' : 'the end held level') + (f ? ', faded.' : '.');
+    b.setAttribute('aria-label', read);
+    b.onclick = () => {
+      grid.querySelectorAll('.on').forEach(x => x.classList.remove('on')); b.classList.add('on');
+      say.textContent = read;
+      if (player) player.play(Math.max(0, l[0] - 0.2), l[1] + 0.4);
+    };
+    grid.appendChild(b);
+  });
+  box.appendChild(grid); box.appendChild(say);
+  return box;
+}
+/* a folded longer explanation under a reading or a fault: the short line
+   stays visible, the why and the how sit one tap down (SPEAK 1.0.56) */
+function moreBox(text) {
+  if (!text) return null;
+  const det = el('details', 'more');
+  det.innerHTML = '<summary class="mb-tap">Why it matters</summary><p>' + esc(text) + '</p>';
+  return det;
+}
+const METRIC_MORE = {
+  wpm: 'Words a minute. Too slow and the viewer drifts; too fast and the words blur. Each style of video has its own band, and the target above is this take’s.',
+  fpm: 'Every um, uh and crutch phrase, counted per minute. One now and then is normal speech. Many in a row tell the viewer you are searching, and a silent pause does the same job without the noise.',
+  f100: 'The same fillers counted per 100 words, so a fast and a slow take compare fairly. Research on unscripted speech puts most people between 2 and 6.',
+  crutch: 'Phrases from your list, such as "you know what I mean" and "right", counted only where they filled time or asked to be agreed with. Uses that did a job are listed apart and not counted.',
+  um: 'Ums the transcript caught. Transcribers drop many, so held sounds stand in beside them.',
+  uh: 'Uhs the transcript caught. Like ums, many are dropped by the transcriber.',
+  held: 'A sound held flat for over a third of a second, which is how an um or uh sounds. A vowel you stretch on purpose counts too.',
+  repeats: 'The same word twice in a row, such as "I I". Each one is a small restart the viewer hears.',
+  pauses: 'Silences of a quarter second or more. Short pauses between thoughts make speech easy to follow; they are not a fault.',
+  longP: 'Silences of a second and a half or more. One after a big line lands it; several usually mean you lost the thread.',
+  heldP: 'Pauses of 0.8 to 2 seconds, held on purpose. This is the beat after a line that matters.',
+  ratio: 'How much of the take was sound rather than silence. Talking all the way through leaves the viewer no room to take a point in.',
+  restarts: 'Three or more very short bursts in a row, which is how a stammered start sounds. Starting each sentence soft and a little slow on its first sound eases it.',
+  cwpm: 'Words a minute, counting only words the transcriber was sure of, less fillers and stammered starts. Going faster by mumbling makes this go down, not up.',
+  fadeShare: 'A line fades when its last quarter second is 6 dB or more quieter than the rest of it. The last word is often the point, and a fading one is the word the viewer misses.',
+  fade: 'How far the end of your middle line fell under the rest of it, in dB (decibels). 6 dB is about half as loud to the ear.',
+  pauseCv: 'How uneven your pauses are. Even pauses sound planned; very uneven ones sound like you are hunting for the next word.',
+  crisp: 'How much of your sound sits in the sharp high part where consonants live, against your over-said warm-up twisters. Mumbling takes it down.',
+  pitch: 'How far your voice moves between low and high, in semitones. A voice that moves tells the viewer which word matters; a flat one makes every word weigh the same.',
+  eye: 'The share of the take your eyes and head were on the lens. On camera, the lens is the viewer’s eyes.',
+  eyeAway: 'Your longest single look away from the lens. A short glance to think is fine; a long one breaks the contact.',
+  mouthEven: 'How alike both sides of your mouth moved. Talking from one side closes half the mouth and blurs the sounds.',
+  mouthOpen: 'How wide your lips opened while speaking. A small opening muffles the sound.',
+  ends: 'The last sound of each word, checked with word pairs that differ only in that sound. A dropped ending changes what the viewer hears.',
+  clear: 'The share of words the transcriber was sure of. A mumbled word comes out unsure.',
+  marks: 'The pause and slow marks in your script, checked against what the ear heard.',
+  time: 'From the first word to STOP.',
+};
+const FAULT_MORE = {
+  fade: 'The end of a line is where the point usually lands, and a voice that drops there hands the viewer the weakest version of it. Keep the breath for the last word: say it at the same loudness as the first, then stop.',
+  fillers: 'A filler tells the viewer you are still looking for the words. A closed-mouth pause does the same job and sounds sure.',
+  crutch: 'A crutch phrase repeated becomes the thing people notice. Ending the sentence where it would go, with a beat of silence, makes the claim sound finished.',
+  'um-pause': 'An um straight after a pause throws away the pause. Let the silence run, then start on the word itself.',
+  'um-start': 'The first seconds decide whether the viewer stays. Ums there sound unready; know your first sentence before you start.',
+  'um-end': 'Ums near the end make the close sound unplanned. Know your last line before you start.',
+  speedup: 'Speeding up through a take usually means nerves or a point running away. Breathe at each full stop to reset the pace.',
+  fast: 'Above the band, words blur and the viewer stops keeping up. Breathe in at every full stop.',
+  slow: 'Below the band, the viewer drifts. Shorter sentences, each started as the last one lands.',
+  'dead-air': 'Long silences that were not planned read as lost. Say your last point again in fewer words to find the thread.',
+  'run-on': 'Without pauses the points run together and none of them lands. A beat at each full stop gives each point its own space.',
+  rushed: 'You went fast enough that clarity slipped. A little slower with every word clear beats fast and blurred.',
+  mouth: 'Talking from one side closes half the mouth, and the sound comes out muffled. Open the whole mouth with both corners moving.',
+  restarts: 'Stammered starts are short bursts before a word comes out. A soft, slightly slow first sound usually lets it through.',
+  flat: 'A flat voice makes every word weigh the same, so nothing stands out. Lift the one word in each line that matters.',
+  mumble: 'Soft consonants blur words together. Open the mouth and sound every last consonant.',
+  eyes: 'Looking away breaks the feeling that you are talking to the viewer. Find the next thought with your eyes on the lens.',
+  wordy: 'More words than the point needs make the point harder to find. Say the point first, then stop.',
+  unclear: 'When the thread is hard to follow, the viewer gives up on it. One point, the reason, an example, the point again.',
+};
 /* the coach's box at the top of a take's sheet */
 function coachBox(t, d, h) {
   const box = el('div', 'coach mb-plate');
@@ -2352,8 +2459,10 @@ function coachBox(t, d, h) {
     if (player) box.appendChild(player.el);
     else if (t.ev) box.appendChild(timeline(t));
     const fs = coach(t), f = fs[0];
+    const ends = () => { if (!(fs.some(x => x.id === 'fade') || d.id === 'fix-land' || d.id === 'lib-endlines')) return; const c = endsChart(t, player); if (c) box.appendChild(c); };
     if (!f) {
       box.appendChild(el('p', 'what', 'Nothing over its line.'));
+      ends();
       const next = !d.fix && d !== TT ? DRILLS.filter(x => x.skill === d.skill && x.step === d.step + 1)[0] : null;
       if (t.pass && next && stepState(next) === 'now') {
         const acts = el('div', 'acts'), go = el('button', 'mb-btn go mb-press mb-tap', ICN('play') + '<span>NEXT: ' + esc(next.name.toUpperCase()) + '</span>');
@@ -2365,6 +2474,7 @@ function coachBox(t, d, h) {
     }
     const fx = drillById(f.fix);
     box.appendChild(el('p', 'what', esc(f.what)));
+    const fm = moreBox(FAULT_MORE[f.id]); if (fm) box.appendChild(fm);
     box.appendChild(moments(f, player));
     const g = el('div', 'goal');
     fixFrom = t;
@@ -2393,9 +2503,11 @@ function coachBox(t, d, h) {
     fs.slice(1, 3).forEach((x, i) => {
       const a = el('div', 'also');
       a.appendChild(el('p', 'muted', (i ? '' : 'Also: ') + esc(x.what)));
+      const xm = moreBox(FAULT_MORE[x.id]); if (xm) a.appendChild(xm);
       if (x.at.length) a.appendChild(moments(x, player));
       box.appendChild(a);
     });
+    ends();
     paintIcons(box);
   };
   render();
@@ -4599,9 +4711,10 @@ function openPlan(day) {
     actions: [{ label: 'MAKE AGAIN', fn: () => { makePlan(day); return false; } }, { label: 'CLOSE' }],
   });
 }
-function stat(box, k, v, d, cls) {
+function stat(box, k, v, d, cls, more) {
   const s = el('div', 'stat mb-plate' + (cls ? ' ' + cls : ''));
   s.innerHTML = '<div class="k">' + esc(k) + '</div><div class="v">' + esc(String(v)) + '</div>' + (d ? '<div class="d">' + esc(d) + '</div>' : '');
+  const mb = moreBox(more); if (mb) s.appendChild(mb);
   box.appendChild(s);
   return s;
 }
@@ -5082,6 +5195,7 @@ function finishTake(m, secs) {
   const ev = { end: r1(m.total), held: m.heldAt.map(h => [rel(h.at), r1(h.dur)]), pz: m.pauseAt.map(p => [rel(p.at), r1(p.dur)]) };
   if (mo && mo.bad.length) ev.mz = mo.bad;
   if (m.fadeAt && m.fadeAt.length) ev.fz = m.fadeAt.slice(0, 8).map(f => [rel(f[0]), f[1]]);
+  if (m.lineAt && m.lineAt.length >= 2) ev.ln = m.lineAt.slice(0, 60).map(l => [rel(l[0]), rel(l[1]), r1(l[2]), r1(l[3])]);
   out.openUms = ev.held.filter(h => h[0] < 5).length;
   if (asrOn) {
     const dv = devicesOf(T.listener.out.chunks, T.listener.text());
@@ -5330,7 +5444,7 @@ function showTake(t, html, fresh) {
           const mt = METRICS[g.m];
           stat(gs, mt.name, g.got == null ? '·' : mt.fmt(g.got) + (mt.unit ? ' ' + mt.unit : ''),
             g.got == null ? 'not measured' : 'goal ' + goalText(g).replace(mt.name.toLowerCase() + ' ', ''),
-            g.got == null ? '' : g.ok ? 'met' : 'miss');
+            g.got == null ? '' : g.ok ? 'met' : 'miss', METRIC_MORE[g.m]);
         });
         if (!(t.goals || []).length) wrap.appendChild(el('p', 'muted', 'A count to start from. Nothing to meet.'));
         wrap.appendChild(gs);
@@ -5340,7 +5454,7 @@ function showTake(t, html, fresh) {
       const graded = id => !rb || rb.has(id), boxOf = id => graded(id) ? rows : others;
       const put = (id, v, note) => {
         if (v == null) return; const mt = METRICS[id], j = d ? readOf(id, v, d) : null;
-        stat(boxOf(id), mt.name, mt.fmt(v) + (mt.unit ? ' ' + mt.unit : ''), j ? j.line : (note || mt.note), j ? j.cls : '');
+        stat(boxOf(id), mt.name, mt.fmt(v) + (mt.unit ? ' ' + mt.unit : ''), j ? j.line : (note || mt.note), j ? j.cls : '', METRIC_MORE[id]);
       };
       if (d) {
         put('wpm', m.wpm, t.asr ? m.words + ' words in ' + r1(m.spoken) + 's' : 'estimated from ' + m.syll + ' syllables');

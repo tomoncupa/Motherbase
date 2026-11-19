@@ -342,7 +342,7 @@ Every DO THIS NEXT button carries a line saying what pressing it does (a fix dri
 
 ## Less Claude, 2026-11-18 (SPEAK 1.0.55)
 
-Tom: "How can we optimize speak to minimize Claude usage?" Every Claude job used his default model. `askRefine(prompt, model)` now names one and SpeakRefine.cs passes `--model` (only `haiku` or `sonnet` accepted): the story scan, free speak filing and tomorrow's plan run on haiku; judging a take and MARK IT FOR ME on sonnet; REFINE INTO CONTENT names none and runs on his default, since those are his published words. A drill whose rubric grades nothing in the words (pace, clear, eyes, flow, devices, script, and clean with no crutch hits) is never sent to Claude. The story scan reads at most 5 RAMBLES pieces or posts a day. Not done yet (asked the same day): a chart of each line's ending for the fade fault, and longer explanations folded under each reading.
+Tom: "How can we optimize speak to minimize Claude usage?" Every Claude job used his default model. `askRefine(prompt, model)` now names one and SpeakRefine.cs passes `--model` (only `haiku` or `sonnet` accepted): the story scan, free speak filing and tomorrow's plan run on haiku; judging a take and MARK IT FOR ME on sonnet; REFINE INTO CONTENT names none and runs on his default, since those are his published words. A drill whose rubric grades nothing in the words (pace, clear, eyes, flow, devices, script, and clean with no crutch hits) is never sent to Claude. The story scan reads at most 5 RAMBLES pieces or posts a day. Both asks left open that day shipped in 1.0.56, below.
 
 ## Needs from the foundation
 
@@ -356,3 +356,7 @@ Tom: "How can we optimize speak to minimize Claude usage?" Every Claude job used
 ## History, moved from the root brief on 2026-09-22
 
 Moved to HISTORY.md (HISTORY.md: History, moved from the root brief on 2026-09-22).
+
+## Line endings chart and why it matters, 2026-11-19 (SPEAK 1.0.56)
+
+Tom: "better data visualization so that I can see what you mean when I finish my endings off", and "make the explanations more verbose without taking up unnecessary screen space". The ear keeps each line's start and end loudness (`lineAt`, stored as `ev.ln` `[start s, end s, head dB, tail dB]`, 60 lines at most, takes from 1.0.56 on). LINE ENDINGS (`endsChart`) sits in WHAT TO FIX whenever the fade fault shows, and on every Land the ending and Ending sounds: in lines take: one tile per line, left dot the line, right dot its last quarter second, one scale for the take, a fall of 6 dB or more in warn, the fall printed under each tile; a tap plays the line and names its reading. Every reading and fault with an entry in `METRIC_MORE` or `FAULT_MORE` has its short line visible and a folded Why it matters (`moreBox`). Tested in headless Chromium at 1280 and 390 with a made-up take: chart, tile taps, tiles 46 px or wider, folded text, no sideways scroll, no page errors. Not tested on a real take or his voice.
