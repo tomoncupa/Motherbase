@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.119, 2026-11-18">
+<meta name="mb-version" content="1.0.120, 2026-11-19">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1069,7 +1069,9 @@ body.deskmini .deskdoing:focus { border-color: var(--accent); }
    the strip shows every way out until one is picked or Back. */
 .deskflow { display: flex; align-items: center; gap: var(--s-1); flex: 0 1 auto; min-width: 0; height: var(--s-5);
   padding: 0 var(--s-2); background: none; border: var(--border-width, 1px) solid var(--border); border-radius: var(--radius-sm);
-  color: var(--text-2); font-size: var(--f-1); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  color: var(--text-2); font-size: var(--f-1); cursor: pointer; white-space: nowrap; overflow: hidden; }
+/* 1.0.120: the box name is never cut; `deskFitFlow` shrinks it, then wraps it to two lines. */
+.deskflow .fn { flex: 0 1 auto; min-width: 0; overflow: hidden; text-align: left; }
 .deskflow i, .deskway i { flex: none; width: var(--s-2); height: var(--s-2); border-radius: var(--radius-sm); background: var(--k); }
 .deskflowpick { display: flex; flex-wrap: wrap; align-content: flex-start; gap: var(--s-2); padding: var(--s-2); overflow: auto; max-height: 100%; }
 .deskflowpick .k { width: 100%; font-size: var(--f-1); color: var(--text-muted); }
@@ -9996,7 +9998,7 @@ function deskBar() {
   if (flowId) {
     const h = Flow.here(flowId), fk = h && h.box ? h.box : h && h.start;
     if (fk) {
-      const fc = el('button', 'deskflow mb-tap', '<i style="--k:var(' + ((Flow.KINDS[fk.kind] || {}).token || '--border') + ')"></i>' + (h.box ? esc(fk.name) : 'Start ' + esc(fk.name)));
+      const fc = el('button', 'deskflow mb-tap', '<i style="--k:var(' + ((Flow.KINDS[fk.kind] || {}).token || '--border') + ')"></i><span class="fn">' + (h.box ? esc(fk.name) : 'Start ' + esc(fk.name)) + '</span>');
       fc.title = (h.box ? 'At ' + fk.name + ' in your flow. ' : '') + 'Pick what comes next';
       fc.onclick = () => { deskFlowOpen = true; deskBar(); };
       foot.appendChild(fc);
@@ -10046,6 +10048,7 @@ function deskBar() {
 
   if (window.Icons && Icons.paint) Icons.paint(bar);
   deskFitLine();
+  deskFitFlow();
   deskWatchBox(bar);
   deskTitle();
 }
@@ -10056,7 +10059,7 @@ function deskBar() {
 let deskFitHooked = false;
 function deskFitLine() {
   const t = document.querySelector('#deskbar .deskline');
-  if (!deskFitHooked) { deskFitHooked = true; addEventListener('resize', () => { if (deskSmall) deskFitLine(); }); }
+  if (!deskFitHooked) { deskFitHooked = true; addEventListener('resize', () => { if (deskSmall) { deskFitLine(); deskFitFlow(); } }); }
   if (!t || !t.clientWidth) return;
   t.style.cssText = '';
   const band = t.clientHeight;
@@ -10068,6 +10071,23 @@ function deskFitLine() {
   px = Math.min(px, Math.floor(band / 2 / 1.15));
   t.style.fontSize = px + 'px';
   while (t.scrollHeight > band + 1 && px > 5) { px -= 0.5; t.style.fontSize = px + 'px'; }
+}
+
+/* The flow chip's box name, fitted the same way: one line down to 9px, then
+   two lines of half the chip down to 5px. His words are never cut. */
+function deskFitFlow() {
+  const t = document.querySelector('#deskbar .deskflow .fn');
+  if (!t || !t.clientWidth) return;
+  t.style.cssText = '';
+  const band = t.parentNode.clientHeight;
+  let px = parseFloat(getComputedStyle(t).fontSize);
+  while (t.scrollWidth > t.clientWidth && px > 9) { px -= 0.5; t.style.fontSize = px + 'px'; }
+  if (t.scrollWidth <= t.clientWidth) return;
+  t.style.whiteSpace = 'normal';
+  t.style.lineHeight = (band / 2) + 'px';
+  px = Math.min(px, Math.floor(band / 2 / 1.15));
+  t.style.fontSize = px + 'px';
+  while ((t.scrollHeight > band + 1 || t.scrollWidth > t.clientWidth) && px > 5) { px -= 0.5; t.style.fontSize = px + 'px'; }
 }
 
 /* ── the first line of a new day asks for sleep and weight ──
