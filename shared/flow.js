@@ -332,6 +332,9 @@ const CARD_CSS = `
 .flc-mid{aspect-ratio:1.618/1;padding:var(--s-2,8px);font-weight:var(--w-body,500)}
 .flc-sm{aspect-ratio:1.618/1;padding:var(--s-2,8px);opacity:.85}
 .flc-row.one{grid-template-columns:minmax(0,62%);justify-content:center}
+.flc-row2{gap:var(--s-2,8px)}
+.flc-row2 .flc-sm{width:80%;align-self:center}
+.flc-row2.one{grid-template-columns:minmax(0,46%)}
 .flc-pager{display:flex;justify-content:center}
 .flc-more,.flc-say{font-size:var(--f-1,12px);color:var(--text-muted,GrayText);text-align:center;margin-top:var(--s-1,4px)}
 .flc-wires{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:0}
@@ -417,25 +420,44 @@ const SAMPLES = {
   day: { name: 'My day', start: 'ask',
     boxes: [['ask', 'How did you wake up?', 't', 2, 0], ['good', 'Woke up good', 'g', 1, 1], ['bad', 'Woke up bad', 'r', 3, 1],
       ['fix', 'Fix bed', 'g', 1, 2], ['lie', 'Lie there for a bit', 'r', 3, 2], ['more', 'Try for more sleep', 'g', 4, 2],
-      ['teeth', 'Brush teeth, wash face', 'g', 1, 3, 1], ['weigh', 'Weigh in', 'g', 1, 4], ['salt', 'Salt drink, sunlight', 'g', 1, 5, 1],
-      ['client', 'Client check-ins', 'g', 2, 5], ['caf', 'Caffeine', 'g', 1, 6], ['stories', 'Stories and a post', 'g', 2, 6],
-      ['train', 'Train', 'g', 1, 7], ['reset', 'Reset gym, shower, meal', 'g', 1, 8], ['work', "To-do's and deep work", 'g', 1, 9],
-      ['down', 'Down time', 'd', 2, 10], ['make', 'Make content', 'g', 1, 11], ['book', 'Read a book', 'g', 2, 11], ['scroll', 'Scroll or games', 'r', 3, 11],
-      ['night', 'Night routine alarm', 't', 2, 12], ['bag', 'Bag and clothes for tomorrow', 'g', 2, 13], ['todo', "Tomorrow's to-do's", 'g', 2, 14],
-      ['daylio', 'BuJo sync, Daylio', 'g', 2, 15], ['shower', 'Shower', 'g', 2, 16], ['alarm', 'Bed time alarm', 't', 2, 17],
-      ['sleep', 'Lights out, phone away', 'g', 1, 18], ['late', 'Phone in bed', 'r', 3, 18],
+      ['teeth', 'Brush teeth, wash face', 'g', 1, 3, 1], ['walk', 'Morning walk, sunlight', 'g', 2, 3], ['weigh', 'Weigh in', 'g', 1, 4],
+      ['salt', 'Salt drink', 'g', 1, 5, 1], ['client', 'Client check-ins', 'g', 2, 5], ['caf', 'Caffeine', 'g', 1, 6],
+      ['stories', 'Stories and a post', 'g', 2, 6], ['train', 'Train', 'g', 1, 7], ['light', 'Light session, mobility', 'g', 2, 7],
+      ['reset', 'Reset gym, shower, meal', 'g', 1, 8], ['nap', 'Power nap', 'd', 3, 8], ['work', "To-do's and deep work", 'g', 1, 9],
+      ['stuck', 'Stuck, scrolling', 'r', 3, 9], ['down', 'Down time', 'd', 2, 10], ['make', 'Make content', 'g', 1, 11],
+      ['book', 'Read a book', 'g', 2, 11], ['scroll', 'Scroll or games', 'r', 3, 11], ['night', 'Night routine alarm', 't', 2, 12],
+      ['bag', 'Bag and clothes for tomorrow', 'g', 1, 13], ['todo', "Tomorrow's to-do's", 'g', 2, 13], ['shower', 'Shower, Daylio', 'g', 2, 14],
+      ['alarm', 'Bed time alarm', 't', 2, 15], ['sleep', 'Lights out, phone away', 'g', 1, 16], ['late', 'Phone in bed', 'r', 3, 16],
       ['crave', 'Craving junk food', 't', 5, 5], ['plan', 'Eat on plan', 'g', 4, 6], ['junk', 'Eat junk food', 'r', 6, 6],
-      ['avoid', 'Avoid going off track', 'g', 4, 7], ['feel', 'Feel bad about it', 'r', 6, 7]],
-    arrows: [['ask', 'good', 'Good', null, 'enough'], ['ask', 'bad', 'Bad', null, 'short'],
-      ['good', 'fix', '', 0], ['bad', 'fix', 'Try to have a nice day'], ['bad', 'teeth', 'Essentials only', 0], ['bad', 'lie', 'Too flat'],
-      ['lie', 'teeth', 'Get up eventually'], ['lie', 'more'], ['more', 'good', 'Woke up better', null, null, 1], ['more', 'bad', 'Still flat'],
-      ['fix', 'teeth', '', 0], ['teeth', 'weigh', '', 0], ['weigh', 'salt', '', 0], ['salt', 'caf', '', 75], ['salt', 'client', 'Clients first'],
-      ['client', 'stories'], ['stories', 'caf'], ['caf', 'train', '', 15], ['train', 'reset', '', 5], ['reset', 'work', '', 30],
-      ['work', 'down', "All to-do's done"], ['down', 'make'], ['down', 'book'], ['down', 'scroll'],
-      ['make', 'night'], ['book', 'night'], ['scroll', 'book', '30 min, then'], ['scroll', 'night'],
-      ['night', 'bag', '', 0], ['bag', 'todo', '', 0], ['todo', 'daylio', '', 0], ['daylio', 'shower', '', 0], ['shower', 'alarm', 'Some down time'],
+      ['water', 'Water, wait 10 min', 'g', 5, 7], ['feel', 'Feel bad about it', 'r', 6, 7]],
+    arrows: [['ask', 'good', 'Good', null, 'enough'], ['ask', 'bad', 'Bad', null, 'short'], ['ask', 'fix', 'Okay'],
+      ['good', 'fix', 'Immediately', 0], ['good', 'walk', 'Walk first'], ['good', 'teeth', 'Skip the bed', 0],
+      ['bad', 'fix', 'Try to have a nice day'], ['bad', 'teeth', 'Essentials only', 0], ['bad', 'lie', 'Too flat'],
+      ['lie', 'teeth', 'Get up eventually'], ['lie', 'more', 'Still tired'], ['lie', 'walk', 'Get some light'],
+      ['more', 'good', 'Woke up better', null, null, 1], ['more', 'bad', 'Still flat'],
+      ['fix', 'teeth', '', 0], ['fix', 'walk', 'Walk first'],
+      ['walk', 'teeth', 'Back home'], ['walk', 'salt', 'Already washed'],
+      ['teeth', 'weigh', '', 0], ['teeth', 'salt', 'Skip the weigh-in'],
+      ['weigh', 'salt', '', 0], ['weigh', 'client', 'Clients first'],
+      ['salt', 'caf', '', 75], ['salt', 'client', 'Clients first'], ['salt', 'train', 'Train fasted'],
+      ['client', 'stories', ''], ['client', 'caf', 'Skip stories'],
+      ['stories', 'caf'], ['stories', 'work', 'Rest day'],
+      ['caf', 'train', '', 15], ['caf', 'light', 'Low energy'], ['caf', 'work', 'Rest day'],
+      ['train', 'reset', '', 5], ['light', 'reset', '', 5],
+      ['reset', 'work', '', 30], ['reset', 'nap', 'Wiped out'],
+      ['nap', 'work', '20 min, then'],
+      ['work', 'down', "All to-do's done"], ['work', 'stuck', 'Lost focus'], ['work', 'night', 'Ran late'],
+      ['stuck', 'work', '10 min walk, then', null, null, 1], ['stuck', 'down', 'Call it'],
+      ['down', 'make'], ['down', 'book'], ['down', 'scroll'],
+      ['make', 'night'], ['make', 'book', 'Wind down'],
+      ['book', 'night'], ['book', 'alarm', 'Early night'],
+      ['scroll', 'book', '30 min, then'], ['scroll', 'night', 'Alarm goes off'], ['scroll', 'late', 'Kept going'],
+      ['night', 'bag', 'Immediately', 0], ['night', 'todo', 'Bag is ready', 0], ['night', 'shower', 'Short version'],
+      ['bag', 'todo', '', 0], ['todo', 'shower', '', 0], ['shower', 'alarm', 'Some down time'],
       ['alarm', 'sleep', 'Follow'], ['alarm', 'late', 'Ignore'], ['late', 'sleep', 'Put the phone away'], ['sleep', 'ask', 'Next morning'],
-      ['crave', 'plan', 'Ignore'], ['crave', 'junk', 'Follow'], ['plan', 'avoid'], ['junk', 'feel'], ['feel', 'plan', 'Next meal on plan']] },
+      ['crave', 'plan', 'Ignore'], ['crave', 'water', 'Not sure'], ['crave', 'junk', 'Follow'],
+      ['water', 'plan', 'Gone'], ['water', 'junk', 'Still there'],
+      ['junk', 'feel'], ['junk', 'plan', 'Small portion, move on'], ['feel', 'plan', 'Next meal on plan']] },
   '2020': { name: '2020 day', start: 'alarm',
     boxes: [['alarm', 'Bed time alarm', 't', 2, 0], ['bed', 'Go to bed on time, Proper sleep prep, ZMA', 'g', 1, 1], ['tape', "Play tomorrow's videotape", 'g', 0, 1],
       ['late', 'Sleep Late, Bring phone to bed, No ZMA', 'r', 3, 1], ['well', 'Sleep well', 'g', 1, 2], ['sbad', 'Sleep bad', 'r', 3, 2],
@@ -540,23 +562,45 @@ function paint(host, fid, st, o) {
     const b = bs[w.b], m = E('button', 'flc-b flc-mid', X(b.name));
     m.title = b.name;
     m.type = 'button'; m.style.setProperty('--k', kvar(b.kind)); m.style.setProperty('--ink', ink(b.kind));
+    m.dataset.id = w.b;
     m.onclick = () => travel(host, fid, st, o, [w.b], m);
     col.appendChild(m);
-    const next = all.filter(a => a.a === w.b && bs[a.b]);
-    if (next.length) {
-      const n = next[0], c = bs[n.b];
-      const z2 = E('div', 'flc-zone2'), t2 = tag(n.label || gapWords(n.gap));
-      if (t2) z2.appendChild(t2);
-      col.appendChild(z2);
-      const sm = E('button', 'flc-b flc-sm', X(c.name));
-      sm.type = 'button'; sm.style.setProperty('--k', kvar(c.kind)); sm.style.setProperty('--ink', ink(c.kind));
-      sm.onclick = () => travel(host, fid, st, o, [w.b, n.b], sm);
-      col.appendChild(sm);
-      if (next.length > 1) col.appendChild(E('div', 'flc-more', '+' + (next.length - 1) + ' more after ' + X(String(b.name).split(',')[0])));
-    }
     row.appendChild(col);
   });
   stage.appendChild(row);
+  /* Level two (Tom, 2026-11-19: "branching paths, not just linear lines ...
+     each level gets smaller boxes ... and this around convergence points"):
+     every block the shown paths lead to, smaller, each once. A block two
+     paths both lead to is drawn once and both lines meet it. Blocks already
+     on level one are not drawn again. Four at most; the rest are counted. */
+  const kids = [], seen = {}, lv1 = {};
+  shown.forEach(w => { lv1[w.b] = 1; });
+  shown.forEach(w => all.filter(a => a.a === w.b && bs[a.b] && !lv1[a.b] && a.b !== v.id).forEach(n => {
+    if (!seen[n.b]) { seen[n.b] = { id: n.b, from: [], arrows: [] }; kids.push(seen[n.b]); }
+    seen[n.b].from.push(w.b); seen[n.b].arrows.push(n);
+  }));
+  const row2 = E('div', 'flc-row flc-row2');
+  if (kids.length) {
+    const sh2 = kids.slice(0, 4);
+    row2.style.setProperty('--n', sh2.length);
+    row2.classList.toggle('one', sh2.length === 1);
+    sh2.forEach(k => {
+      const c = bs[k.id], col = E('div', 'flc-col');
+      col.dataset.from = k.from.join(' ');
+      const z2 = E('div', 'flc-zone2'), a0 = k.arrows[0];
+      const words = k.arrows.length === 1 ? (a0.label || gapWords(a0.gap)) : '';
+      const t2 = tag(words);
+      if (t2) z2.appendChild(t2);
+      col.appendChild(z2);
+      const sm = E('button', 'flc-b flc-sm', X(c.name));
+      sm.type = 'button'; sm.title = c.name; sm.style.setProperty('--k', kvar(c.kind)); sm.style.setProperty('--ink', ink(c.kind));
+      sm.onclick = () => travel(host, fid, st, o, [k.from[0], k.id], sm);
+      col.appendChild(sm);
+      row2.appendChild(col);
+    });
+    stage.appendChild(row2);
+    if (kids.length > 4) stage.appendChild(E('div', 'flc-more', '+' + (kids.length - 4) + ' more beyond these'));
+  }
   if (pages > 1) {
     const pg = E('div', 'flc-pager'), mb = E('button', 'mb-btn mb-press mb-tap', 'MORE WAYS (' + (ways.length - shown.length) + ')');
     mb.type = 'button'; mb.onclick = () => { st.page = (st.page + 1) % pages; paint(host, fid, st, o); rise(host); };
@@ -567,8 +611,8 @@ function paint(host, fid, st, o) {
      each row takes the one size its longest name fits at, on whole words. */
   const fitAll = () => {
     fitTop(top);
-    [['.flc-mid', 20], ['.flc-sm', 16]].forEach(([q, max]) => {
-      const els = [...row.querySelectorAll(q)];
+    [['.flc-mid', 20], ['.flc-sm', 14]].forEach(([q, max]) => {
+      const els = [...stage.querySelectorAll(q)];
       if (!els.length) return;
       const f = Math.min(...els.map(e => fit(e, max, 12)));
       els.forEach(e => { e.style.fontSize = f + 'px'; e.classList.toggle('grow', !fits(e)); });
@@ -576,7 +620,7 @@ function paint(host, fid, st, o) {
     });
     /* one height per row of tags, so the paths read as one design */
     ['.flc-zone', '.flc-zone2'].forEach(q => {
-      const els = [...row.querySelectorAll(q)];
+      const els = [...stage.querySelectorAll(q)];
       els.forEach(e => { e.style.minHeight = ''; });
       if (els.length < 2) return;
       const hmax = Math.max(...els.map(e => e.offsetHeight));
@@ -607,9 +651,21 @@ function wires(stage, svg, top, row, grow) {
     mids.forEach(k => {
       const r = R2(k), cx = r.x + r.w / 2;
       d.push('M' + cx + ',' + busY + ' L' + cx + ',' + (r.y - 1));
-      const sm = k.parentElement.querySelector('.flc-sm');
-      if (sm) { const f = R2(sm); d.push('M' + cx + ',' + (r.y + r.h) + ' L' + cx + ',' + (f.y - 1)); }
     });
+    const row2 = stage.querySelector('.flc-row2');
+    if (row2) {
+      const midOf = {}; mids.forEach(k => { midOf[k.dataset.id] = R2(k); });
+      const y2 = R2(row2).y + 10;
+      row2.querySelectorAll('.flc-col').forEach(col => {
+        const sm = col.querySelector('.flc-sm'); if (!sm) return;
+        const f = R2(sm), fx = f.x + f.w / 2;
+        col.dataset.from.split(' ').forEach(pid => {
+          const pr = midOf[pid]; if (!pr) return;
+          const px = pr.x + pr.w / 2;
+          d.push('M' + px + ',' + (pr.y + pr.h) + ' L' + px + ',' + y2 + ' L' + fx + ',' + y2 + ' L' + fx + ',' + (f.y - 1));
+        });
+      });
+    }
   }
   svg.innerHTML = d.map(p => '<path d="' + p + '"/>').join('');
   if (!grow || still()) return;
@@ -697,7 +753,7 @@ function arrive(host, fid, st, o) {
 }
 
 g.Flow = {
-  VERSION: '0.3.1', card: card, fit: fit, note: note, sample: sample, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
+  VERSION: '0.4.0', card: card, fit: fit, note: note, sample: sample, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
   list: list, get: get, boxes: boxes, arrows: arrows, box: box, arrow: arrow, outOf: outOf,
   make: make, patchFlow: patchFlow, delFlow: delFlow,
   addBox: addBox, patchBox: patchBox, delBox: delBox,
