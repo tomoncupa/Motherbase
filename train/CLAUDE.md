@@ -502,6 +502,15 @@ Each is short here; its story is under the heading named.
   Warmup switch** (1.0.82, Tom 2026-11-09): it starts as TRAIN reads the
   set and writes `warm` 1 or 0. Weight and reps on a TRACK row stand
   `--s-4` apart (the columns are inline, so their min-widths never apply). (HISTORY.md: The training screen, as Tom rebuilt it on 2026-09-24)
+- **A redraw nobody pressed for never takes the caret** (1.0.97, Tom
+  2026-11-22: "Something is fucking with my screen inputs"). `draw()` empties
+  `#main`, and every store write from anywhere redraws, so live sync on a
+  resume, the device note or a record pass threw away the box he was typing
+  in and dropped the keyboard. While a typing box in `#main` has the caret
+  and no press came in the last second (`TRAIN.pressAt`: a pointer or click
+  on anything but a typing box, or Enter), `draw()` waits and runs when the
+  caret leaves. **A handler that redraws from its own typing** (the records
+  search) sets `TRAIN.pressAt` first, or it never draws. (HISTORY.md: Typing survives a sync (1.0.97, 2026-11-22))
 - **Routines list his named sessions**; TRAIN opens on today's first waiting
   set; a save is silent unless it is a record. (HISTORY.md: Named sessions, and what opens first (1.0.26, 2026-09-25))
 - **A FORGE program is one routine per week** (`prog-<id>-wN`); its target is
