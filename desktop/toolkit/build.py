@@ -32,7 +32,7 @@ def read(name):
 
 def page():
     src = read("page.src.html")
-    flow = "\n".join(read(n) for n in ("flow.js", "words.js", "summary.js"))
+    flow = "\n".join(read(n) for n in ("flow.js", "words.js", "summary.js", "plan.js"))
     prompt = json.dumps(read("prompt.md")).replace("</", "<\\/")
     out = src.replace("%%DATA%%", read("data.js")).replace("%%FLOW%%", flow).replace("%%PROMPT%%", prompt)
     if "%%" in out:

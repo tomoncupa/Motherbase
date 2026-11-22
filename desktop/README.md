@@ -201,6 +201,11 @@ Claude reflection is hidden in it; the summaries work without it.
 Unsigned, so Windows may say "Windows protected your PC" the first time:
 More info, Run anyway.
 
+My plan (2026-11-22, `page/plan.js`) puts the pattern, its count, plans, tools
+being tried, in-the-moment cards and the journal on one tab, prints the plan,
+pocket cards and a journal week, and holds the one-tap counter, the guided
+timers and the values sort.
+
 Rebuild after changing anything in `toolkit/page`:
 `py -3 desktop/toolkit/build.py`. It needs Go, and `go-winres` for the icon
 (`go install github.com/tc-hib/go-winres@v0.3.3`). Without Go it still writes
