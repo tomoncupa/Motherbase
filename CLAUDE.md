@@ -105,7 +105,7 @@ Do not break these. Ask first if you think one needs to change.
 
    **ARC, BLOCK and STYLE are desktop only.** Tom, 2026-09-14: they are not
    meant to work on a phone. FORGE, built 2026-09-24 to work like BLOCK, is
-   desktop only too. Do not spend work making them stack or fit a
+   desktop only too, and so is LOADOUT (Tom, 2026-11-24). Do not spend work making them stack or fit a
    thumb, and a phone-width failure in one of them is not a bug. They are used sitting down, with a mouse, to plan,
    build, review and compare. Hover is allowed, density can be tighter, dialogs
    may sit in the middle of the screen rather than rising from the bottom, and
@@ -260,7 +260,7 @@ An app may read any type. It writes only the types it owns.
 | `lane` `item` `routine` | block | | |
 | `rhythm` | **block** | rhythm id | `{kind, name, color, n, unit, from, times, per, made, act}` — a Block on BLOCK's Every tab (`kind: 'every'`, every `n` days, weeks or months, first due `from`) or Habits tab (`kind: 'anytime'`, `times` each `per`: `week` (none is a week), `fortnight` or `month`; `made` the day it was made; `act` a block's tick id when tracked from a block, which it then ticks instead of its name). What got done is ordinary `tick` rows under the slug of the name, with no routine |
 | `plan` | **block** | `routine` | today's published plan, for anything that wants to read it |
-| `note` | **status** names the shape; a todo may also carry `tags`, QUESTS's labels, as a list of slugs; **log** and **quest** write it too, and **arc** writes a todo per skill in training and per review due, `src: 'arc'`; **wealth** writes one per bill coming up, `src: 'wealth'`, never for a loan | line id | one journal line: a todo, an entry, an event or an idea. A todo may carry `due`, `pri`, `proj` and `rep` from QUESTS; see `quest/CLAUDE.md`. Any line may carry `link`, a web address or a suite address (`mb:status/check`) its words open (`shared/ui.js`, GO, 2026-10-26) |
+| `note` | **status** names the shape; a todo may also carry `tags`, QUESTS's labels, as a list of slugs; **log** and **quest** write it too, and **arc** writes a todo per skill in training and per review due, `src: 'arc'`; **wealth** writes one per bill coming up, `src: 'wealth'`, never for a loan; **loadout** writes a repeating todo per tool being tried, key `lo-<tool>-<start>`, `src: 'loadout'`, `lo: {tool}` | line id | one journal line: a todo, an entry, an event or an idea. A todo may carry `due`, `pri`, `proj` and `rep` from QUESTS; see `quest/CLAUDE.md`. Any line may carry `link`, a web address or a suite address (`mb:status/check`) its words open (`shared/ui.js`, GO, 2026-10-26) |
 | `field` | **status** | field id | the definition of a tracked measure |
 | `ev` | **status**; **checkin** writes `weight` too, the way STATUS's `evAdd` does | field id | `{e:[{t,v}]}` — one row per field per day |
 | `cfield` | **checkin** | field id | `{label, kind, unit, ord, on}` — what a check-in asks. `kind` is `photo`, `number`, `scale` (1 to 5) or `text`. A default is shown until changed; a row wins over its default |
@@ -338,6 +338,7 @@ An app may read any type. It writes only the types it owns.
 | `kplan` | **kitchen** | timestamp id, dated the planned day | `{slot, food, mult, ord, dish}` — one planned food. `slot` is `b`, `l`, `d` or `s` (Breakfast, Lunch, Dinner, Snacks), `mult` a multiple of the food's base amount, `dish` the saved meal it came from, if any. Eaten is never stored here: it is the `meal` row `kitchen-<key>` existing |
 | `kdish` | **kitchen** | timestamp id, undated | `{name, items:[{food, mult}], ord}` — a saved meal. `items` is never empty: removing the last item removes the meal |
 | `kskip` | **kitchen** | the meal's key, dated the meal's date | `{skip: 1}` — this logged meal did not come out of the kitchen, so it takes no stock off. Kept off `meal`, the way WEALTH's `mark` is kept off `spend` |
+| `lpick` `lentry` `lcard` `ltap` | **loadout** | tool id; entry, card and tap ids; all undated | a tool in the kit `{s, at, start, aim}`, a saved worksheet `{tool, at, v}`, a card on My board, one "It happened" press `{at}`. See `loadout/CLAUDE.md` |
 | `device` | **the shared layer** (`shared/report.js`); every device writes its own | a random id this browser made once, kept in localStorage `mb.device`, undated | `{name, seen, sync, syncedAt, revived, v: {app: version}, errs: [{t, app, m, at}], errN, open: {app: {s, p, r, at}}}` — how this device is doing. `revived` is the last time live sync remade a connection that died asleep, and why. `open` is each app's last open in seconds (`s` drawn and ready, `p` first paint, `r` Rec.ready), shown in DATA as "Opened in X s". An iPhone home-screen app has storage of its own, so it is a device of its own |
 | `kpiece` | **OUTER HEAVEN** (`jobs/knowledge.py`), through Backup.exe's inbox; **arc** reads it | `skool|<course>|<page>` or `ramble|<thread id>`, undated | `{src, title, text, subj, ref, born}` — one piece of what Tom made for ARC's knowledge banks: a Skool lesson page (`src: 'skool'`, `subj` from its course, `ref` the course) or a RAMBLES thread (`src: 'ramble'`, no subj). See `arc/CLAUDE.md`, Knowledge banks |
 | `postspeech` | **OUTER HEAVEN**, through Backup.exe's inbox; **speak** reads it | the post's id, dated the post day | how Tom spoke in one posted Story or reel, shaped like a `take`: `{m, hits, ev, tx, kind, link, raw, how}`; `raw` false for a reel CLIP cut (ums and gaps removed). Ums are a floor, pauses from Whisper word times. Spec in the SPEAK side-session notes |
@@ -1156,6 +1157,7 @@ own brief since 2026-09-22.
 | `system/` | NOTICE, status window pictures. Tom only. Brief: `system/CLAUDE.md`. |
 | `mix/` | ELEMENT, the electrolyte bench. Tom only. Brief: `mix/CLAUDE.md`. |
 | `coach/` | COACH, Tom's clients in a PC box. Tom only. Brief: `coach/CLAUDE.md`. |
+| `loadout/` | LOADOUT, tools for changing a pattern; equipped tools are QUESTS todos. Client build, desktop only, also `Personal Design Toolkit.exe` on its own. Brief: `loadout/CLAUDE.md`. |
 | `forge/` | FORGE, the program builder. Weeks of days of exercises, sent through COACH to TRAIN. Tom only, desktop only. Brief: `forge/CLAUDE.md`. |
 | `receipts/` | RECEIPTS, a receipt photo turned into rows. Tom only. Brief: `receipts/CLAUDE.md`. |
 | `flow/` | FLOW, BLOCK's flow on the phone: the travel card (`Flow.card`), today's notes and bullets. Phone, client build. Brief: `flow/CLAUDE.md`. |

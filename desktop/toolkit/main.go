@@ -1,12 +1,15 @@
-// Personal Design Toolkit: opens the toolkit in its own window.
-// The page is carried inside this program. On each start it is written to
-// %LOCALAPPDATA%\Personal Design Toolkit\app\index.html and opened in Microsoft
-// Edge (or Chrome) as an app window with a private profile, so entries saved
-// in the toolkit stay on this computer between sessions.
+// Personal Design Toolkit: LOADOUT on its own, for a computer without Motherbase.
+// The program carries loadout/index.html and the shared files it loads. On each
+// start they are written to %LOCALAPPDATA%\Personal Design Toolkit\app\ and
+// loadout/index.html?solo=1 is opened in Microsoft Edge (or Chrome) as an app
+// window with a private profile, so entries saved in it stay on this computer
+// between sessions. The profile is the one the old toolkit used, so its saved
+// work is still there and LOADOUT moves it into its rows on the first open.
 package main
 
 import (
-	_ "embed"
+	"embed"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,8 +18,8 @@ import (
 	"unsafe"
 )
 
-//go:embed index.html
-var page []byte
+//go:embed all:app
+var files embed.FS
 
 func main() {
 	base := os.Getenv("LOCALAPPDATA")
@@ -26,17 +29,27 @@ func main() {
 	root := filepath.Join(base, "Personal Design Toolkit")
 	appDir := filepath.Join(root, "app")
 	profile := filepath.Join(root, "profile")
-	if err := os.MkdirAll(appDir, 0o755); err != nil {
-		fail("Could not create the folder " + appDir + ".\n\n" + err.Error())
+	err := fs.WalkDir(files, "app", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		dst := filepath.Join(root, filepath.FromSlash(p))
+		if d.IsDir() {
+			return os.MkdirAll(dst, 0o755)
+		}
+		b, err := files.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(dst, b, 0o644)
+	})
+	if err != nil {
+		fail("Could not write the toolkit to " + appDir + ".\n\n" + err.Error())
 		return
 	}
 	_ = os.MkdirAll(profile, 0o755)
-	file := filepath.Join(appDir, "index.html")
-	if err := os.WriteFile(file, page, 0o644); err != nil {
-		fail("Could not write the toolkit to " + file + ".\n\n" + err.Error())
-		return
-	}
-	url := "file:///" + strings.ReplaceAll(file, `\`, "/")
+	file := filepath.Join(appDir, "loadout", "index.html")
+	url := "file:///" + strings.ReplaceAll(file, `\`, "/") + "?solo=1"
 
 	for _, b := range browsers() {
 		if _, err := os.Stat(b); err != nil {

@@ -813,7 +813,7 @@
   }
 
   var APPS = ['home', 'block', 'status', 'train', 'quest', 'log', 'checkin', 'kitchen', 'wealth', 'coach', 'forge', 'arc', 'style',
-    'form', 'portion', 'speak', 'system', 'mix', 'receipts', 'sheet', 'bullet'];
+    'form', 'portion', 'speak', 'system', 'mix', 'receipts', 'sheet', 'bullet', 'loadout'];
   function quiet() {
     var today = g.Day.today();
     try {

@@ -240,6 +240,7 @@ const ROLES = {
   'app.bullet': 'pencil',
   'app.kitchen': 'bowl',
   'app.flow': 'nodes',
+  'app.loadout': 'target',
   quest: 'flag', flag: 'flag',
   pose: 'pose', physique: 'pose', checkin: 'pose',
   compare: 'frames', frames: 'frames',
@@ -258,7 +259,7 @@ const ROLES = {
    so the home screen and tools/make-icons.html cannot disagree. Six slots
    for twelve apps, so two share a slot where they never sit side by side;
    HOME and STYLE wear the accent. */
-const APP_SLOT = { block: 1, system: 1, status: 2, portion: 2, mix: 2, train: 3, coach: 3, forge: 3, form: 3, log: 4, arc: 4, quest: 5, wealth: 5, checkin: 6, speak: 6, kitchen: 1 };
+const APP_SLOT = { block: 1, system: 1, status: 2, portion: 2, mix: 2, train: 3, coach: 3, forge: 3, form: 3, log: 4, arc: 4, quest: 5, wealth: 5, checkin: 6, speak: 6, kitchen: 1, loadout: 6 };
 
 /* ── each app's own picture ──
    Tom's picks, 2026-09-23 (the reference page is tools/icon-set.html, and
@@ -334,6 +335,9 @@ const APP_ART = {
      right-angle lines, as his 2020 chart and the travel card draw them.
      Picked by the build session, not by Tom yet. */
   flow:    { c: GOLD, g: '<rect class="f" x="8" y="2.5" width="8" height="5.5" rx="1"/><path d="M12 8v3.5M5.75 11.5h12.5M5.75 11.5V15M18.25 11.5V15"/><rect class="h" x="2" y="15" width="7.5" height="5.5" rx="1"/><rect x="14.5" y="15" width="7.5" height="5.5" rx="1"/>' },
+  /* LOADOUT, 2026-11-24: a pegboard with two tools hanging on it, the ones
+     taken down to try. Picked by the build session, not by Tom yet. */
+  loadout: { c: GOLD, g: '<rect class="f" x="2.5" y="2.5" width="19" height="19" rx="2"/><circle class="s n" cx="7" cy="6" r=".9"/><circle class="s n" cx="12" cy="6" r=".9"/><circle class="s n" cx="17" cy="6" r=".9"/><path d="M7 6.9v2.6M5 9.5h4v9H5zM17 6.9v2.1"/><circle cx="17" cy="11.5" r="2.5"/><path d="M17 14v4.5"/>' },
   system:  { c: GOLD, big: 1, g: '<path class="f" d="M4.5 1.5h15l3 3v15l-3 3h-15l-3-3v-15z"/><path d="M1.5 6.5h21"/><circle class="s n" cx="4.5" cy="4" r=".8"/><path class="s n" d="M11.35 9.5h1.3l-.3 7.5h-.7z"/><circle class="s n" cx="12" cy="19.3" r=".85"/>' },
 };
 /* the marks, turned into attributes, so a picture file with no stylesheet

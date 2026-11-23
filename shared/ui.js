@@ -1138,7 +1138,7 @@ const SPOTS = [
   ['quest', 'QUESTS', [['today', 'Today'], ['inbox', 'Inbox'], ['upcoming', 'Upcoming']]],
   ['kitchen', 'KITCHEN', [['shelf', 'Shelf'], ['plan', 'Plan'], ['guide', 'Guide']]],
   ['train', 'TRAIN'], ['checkin', 'CHECK IN'], ['block', 'BLOCK'], ['log', 'LOG'], ['bullet', 'BULLET'],
-  ['mix', 'ELEMENT'], ['speak', 'SPEAK'], ['coach', 'COACH'], ['forge', 'FORGE'], ['wealth', 'WEALTH'],
+  ['mix', 'ELEMENT'], ['speak', 'SPEAK'], ['coach', 'COACH'], ['forge', 'FORGE'], ['loadout', 'LOADOUT'], ['wealth', 'WEALTH'],
   ['arc', 'ARC'], ['portion', 'FOODDÉX'], ['sheet', 'SHEET'], ['system', 'NOTICE'], ['form', 'FORM'],
   ['style', 'STYLE'], ['receipts', 'RECEIPTS'],
 ];

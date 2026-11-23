@@ -187,30 +187,25 @@ To test on this PC without touching your own shortcuts:
 ## Personal Design Toolkit
 
 Tom, 2026-11-19: "Turn this into an Exe, Name it Personal Design Toolkit."
-A separate program, not part of Motherbase: 214 behaviour change tools as
-fill-in worksheets, each writing its own summary, with a personal board and
-the best next steps for every tool. The same page is the claude.ai artifact
-Pattern Toolwall.
+Since 2026-11-24 it is LOADOUT (`loadout/index.html`, brief
+`loadout/CLAUDE.md`) on its own, for a PC without the suite (Tom: "keep a
+seperate standalone EXE"): 214 behaviour change tools as worksheets, My plan,
+printing, the counter, timers and the values sort, in Block.
 
-Double click **Personal Design Toolkit.exe**. It writes the page to
-`%LOCALAPPDATA%\Personal Design Toolkit\app` and opens it in Edge (or
-Chrome) as an app window with its own profile there, so entries stay on that
-PC. Nothing syncs and no account is used: **Save a backup** and **Restore a
-backup** in its top bar are the only way to move or keep entries. The Ask
-Claude reflection is hidden in it; the summaries work without it.
+Double click **Personal Design Toolkit.exe**. It writes LOADOUT and the shared
+files it loads to `%LOCALAPPDATA%\Personal Design Toolkit\app` and opens
+`loadout/index.html?solo=1` in Edge (or Chrome) as an app window with its own
+profile there, so entries stay on that PC. Solo mode makes no QUESTS todos and
+hides the goal links and the home button; Settings, DATA backs up and
+restores. The old toolkit's entries move into LOADOUT on the first open.
 
 Unsigned, so Windows may say "Windows protected your PC" the first time:
 More info, Run anyway.
 
-My plan (2026-11-22, `page/plan.js`) puts the pattern, its count, plans, tools
-being tried, in-the-moment cards and the journal on one tab, prints the plan,
-pocket cards and a journal week, and holds the one-tap counter, the guided
-timers and the values sort.
-
-Rebuild after changing anything in `toolkit/page`:
-`py -3 desktop/toolkit/build.py`. It needs Go, and `go-winres` for the icon
-(`go install github.com/tc-hib/go-winres@v0.3.3`). Without Go it still writes
-`toolkit/toolwall.html`, the page to republish as the artifact.
+Rebuild after every change to `loadout/index.html` or the shared files:
+`py -3 desktop/toolkit/build.py`. It needs Go (`%LOCALAPPDATA%\Programs\Go`)
+and `go-winres` for the icon (`go install github.com/tc-hib/go-winres@v0.3.3`).
+`toolkit/page/` is the old toolkit source; nothing reads it now.
 
 ## Building it
 
@@ -232,7 +227,7 @@ three Microsoft WebView2 files in `lib\`.
 | `build.ps1` | rebuilds it, even while it is open: the running copy is moved aside as `.old` |
 | `status.ico` `menu.ico` | the icons built into STATUS.exe and Main Menu.exe, cut from `status/icon-512.png` and the root `icon-512.png`. A shortcut reads the file's icon, never the window's |
 | `lib\` | Microsoft's WebView2 files, so there is nothing to download |
-| `Personal Design Toolkit.exe` | the toolkit program, built from `toolkit/` (`main.go` the launcher, `page/` the page in parts, `winres/` its icon and version, `build.py` rebuilds it) |
+| `Personal Design Toolkit.exe` | the toolkit program, built from `toolkit/` (`main.go` the launcher, `winres/` its icon and version, `build.py` copies LOADOUT in and rebuilds it) |
 | `data\` | its store. Deleting this empties it; it refills from sync |
 | `status-app.txt` | your shortcut, always-on-top and widget position |
 | `status-app.log` | what happened on the last run, for when something misbehaves |
