@@ -528,3 +528,35 @@ serving one is a daily quest. Vision goal stays the WOOP's name.
   Back keeping answers, the inner-obstacle line, the row it writes, the two
   tasks and their ^name; no errors, nothing sideways. WebKit review 232 of
   232.
+
+**1.0.44, 2026-11-24** (Tom, after entering his first three: "It feels a bit
+constrictive", then picks 1 to 6 and "it should ask me what my monthly,
+weekly, and daily quests for each Main Quest is"; "Sometimes I'll always want
+to track a metric that's not currently in the system"):
+- **One screen** (`questForm`): the whole quest at once, any order, two
+  columns past 900px (the quest, finish line and checkpoints; what stops it
+  and its quests). "One step at a time" switches to `questFlow` keeping what
+  is typed, and back; the last way used is the setting `qmode`, written only
+  on that switch. Both share `questHead`, `questWoop`, `tierFields` and
+  `questAccept`.
+- **Monthly, weekly and daily quests** (`TIERS`, `tierFields`, `tierTasks`):
+  one box each, a new one appears as the last is filled. A line repeats at its
+  tier's pace unless its own words set a day or a repeat.
+- **Checkpoints** grow and shrink: a cross on each, Add checkpoint under them
+  (30 days past the last).
+- **What stops it** says the plan is for the obstacle, not the win, with a
+  worked example in the If and Then boxes, and a label over every box so a
+  filled one still says what it is. All three of his first plans read "If <the
+  goal is reached>, then <the reward>".
+- **Own number:** in Finish line, A measure, a name no measure has opens Now
+  and Unit; ACCEPT QUEST or SAVE (`srcCommit`, never on Next or Cancel) makes a
+  STATUS `field` keyed `q-<slug>`, `src: 'quest'`, shaped like STATUS's "One a
+  day" number, so it is logged in STATUS like any measure. "Daily quests only"
+  is now "No number".
+- **Typing:** "everyday", "each day", "every morning/night/evening" are daily;
+  "every mon wed fri" with plain spaces is read as those days (it kept "fri"
+  in the words before).
+- Tested by clicking in headless Chromium at 1280 and 390 on a fresh store:
+  the form, a new measure, checkpoints added and removed, the four tiers'
+  tasks and their repeats, the switch both ways keeping text, no errors,
+  nothing sideways. WebKit review 232 of 232. Not on the iPhone.
