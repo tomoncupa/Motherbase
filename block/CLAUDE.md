@@ -97,3 +97,7 @@ The new chapter: `HOME.md`, Needs from BLOCK (2026-11-16), asks STREAKS and EVER
 - **An Every block** missed before the chapter is due on its first day (`everyState` `floor`), not owed for every week before; done since, its schedule is untouched. The Day's Also column uses the chapter running on the day shown.
 - **Kept whole:** every tick, the habit grids, the 14 bars, History, "days recorded" and this period's "x of y" (it keeps every tick in the period, so a chapter never makes it fall).
 - **Today is open** (since 1.0.26, any chapter or none): a half-done today neither breaks the streak nor counts in the average or a block's rate.
+
+## 1.0.35, 2026-11-24: offers from off the flow
+
+Tom picked D: words he types off the flow in FLOW three times in 30 days (`Flow.offers`, matched by slug, not already a box's name) show as gold-dashed boxes right of the chart, in Plan and Today: "Typed N times off the flow, after <block>", Add (a Down time box after the block he most often left for it, with an arrow, Undo) and Not this (`block.flowNo[fid]`, written on his press, Undo). Six at most. Today's rail lists an off-flow step as its words, "off the flow".

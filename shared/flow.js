@@ -13,7 +13,7 @@
      fbox    key fid|bid, undated    {name, kind, x, y, at, floor}
      farrow  key fid|aid, undated    {a, b, label, gap, sleep}
      fwalk   key fid, dated the day the walk began
-                                     {steps: [{box, arrow, t, j, jd}]}
+                                     {steps: [{box, arrow, t, j, jd, free}]}
 
    kind is g (toward his goals), r (away from them), t (a trigger) or
    d (down time). `at` is a fixed time, 'HH:MM'. `gap` is minutes after the
@@ -21,7 +21,8 @@
    moment the box before was reached. `sleep` is 'short' or 'enough': the
    arrow last night's sleep suggests. `floor` marks the boxes that make the
    smallest day that still counts. `j` and `jd` are the STATUS entry the
-   step wrote, so undo removes it.
+   step wrote, so undo removes it. `free` is words he typed for something
+   off the flow (0.6.0): that step has no box, and the ways back follow it.
 
    Facts land on the day they happen: a tick and a STATUS entry are dated
    the moment of the pick, whatever day the walk began on.
@@ -111,14 +112,21 @@ function active(fid, now) {
     if (!s.length) continue;
     const last = s[s.length - 1];
     if (now - last.t > OPEN_HOURS * 3600e3) continue;
+    if (last.free != null) return { date: d, steps: s, box: null, free: last, left: leftBox(s), over: false };
     return { date: d, steps: s, box: last.box, over: !outOf(fid, last.box, all).length };
   }
+  return null;
+}
+/** the last box he stood on before going off the flow */
+function leftBox(steps) {
+  for (let i = steps.length - 1; i >= 0; i--) if (steps[i].box) return steps[i].box;
   return null;
 }
 /** where he is, and every way out of it */
 function here(fid, now) {
   const f = get(fid); if (!f) return null;
   const w = active(fid, now), all = arrows(fid);
+  if (w && w.free) return { flow: f, walk: w, box: null, free: w.free, left: w.left ? box(fid, w.left) : null, ways: waysBack(fid, now) };
   if (!w || w.over) return { flow: f, walk: w, box: null, start: f.start ? box(fid, f.start) : null, ways: [] };
   return { flow: f, walk: w, box: box(fid, w.box), ways: outOf(fid, w.box, all).map(a => Object.assign({}, a, { to: box(fid, a.b) })).filter(a => a.to) };
 }
@@ -154,6 +162,99 @@ function undo(fid, date, t) {
   if (s.j) { R().del('note', s.jd || day, s.j); if (g.Journal && g.Journal.publishNotes) try { g.Journal.publishNotes(s.jd || day, 'flow'); } catch (e) {} }
   if (steps.length) R().set('fwalk', date, fid, { steps: steps }); else R().del('fwalk', date, fid);
 }
+/** Off the flow (Tom, 2026-11-19: "I want the text box to instead act like
+    a custom option"). The words he typed become where he is: a step with no
+    box, `free` the words, and a STATUS entry at the minute typed. Answers an
+    undo. */
+function free(fid, text, now) {
+  now = now || Date.now();
+  text = String(text || '').trim();
+  if (!text || !get(fid)) return null;
+  const w = active(fid, now);
+  const date = w && !w.over ? w.date : D().of(now), day = D().of(now);
+  const steps = walk(fid, date).slice();
+  const step = { box: null, arrow: null, t: now, free: text };
+  if (g.Journal && g.Journal.add) try { step.j = g.Journal.add(day, 'entry', text, { at: hhmm(now), parsed: 1, src: 'flow' }, 'flow'); step.jd = day; } catch (e) {}
+  steps.push(step);
+  R().set('fwalk', date, fid, { steps: steps });
+  return () => undo(fid, date, now);
+}
+const sameWords = (a, b) => slug(a) === slug(b);
+/** every free step in the last `days` days, with the box he left for it and
+    the box he went to next */
+function frees(fid, days, end) {
+  const out = [];
+  D().last(days || 60, end).forEach(d => {
+    const s = walk(fid, d);
+    s.forEach((x, i) => { if (x.free != null) out.push({ text: x.free, t: x.t, left: leftBox(s.slice(0, i)), next: s[i + 1] && s[i + 1].box || null }); });
+  });
+  return out;
+}
+/** The ways back after going off the flow, each box once: the ways out of
+    the block he left, then what he went to after these same words before,
+    then the nearest floor block not done today. `why` is 'left', 'before' or
+    'floor'. Arrows keep their id; the others have none. */
+function waysBack(fid, now) {
+  now = now || Date.now();
+  const w = active(fid, now); if (!w || !w.free) return [];
+  const all = arrows(fid), bs = {}; boxes(fid).forEach(b => { bs[b.id] = b; });
+  const out = [], seen = {};
+  const add = (b, id, why) => { if (!b || !bs[b] || seen[b]) return; seen[b] = 1; out.push({ id: id || null, a: w.left, b: b, why: why, to: bs[b] }); };
+  if (w.left) outOf(fid, w.left, all).forEach(a => add(a.b, a.id, 'left'));
+  const n = {};
+  frees(fid, 60, D().of(now)).forEach(x => { if (x.t !== w.free.t && x.next && sameWords(x.text, w.free.free)) n[x.next] = (n[x.next] || 0) + 1; });
+  Object.keys(n).sort((a, b) => n[b] - n[a]).slice(0, 2).forEach(b => add(b, null, 'before'));
+  const day = D().of(now), got = {};
+  [day, D().shift(day, -1)].forEach(d => walk(fid, d).forEach(s => { if (s.box && D().of(s.t) === day) got[s.box] = 1; }));
+  const need = floor(fid).filter(id => !got[id]);
+  if (need.length) {
+    /* nearest from the block he left, by arrows; else the first */
+    let pick = null;
+    if (w.left) {
+      const q = [w.left], dist = {}; dist[w.left] = 0;
+      while (q.length) {
+        const id = q.shift();
+        if (id !== w.left && need.indexOf(id) > -1) { pick = id; break; }
+        outOf(fid, id, all).forEach(a => { if (dist[a.b] == null) { dist[a.b] = dist[id] + 1; q.push(a.b); } });
+      }
+    }
+    add(pick || need[0], null, 'floor');
+  }
+  return out;
+}
+/** Words he typed off the flow at least `min` times in `days` days, not a
+    box's name already and not dismissed, each with the block he most often
+    left to do it. BLOCK's Flow tab offers these as dashed boxes. */
+function offers(fid, days, min) {
+  const names = {}; boxes(fid).forEach(b => { names[slug(b.name)] = 1; });
+  const no = R().setting('block', 'flowNo') || {}, gone = no[fid] || [];
+  const by = {};
+  frees(fid, days || 30).forEach(x => {
+    const k = slug(x.text);
+    if (names[k] || gone.indexOf(k) > -1) return;
+    const o = by[k] = by[k] || { key: k, text: x.text, n: 0, from: {} };
+    o.n++; o.text = x.text;
+    if (x.left) o.from[x.left] = (o.from[x.left] || 0) + 1;
+  });
+  return Object.keys(by).map(k => by[k]).filter(o => o.n >= (min || 3)).map(o => {
+    const f = Object.keys(o.from).sort((a, b) => o.from[b] - o.from[a])[0] || null;
+    return { key: o.key, text: o.text, n: o.n, from: f };
+  }).sort((a, b) => b.n - a.n);
+}
+/** add an offer as a box after the block it most often followed */
+function takeOffer(fid, o) {
+  const fb = o.from ? box(fid, o.from) : null;
+  const id = addBox(fid, { name: o.text, kind: 'd', x: fb ? fb.x + 192 : 48, y: fb ? fb.y + 108 : 48 });
+  if (fb) addArrow(fid, fb.id, id, { label: '' });
+  return id;
+}
+/** hide an offer for good: his choice, so a setting written on his press */
+function dropOffer(fid, key) {
+  const no = Object.assign({}, R().setting('block', 'flowNo') || {});
+  no[fid] = (no[fid] || []).concat(key);
+  R().setting('block', 'flowNo', no);
+}
+
 /** another step anywhere reached a box of this name on that day */
 function reachedOn(day, name, but) {
   return list().some(f => {
@@ -319,6 +420,7 @@ const CARD_CSS = `
 .flc-wires{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:0}
 .flc-wires path{fill:none;stroke:var(--border-strong,GrayText);stroke-width:2;stroke-linejoin:round}
 .flc-wires .hd{fill:var(--border-strong,GrayText);stroke:none}
+.flc-top.off{background:var(--surface-1,Canvas);border:2px dashed var(--accent,Highlight);box-shadow:none}
 .flc-ghost{position:absolute;pointer-events:none;z-index:5;margin:0}
 @media (hover:hover){.flc-way:hover{filter:brightness(1.1)}}
 `;
@@ -476,7 +578,7 @@ function card(host, o) {
   host.classList.add('flc');
   host.innerHTML = '';
   if (!fid || !get(fid)) { host.appendChild(E('div', 'flc-say', 'No flows.')); if (o.empty) o.empty(host); return; }
-  const h = here(fid), real = h && h.box ? h.box.id : null;
+  const h = here(fid), real = h && h.box ? h.box.id : h && h.free ? 'free:' + h.free.t : null;
   let st = CS[fid];
   if (!st || st.now !== real) st = CS[fid] = { now: real };
   paint(host, fid, st, o);
@@ -493,7 +595,8 @@ function card(host, o) {
 function paint(host, fid, st, o) {
   host.innerHTML = '';
   const all = arrows(fid), bs = {}; boxes(fid).forEach(b => { bs[b.id] = b; });
-  const cur = st.now ? bs[st.now] : null, start = get(fid) && bs[get(fid).start];
+  const off = String(st.now || '').indexOf('free:') === 0 ? here(fid) : null;
+  const cur = !off && st.now ? bs[st.now] : null, start = get(fid) && bs[get(fid).start];
   const stage = E('div', 'flc-stage');
   host.appendChild(stage);
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'flc-wires');
@@ -505,18 +608,25 @@ function paint(host, fid, st, o) {
     top = E('div', 'flc-b flc-top mb-plate', '<span class="n">' + X(cur.name) + '</span>' +
       (lines.length ? '<span class="flc-notes">' + lines.map(x => '<span class="flc-note">' + X(x.text) + '</span>').join('') + '</span>' : ''));
     top.style.setProperty('--c', kvar(cur.kind)); top.style.setProperty('--k', kvar(cur.kind));
+  } else if (off && off.free) {
+    /* off the flow: his own words on top, edged in dashes (0.6.0) */
+    const wk = off.walk, last = wk && wk.steps[wk.steps.length - 1];
+    const lines = (last && last.n || []).map(x => R().get('note', x.d, x.k)).filter(x => x && x.text).slice(-3);
+    top = E('div', 'flc-b flc-top off', '<span class="n">' + X(off.free.free) + '</span>' +
+      (lines.length ? '<span class="flc-notes">' + lines.map(x => '<span class="flc-note">' + X(x.text) + '</span>').join('') + '</span>' : ''));
   } else top = E('div', 'flc-dot');
   top.dataset.top = '1';
   stage.appendChild(top);
-  let ways = cur ? all.filter(a => a.a === cur.id && bs[a.b]) : start ? [{ id: null, b: start.id }] : [];
+  let ways = cur ? all.filter(a => a.a === cur.id && bs[a.b]) : off ? off.ways : start ? [{ id: null, b: start.id }] : [];
   const sug = cur ? suggest(fid) : null;
   if (sug) ways = [ways.find(w => w.id === sug.arrow.id)].concat(ways.filter(w => w.id !== sug.arrow.id)).filter(Boolean);
   const list = E('div', 'flc-ways');
-  if (!ways.length) list.appendChild(E('div', 'flc-say', cur ? 'Nothing comes after this block.' : 'This flow has no start block yet.'));
+  if (!ways.length) list.appendChild(E('div', 'flc-say', cur ? 'Nothing comes after this block.' : off ? 'No way back yet. Type what you do next.' : 'This flow has no start block yet.'));
   ways.forEach(w => {
     const b = bs[w.b], isSug = sug && sug.arrow.id === w.id;
     const m = E('button', 'flc-b flc-way mb-plate mb-press' + (isSug ? ' sug' : ''), '<span class="n">' + X(b.name) + '</span>' +
-      (isSug ? '<span class="w">Slept ' + hours(sug.hours) + '</span>' : ''));
+      (isSug ? '<span class="w">Slept ' + hours(sug.hours) + '</span>' : w.why === 'floor' ? '<span class="w">Floor, not done today</span>' :
+        w.why === 'before' ? '<span class="w">What you did after this before</span>' : ''));
     m.type = 'button'; m.title = b.name; m.dataset.id = w.b;
     m.style.setProperty('--c', kvar(b.kind)); m.style.setProperty('--k', kvar(b.kind));
     m.onclick = () => go(host, fid, st, o, w, m);
@@ -525,7 +635,7 @@ function paint(host, fid, st, o) {
   stage.appendChild(list);
   /* his words are never cut: each block shrinks its name to fit, then wraps */
   const fitAll = () => {
-    if (cur) fitName(top.querySelector('.n'), 20, 14);
+    if (cur || off) fitName(top.querySelector('.n'), 20, 14);
     list.querySelectorAll('.flc-way .n').forEach(n => fitName(n, 18, 12));
   };
   fitAll();
@@ -606,7 +716,7 @@ function go(host, fid, st, o, w, from) {
 }
 
 g.Flow = {
-  VERSION: '0.5.0', card: card, fit: fit, note: note, sample: sample, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
+  VERSION: '0.6.0', card: card, free: free, waysBack: waysBack, frees: frees, offers: offers, takeOffer: takeOffer, dropOffer: dropOffer, fit: fit, note: note, sample: sample, openFlow: openFlow, ink: ink, KINDS: KINDS, TYPES: ['flow', 'fbox', 'farrow', 'fwalk'],
   list: list, get: get, boxes: boxes, arrows: arrows, box: box, arrow: arrow, outOf: outOf,
   make: make, patchFlow: patchFlow, delFlow: delFlow,
   addBox: addBox, patchBox: patchBox, delBox: delBox,

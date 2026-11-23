@@ -29,6 +29,7 @@ bullets as well." Nothing to do with STATUS's desktop widget.
   on blur; a box being typed in is never redrawn.
 - **Bullets** go through `Journal.add`, Entry by default, Enter saves, like
   BULLET. Today's last eight lines, newest first, read only.
+- **The box is a custom option (1.0.3, Tom 2026-11-19: "I want the text box to instead act like a custom option"; picked A+B+C, then D):** Enter takes him off the flow with `Flow.free`. His words are the block on top, edged in gold dashes, and a STATUS Entry at the minute typed, with Undo. Below it, the ways back: the ways out of the block he left, then what he went to after these same words before (line "What you did after this before"), then the nearest floor block not done today (line "Floor, not done today"). Pressing one rejoins the flow. Comments on a block are gone from the box; `Flow.note` stays for anything else. With no flow it saves a bullet and says to make a flow in BLOCK.
 - It owns no type. The flow itself is drawn and edited in BLOCK's Flow tab.
 
 ## Built and watched

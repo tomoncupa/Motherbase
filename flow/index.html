@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.2, 2026-11-18">
+<meta name="mb-version" content="1.0.3, 2026-11-24">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -145,12 +145,14 @@ function build() {
      enter text and then have it pop up and then have it show up in the box
      of where I currently am") */
   const c3 = el('div', 'card');
-  /* a plain entry, no kinds: a comment on the block he is at (Tom, 2026-11-18) */
+  /* a custom option (1.0.3, Tom 2026-11-19: "I want the text box to instead
+     act like a custom option"): what he typed is where he is now, off the
+     flow, and the ways back are drawn under it */
   ta = document.createElement('input');
-  ta.type = 'text'; ta.className = 'mb-input'; ta.placeholder = 'Comment on where you are, then Enter';
+  ta.type = 'text'; ta.className = 'mb-input'; ta.placeholder = 'Something else? Type it';
   ta.setAttribute('autocapitalize', 'sentences');
   ta.setAttribute('enterkeyhint', 'done');
-  ta.setAttribute('aria-label', 'Comment');
+  ta.setAttribute('aria-label', 'Something else');
   ta.onkeydown = e => {
     if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
     e.preventDefault(); saveBullet();
@@ -204,18 +206,23 @@ function saveNote() {
 function saveBullet() {
   const text = ta.value.trim();
   if (!text) return;
-  const from = ta.getBoundingClientRect();
-  const r = Flow.note(fid(), text, 'entry');
-  if (!r) return;
+  const from = ta.getBoundingClientRect(), id = fid();
+  const un = id ? Flow.free(id, text) : null;
+  if (!un) {
+    if (!Flow.note(null, text, 'entry')) return;
+    ta.value = ''; Mobile.feedback('success'); paintList();
+    UI.toast('Saved as a bullet. Make a flow in BLOCK to follow it here.');
+    return;
+  }
   ta.value = '';
   Mobile.feedback('success');
   paintCard(); paintList();
-  if (!r.kept) { UI.toast('Saved as a bullet. Start the flow to keep comments in its blocks.'); return; }
+  UI.undo('Off the flow: ' + esc(text), () => { un(); paintCard(); paintList(); });
   fly(text, from);
 }
 /* the line rises out of the box and lands in the block, which pops */
 function fly(text, from) {
-  const lines = cardBox.querySelectorAll('.flc-note'), to = lines[lines.length - 1];
+  const to = cardBox.querySelector('[data-top] .n');
   if (!to || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const t = to.getBoundingClientRect();
   to.style.visibility = 'hidden';
