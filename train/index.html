@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.96, 2026-11-18">
+<meta name="mb-version" content="1.0.97, 2026-11-22">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -3460,6 +3460,31 @@ TRAIN.back = function () {
    day slides in from the side it came from and a new screen rises in. A
    redraw of the same screen on the same day, which every save causes, does
    not move at all. */
+/* Typing guard (draw, 1.0.97). A press is a pointer or click on anything
+   but a typing box, or Enter; tapping INTO a box is not a press, or a sync
+   landing just after it would wipe the box he just opened. */
+var PRESS_MS = 1000;
+TRAIN.pressAt = 0;
+function typingBox(el) {
+  if (!el) return false;
+  if (el.isContentEditable || el.tagName === 'TEXTAREA') return true;
+  return el.tagName === 'INPUT' && /^(text|search|number|tel|email|url|password|)$/.test(el.type || '');
+}
+function typingInMain() {
+  var a = document.activeElement, m = document.getElementById('main');
+  return !!(m && typingBox(a) && m.contains(a));
+}
+['pointerdown', 'click'].forEach(function (t) {
+  addEventListener(t, function (e) { if (!typingBox(e.target)) TRAIN.pressAt = Date.now(); }, true);
+});
+addEventListener('keydown', function (e) { if (e.key === 'Enter') TRAIN.pressAt = Date.now(); }, true);
+/* leaving the box draws what waited at once, not up to 400ms later */
+document.addEventListener('focusout', function () {
+  setTimeout(function () {
+    if (TRAIN.typeOwed && !typingInMain()) { TRAIN.typeOwed = 0; draw(); }
+  }, 0);
+});
+
 var lastDrawn = null;
 function motion(m) {
   var now = { scr: TRAIN.screen, date: TRAIN.date }, was = lastDrawn;
@@ -3494,6 +3519,27 @@ function draw() {
     }
     return;
   }
+  /* The same on every screen (1.0.97). A redraw empties #main, so the box
+     with the caret went with it and the keyboard dropped mid-number: live
+     sync landing on a resume, the device note, a record pass, a new minute.
+     A redraw no press of his asked for waits while a box in #main has the
+     caret and runs the moment it leaves. A press (SAVE, a tick, a set, the
+     Enter key) still redraws at once. */
+  if (typingInMain() && Date.now() - TRAIN.pressAt > PRESS_MS) {
+    if (!TRAIN.typeOwed) {
+      TRAIN.typeOwed = 1;
+      (function wait() {
+        setTimeout(function () {
+          if (!TRAIN.typeOwed) return;
+          if (typingInMain()) return wait();
+          TRAIN.typeOwed = 0;
+          draw();
+        }, 400);
+      })();
+    }
+    return;
+  }
+  TRAIN.typeOwed = 0;
   drawChrome();
   var m = document.getElementById('main');
   m.innerHTML = '';
@@ -6415,6 +6461,7 @@ function drawRecords(m) {
   input.oninput = function () {
     TRAIN.recQuery = input.value;
     var pos = input.selectionStart;
+    TRAIN.pressAt = Date.now();   /* his own typing asked for this one */
     draw();
     var live = document.querySelector('.search input');
     if (live) { live.focus(); live.setSelectionRange(pos, pos); }
@@ -6512,6 +6559,7 @@ function drawRepMax(m) {
   input.oninput = function () {
     TRAIN.recQuery = input.value;
     var pos = input.selectionStart;
+    TRAIN.pressAt = Date.now();   /* his own typing asked for this one */
     draw();
     var live = document.querySelector('.search input');
     if (live) { live.focus(); live.setSelectionRange(pos, pos); }

@@ -1698,3 +1698,27 @@ before it 2px, older 1px muted; set 1's reading carried "felt strong" and
 Nov 1 set 3 (1,080); an assisted pull up at 180 lb bodyweight read 130 x 8 =
 1,040 from 50 lb of help; a run offered no Volume By Set; no sideways
 scroll, every button 44px. Not seen on the iPhone.
+
+## Typing survives a sync (1.0.97, 2026-11-22)
+
+Tom, on the iPhone: "Something is fucking with my screen inputs". Read in
+the code, not seen on the phone: the redraw on `Rec.on` fires for any row
+from anywhere and `draw()` empties `#main`, so a write landing while he
+typed took the stepper box away; the digits survived in `TRAIN.draftW`, the
+caret and keyboard did not, and keys typed after it went nowhere. Between
+sets the phone sleeps past 30 s, so live sync revives and pulls rows on
+every unlock, and the device note is written on coming back.
+
+Only Tidy Movements' search waited (`tidyTyping`). The guard is now in
+`draw()` for every screen: a typing box in `#main` focused and no press in
+the last `PRESS_MS` (1000) waits, polled every 400 ms and drawn on
+`focusout`. Tapping into a box is not a press. The records search redraws
+from its own `oninput`, so it sets `TRAIN.pressAt`.
+
+Watched in headless Chromium at 390 x 844, touch: weight box typed 10, a
+setting written by script 1.2 s later; the old build replaced the box,
+lost focus and dropped the next key (10), the new one kept the box
+focused and took it (105), then redrew on leaving with 105. SAVE with the
+keyboard up still drew the set at once; records search filtered while
+typing. `_review.html` 222/222 at 390 touch, 206/206 at 1280. No WebKit in
+that cloud session; not seen on the iPhone.
