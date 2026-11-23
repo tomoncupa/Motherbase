@@ -501,3 +501,30 @@ under "Plan for it", saved by merge. The rule is `shared/goals.js`, WOOP.
   (`Journal.filterShows`), read by the home screen's NEXT card too.
 - The side's Today count still counts every todo due.
 - **The name on screen is "vision goals"** (Tom, 2026-11-17: "Change the term whoop to vision goals"; 1.0.41). Never print WOOP to him; code keeps `woop`, `wrun`, `Goals.hasWoop` so no data moves.
+
+## Main quests (Tom, 2026-11-24: "the best quest input flow"; 1.0.43)
+
+Main quests are month and year projects that daily quests move; they are the
+`aim` rows, three open at most. On screen: Goals is "Main quests", a task
+serving one is a daily quest. Vision goal stays the WOOP's name.
+- **New main quest** (`questFlow`): one question a screen. THE QUEST (words,
+  1 month, 3 months, 6 months, 1 year, Longer for 5 and 10, a date, the
+  ^name), FINISH LINE (`srcPicker`, "Daily quests only" is no feed),
+  CHECKPOINTS (three, dated a third apart, numbers filled from start to
+  target when the feed has both), WHAT STOPS IT (outcome, obstacle, if,
+  then), DAILY QUESTS (up to three tasks, parsed like the add bar, `aim` set,
+  due today when no day is typed), then the quest as a NOTICE window and
+  ACCEPT QUEST, which writes the aim and the tasks with one Undo. The middle
+  three can be skipped. Editing a quest is the full sheet (`aimSheet`), which
+  now edits checkpoints too.
+- `aim.cp` = `[{d, text}]`, the checkpoints. Not `marks`: that is the health
+  calls. The row shows the next one still to come.
+- `3m` horizon added, reviewed monthly.
+- The Main quests screen is one Open list (longest horizon first) and a
+  numbered "New main quest" slot per quest still to set.
+- ROOM's cards (`Goals.cards`) and HOME's Plan the day already read `aim`
+  rows, so they follow main quests with no change.
+- Tested by clicking in headless Chromium at 1280 and 390: the whole flow,
+  Back keeping answers, the inner-obstacle line, the row it writes, the two
+  tasks and their ^name; no errors, nothing sideways. WebKit review 232 of
+  232.
