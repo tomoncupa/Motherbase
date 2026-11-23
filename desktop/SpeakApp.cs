@@ -72,12 +72,13 @@ static class App
         try { File.Delete(Path.Combine(Dir, "speak-app.log")); } catch { }
         Load();
         bool boot = Array.IndexOf(args, "--tray") >= 0;
+        Log(boot ? "started with Windows" : "started by hand");
         marshal = new Control();
         IntPtr made = marshal.Handle;
         MakeTray();
         /* first run: Start with Windows on, in the tray */
         if (!Cfg.ContainsKey("bootSet")) { SetBoot(true); Cfg["bootSet"] = "1"; Save(); }
-        else if (GetBoot()) SetBoot(true);   /* keeps the --tray in the Run key */
+        else if (GetBoot()) SetBoot(true);   /* rewrites the Startup shortcut, and moves an old Run value over */
         if (Array.IndexOf(args, "--mini") >= 0) ShowMini(true);
         else if (!(boot && On("hidden"))) ShowFull();
         /* the full app loads hidden at start, so opening it from the mini
@@ -198,20 +199,41 @@ static class App
 
     const string RUN_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
     const string RUN_NAME = "Motherbase SPEAK";
-    public static bool GetBoot()
+    /* Start with Windows is a shortcut in the Startup folder, since 2026-11-23.
+       The Run key it used before was there at the 23 Nov sign-in, Windows ran
+       the rest of that list, and SPEAK alone never started, with no error
+       anywhere; STATUS, Main Menu and Click Fix start from the Startup folder
+       and all came up. An old Run value counts as on and is moved over. */
+    static string BootLink { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "SPEAK.lnk"); } }
+    static bool RunValue()
     {
         try { using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RUN_KEY)) return k != null && k.GetValue(RUN_NAME) != null; }
         catch { return false; }
     }
+    public static bool GetBoot() { return File.Exists(BootLink) || RunValue(); }
     public static void SetBoot(bool on)
     {
         try
         {
             using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RUN_KEY))
-            {
-                if (on) k.SetValue(RUN_NAME, "\"" + Application.ExecutablePath + "\" --tray");
-                else if (k.GetValue(RUN_NAME) != null) k.DeleteValue(RUN_NAME);
-            }
+                if (k.GetValue(RUN_NAME) != null) k.DeleteValue(RUN_NAME);
+        }
+        catch (Exception ex) { Log("could not clear the old Run value: " + ex.Message); }
+        try
+        {
+            if (!on) { if (File.Exists(BootLink)) File.Delete(BootLink); return; }
+            string exe = Application.ExecutablePath;
+            Type t = Type.GetTypeFromProgID("WScript.Shell");
+            object sh = Activator.CreateInstance(t);
+            object sc = t.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, sh, new object[] { BootLink });
+            Type st = sc.GetType();
+            st.InvokeMember("TargetPath", System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { exe });
+            st.InvokeMember("Arguments", System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { "--tray" });
+            st.InvokeMember("WorkingDirectory", System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { Path.GetDirectoryName(exe) });
+            st.InvokeMember("Description", System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { "SPEAK in the tray" });
+            st.InvokeMember("Save", System.Reflection.BindingFlags.InvokeMethod, null, sc, null);
+            Marshal.FinalReleaseComObject(sc);
+            Marshal.FinalReleaseComObject(sh);
         }
         catch (Exception ex) { Log("could not change start with Windows: " + ex.Message); }
     }

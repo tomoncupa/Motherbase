@@ -115,8 +115,9 @@ whenever." He chose a PC widget of its own over a button on STATUS.
   `data` with STATUS and the Main Menu, so a take made here is in SPEAK
   everywhere.
 - The microphone and camera are allowed without a prompt in this window only.
-- **Start with Windows** is on from its first open: a line under the user's
-  Run key, `Motherbase SPEAK`. Right click the title bar to turn it off.
+- **Start with Windows** is on from its first open: `SPEAK.lnk` in the
+  user's Startup folder (the Run key until 2026-11-23, which Windows skipped
+  at sign-in with no error). Right click the title bar to turn it off.
 - Where it sits is kept in `speak-app.txt`.
 - Tom only, like SPEAK, so Setup.exe does not carry it and a change to
   `SpeakApp.cs` needs no client Setup.

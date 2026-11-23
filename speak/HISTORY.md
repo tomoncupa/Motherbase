@@ -611,3 +611,9 @@ The half of ASHA idea A left unbuilt in 1.0.49. `mixLearned` puts steps not yet 
 
 Tom: "Why don't I see speak in the tray icon? Also, sometimes the web service, whatever, stops it from opening." SPEAK.exe was not running at all, so no icon; and Windows 11 puts a new program's tray icon behind the ^ arrow until it is dragged out. The engine refusal: STATUS, the Main Menu and the nightly backup share SPEAK's web engine data folder, and starting together at sign-in one can be refused; SPEAK showed "The web engine would not start" and stayed blank. Now a refusal is logged and retried (`Build`, `Retry`: 1, 2, 4, 8, 8, 8 s, a fresh control each time); after that the tray warns and opening SPEAK tries again.
 [TESTED: rebuilt and started with --tray beside the running STATUS and Main Menu, engine started first try and the page loaded. The retry path itself was not forced.]
+
+## SPEAK.exe starts from the Startup folder, 2026-11-23
+
+Tom: "why isn't speak auto starting". The Run key value was there and enabled, Windows ran the rest of that list at the 1:11pm sign-in (Viber at 1:13), and SPEAK's log showed it had not started since 18 Nov, with no crash event. Started by hand with --tray it ran fine. STATUS, Main Menu and Click Fix start from the Startup folder and all came up, so Start with Windows is now `SPEAK.lnk` there; an old Run value counts as on and is moved over on the next start. The log's first line now says whether Windows or a hand started it.
+
+[TESTED: rebuilt, started with --tray, the shortcut was made pointing at SPEAK.exe --tray and the Run value was gone. A real sign-in not yet watched.]
