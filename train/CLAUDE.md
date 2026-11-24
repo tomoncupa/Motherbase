@@ -399,6 +399,9 @@ verdicts.** **An exercise's HISTORY shows every note** (1.0.79, Tom: "I should
 be able to select and see past session notes from this screen"): a set's
 comment in the gap beside its numbers, the day's session comment under its
 date, and the date opens that session. Never a hover. (HISTORY.md: Where things live on screen)
+**The day's list prints every set's comment the same way** (1.0.98, Tom
+2026-11-24: "Let train notes show up when looking at history for all"): in
+the gap beside its numbers, for every lift of the day, never only a bubble.
 
 ## First run
 
