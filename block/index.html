@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.35, 2026-11-24">
+<meta name="mb-version" content="1.0.36, 2026-11-25">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="icon-192.png">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -1968,6 +1968,15 @@ function normalise() {
 }
 normalise();
 S.viewDate = null;                     /* a session always opens on today */
+/* ...unless the address names a date: `?date=YYYY-MM-DD` opens the Day on it
+   (Tom, 2026-11-25: Alice's Plan in BLOCK opens tomorrow or today here). Held
+   until the store has landed, since the board adopted at Rec.ready replaces S. */
+let OPEN_DATE = (() => { try { const d = new URLSearchParams(location.search).get('date') || ''; return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : ''; } catch (e) { return ''; } })();
+function openDate() {
+  if (!OPEN_DATE) return;
+  S.view = 'day'; S.viewDate = OPEN_DATE === todayKey() ? null : OPEN_DATE;
+  const vid = dayForDate(OPEN_DATE); if (vid && variant(vid)) S.current = vid;
+}
 soundAdopt();
 
 /* ── the date on screen ──
@@ -2964,6 +2973,7 @@ function renderDateBar(bar) {
 
 /** open a date, and with it whatever day runs there */
 function goDate(key) {
+  OPEN_DATE = '';                        /* he moved the date himself */
   S.viewDate = key === todayKey() ? null : key;
   const vid = dayForDate(key);
   if (vid && variant(vid)) S.current = vid;
@@ -7080,7 +7090,7 @@ function adoptRows() {
       }
       const after = blockState();
       if (after) {
-        S = after; normalise(); lastRows = rowSnap(blockRows()); showingDemo = false;
+        const at = S.viewDate; S = after; normalise(); S.viewDate = at; openDate(); lastRows = rowSnap(blockRows()); showingDemo = false;
         try { render(); } catch (e) {}
         return true;
       }
@@ -7089,7 +7099,9 @@ function adoptRows() {
 
   if (boardSig(fresh) === before) return false;  /* nothing moved that we can see */
   showingDemo = false;
-  S = fresh; normalise(); lastRows = rowSnap(blockRows());
+  /* the date on screen is where he is looking, not a row: a sync landing must
+     not jump the board back to today */
+  const at = S.viewDate; S = fresh; normalise(); S.viewDate = at; openDate(); lastRows = rowSnap(blockRows());
   try { render(); } catch (e) {}
   return true;
 }
@@ -7121,7 +7133,7 @@ function adoptRows() {
    two and a half seconds after boot, by which time you may already be
    clicking, and writeRows still asks for a rebuild it had to defer. Both go
    through the same door. */
-Rec.ready(adoptRows);
+Rec.ready(() => { adoptRows(); setTimeout(() => { OPEN_DATE = ''; }, 3000); });
 
 /* ── and a board that arrives while it is already open ──
 
@@ -7388,6 +7400,7 @@ LifeOS.on(() => {
 });
 LifeOS.ready(() => { repairActIds(); repairTickIds(); pullDone(); render(); });
 
+openDate();
 render();
 /* keep the now line honest without redrawing the world */
 setInterval(() => { if (S.view === 'day' && S.nowline) renderBoard(); }, 60000);
