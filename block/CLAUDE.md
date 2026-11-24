@@ -101,3 +101,7 @@ The new chapter: `HOME.md`, Needs from BLOCK (2026-11-16), asks STREAKS and EVER
 ## 1.0.35, 2026-11-24: offers from off the flow
 
 Tom picked D: words he types off the flow in FLOW three times in 30 days (`Flow.offers`, matched by slug, not already a box's name) show as gold-dashed boxes right of the chart, in Plan and Today: "Typed N times off the flow, after <block>", Add (a Down time box after the block he most often left for it, with an arrow, Undo) and Not this (`block.flowNo[fid]`, written on his press, Undo). Six at most. Today's rail lists an off-flow step as its words, "off the flow".
+
+## 1.0.36, 2026-11-25: open on a date
+
+`?date=YYYY-MM-DD` opens the Day on that date (`OPEN_DATE`, `openDate()`), held until the store lands, since the board adopted at Rec.ready replaces S; moving the date clears it. OUTER HEAVEN's Alice opens it for her Plan in BLOCK window and reads that date's `plan` row back on close. A sync landing (`adoptRows`) now keeps `S.viewDate`: it used to jump the board back to today. Watched in headless Chromium: opens on the date, holds through an adopt, a plain open is today.
